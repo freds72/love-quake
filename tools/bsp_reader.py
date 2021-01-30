@@ -283,11 +283,7 @@ def pack_leaf(id, leaf, vis):
   s += pack_variant(len(vis))
   for k,v in vis.items():
     s += pack_variant(k)
-    # s += pack_int32(v)
-    s += "{:02x}".format(v)
-
-  #  id -= 1
-  #  print(vis[id>>3]&(1<<(id&7))!=0)
+    s += pack_int32(v)
 
   # faces?
   s += pack_variant(leaf.face_num)
@@ -352,8 +348,7 @@ def unpack_node_pvs(node, model, cache):
           while c_out<numbytes:
             ii = visdata[leaf.visofs+i]
             if ii != 0:
-              # vis[c_out>>2] = vis.get(c_out>>2,0) | ii<<(8*(c_out%4))
-              vis[c_out] = ii
+              vis[c_out>>2] = vis.get(c_out>>2,0) | ii<<(8*(c_out%4))              
               i += 1
               c_out += 1
               continue
@@ -365,13 +360,13 @@ def unpack_node_pvs(node, model, cache):
             i += 1
             c_out += c
           # print("{}:{}".format(child_id,{k:"{:02x}".format(v) for k,v in vis.items()}))
-          s = ""        
-          for i in range(model.numleafs):
-            if vis.get(i>>3,0)&(1<<(i&7)):
-              s += "\t{}".format(i+1)
-            else:
-              s += "\t."
-          print("{}\t{}".format(child_id,s))
+          # s = ""                  
+          # for i in range(model.numleafs):
+          #   if vis.get(i>>3,0)&(1<<(i&7)):
+          #     s += "\t{}".format(i+1)
+          #   else:
+          #     s += "\t."
+          # print("{}\t{}".format(child_id,s))
           cache[child_id] = vis
     else:
       unpack_node_pvs(nodes[child_id], model, cache)
@@ -407,7 +402,6 @@ def pack_bsp(filename):
     models = dmodel_t.read_all(f, header.models)
     vertices = vec3_t.read_all(f, header.vertices)
     visdata = read_bytes(f, header.visilist)
-    print(visdata)
     nodes = dnode_t.read_all(f, header.nodes)
     faces = dface_t.read_all(f, header.faces)
     texinfo = texinfo_t.read_all(f, header.texinfo)
@@ -456,6 +450,7 @@ def pack_bsp(filename):
       s += pack_node(n)
     
     # load models 
+    models=[models[0]]
     s += pack_variant(len(models))
     for model in models:
       s += pack_model(model)

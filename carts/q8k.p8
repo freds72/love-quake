@@ -163,20 +163,21 @@ function make_cam()
       end
       return outcode==0
     end,
-    draw_faces=function(self,model,pvs)
+    draw_faces=function(self,model)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local v_cache={}
-      local f_cache={}
+      local v_cache,f_cache={},{}
       for j,leaf in ipairs(model) do
-        for i,face in pairs(leaf.faces) do          
+        for i,face in pairs(leaf.faces) do    
+          -- some sectors are sharing faces
+          -- make sure a face from a leaf is draw only once
           if not f_cache[face] and v_dot(face.plane.n,self.pos)<face.cp!=face.side then
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0          
-            local g={0,0,0}
+            -- local g={0,0,0}
             for k,v in pairs(face.verts) do
               local a=v_cache[v]
               if not a then
-                local code,x,y,z=0,unpack(v)
+                local code,x,y,z=0,v[1],v[2],v[3]
                 x,y,z=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
                 if z<8 then code=2 end
@@ -194,7 +195,7 @@ function make_cam()
               outcode&=a.outcode
               clipcode+=a.outcode&2              
               p[k]=a
-              g=v_add(g,a)
+              -- g=v_add(g,a)
             end
             if outcode==0 then            
               if(clipcode>0) p=z_poly_clip(8,p)
@@ -299,7 +300,7 @@ function _init()
 
   -- 
   _cam=make_cam()
-  _plyr=make_player(0,0,0)
+  _plyr=make_player(0,10,0)
 
   -- unpack map
   _model,_leaves=decompress("q8k",0,0,unpack_map)
@@ -320,8 +321,10 @@ function _draw()
   visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
     local child=node.children[side]
     if child and child.pvs then
+      -- pvs skips leaf 0
       local id=child.id-1
-      if band(pvs[id\8],1<<(id&7))!=0 then
+      -- use band to handle no entry in pvs case
+      if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
         add(leaves,child)
       end
     elseif child and _cam:is_visible(child.bbox) then
@@ -329,7 +332,7 @@ function _draw()
     end
   end)
   
-  _cam:draw_faces(leaves,pvs)
+  _cam:draw_faces(leaves)
 
   print(stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nleaf:"..(current_leaf and current_leaf.id or -1),2,2,7)
 end
@@ -419,16 +422,19 @@ function unpack_map()
   end)
 
   unpack_array(function(i)
-    local f,pvs,id={},{},i
-    leaves[id]={
-      id=id-1,
+    local f,pvs={},{}
+    add(leaves,{
+      -- get 0-based index of leaf
+      -- leaf 0 is "solid" leaf
+      id=i-1,
       contents=mpeek(),
       faces=f,
       pvs=pvs
-    }
-    -- vislist
+    })
+
+    -- potentially visible set
     unpack_array(function()
-      pvs[unpack_variant()]=mpeek() --unpack_fixed()
+      pvs[unpack_variant()]=unpack_fixed()
     end)
     
     unpack_array(function()
