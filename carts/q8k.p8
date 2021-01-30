@@ -155,27 +155,24 @@ function make_cam()
 
         if z<1 then code=2 end
         --if z>250 then code|=1 end
-        if 2*x>z then code|=4
-        elseif 2*x<-z then code|=8 end
-        if 2*y>z then code|=16
-        elseif 2*y<-z then code|=32 end
+        if x>z then code|=4
+        elseif x<-z then code|=8 end
+        if y>z then code|=16
+        elseif y<-z then code|=32 end
         outcode&=code
       end
       return outcode==0
     end,
-    draw_faces=function(self,model)
+    draw_faces=function(self,model,pvs)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache={}
-      for j,leaf in pairs(model) do
-        for i,face in pairs(leaf.faces) do
-          local viz
-          if face.side then
-            viz=v_dot(face.plane.n,self.pos)>=face.cp
-          else
-            viz=v_dot(face.plane.n,self.pos)<face.cp
-          end
-          if viz then
+      local f_cache={}
+      for j,leaf in ipairs(model) do
+        for i,face in pairs(leaf.faces) do          
+          if not f_cache[face] and v_dot(face.plane.n,self.pos)<face.cp!=face.side then
+            f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0          
+            local g={0,0,0}
             for k,v in pairs(face.verts) do
               local a=v_cache[v]
               if not a then
@@ -184,23 +181,30 @@ function make_cam()
 
                 if z<8 then code=2 end
                 --if z>250 then code|=1 end
-                if 2*x>z then code|=4
-                elseif 2*x<-z then code|=8 end
-                if 2*y>z then code|=16
-                elseif 2*y<-z then code|=32 end
+                if x>z then code|=4
+                elseif x<-z then code|=8 end
+                if y>z then code|=16
+                elseif y<-z then code|=32 end
                 -- save world space coords for clipping
                 -- to screen space
-                local w=128/z
+                local w=64/z
                 a={x,y,z,x=63.5+x*w,y=63.5-y*w,w=w,outcode=code}    
                 v_cache[v]=a
               end
               outcode&=a.outcode
               clipcode+=a.outcode&2              
               p[k]=a
+              g=v_add(g,a)
             end
             if outcode==0 then            
               if(clipcode>0) p=z_poly_clip(8,p)
-              if(#p>2) polyfill(p,1+(i%14))
+              if #p>2 then
+                polyfill(p,1+(i%14))
+                --polyline(p,c)
+                -- v_scale(g,1/#face.verts)
+                -- local w=64/g[3]                
+                --if(w>0) print(leaf.id,63.5+g[1]*w,63.5-g[2]*w,c)
+              end
             end
           end
         end
@@ -219,14 +223,14 @@ function z_poly_clip(znear,v)
       if d0<=0 then
         local t=d0/(d0-d1)
         local nv=v_lerp(v0,v1,t) 
-        local w=128/nv[3]
+        local w=64/nv[3]
         res[#res+1]={x=63.5+nv[1]*w,y=63.5-nv[2]*w,w=w}
 			end
       res[#res+1]=v1
 		elseif d0>0 then
       local t=d0/(d0-d1)
 			local nv=v_lerp(v0,v1,t)
-      local w=128/nv[3]
+      local w=64/nv[3]
       res[#res+1]={x=63.5+nv[1]*w,y=63.5-nv[2]*w,w=w}
 		end
     v0=v1
@@ -274,6 +278,20 @@ function visit_bsp(node,pos,visitor)
   visitor(node,not side,pos,visitor)
 end
 
+function find_sub_sector(node,pos)
+  while node do
+    local plane=node.plane
+    local side=v_dot(plane.n,pos)<=plane.d
+    local child=node.children[not side]
+    if child and child.contents then
+      -- leaf?
+      return child
+    end
+    node=child
+  end
+end
+
+
 function _init()
   -- capture mouse
   -- enable lock+button alias
@@ -281,10 +299,10 @@ function _init()
 
   -- 
   _cam=make_cam()
-  _plyr=make_player(4,3,4)
+  _plyr=make_player(0,0,0)
 
   -- unpack map
-  _model=decompress("q8k",0,0,unpack_map)
+  _model,_leaves=decompress("q8k",0,0,unpack_map)
 end
 
 function _update()
@@ -296,18 +314,24 @@ end
 function _draw()
   cls()
   local leaves={}
+  local current_leaf=find_sub_sector(_model,_cam.pos)
+  local pvs={}
+  if(current_leaf) pvs=current_leaf.pvs
   visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
     local child=node.children[side]
-    if child and child.contents then
-      add(leaves,child)
+    if child and child.pvs then
+      local id=child.id-1
+      if band(pvs[id\8],1<<(id&7))!=0 then
+        add(leaves,child)
+      end
     elseif child and _cam:is_visible(child.bbox) then
       visit_bsp(child,pos,visitor)
     end
   end)
+  
+  _cam:draw_faces(leaves,pvs)
 
-  _cam:draw_faces(leaves)
-
-  print(stat(1).."\n"..stat(0).."\n"..#leaves,2,2,7)
+  print(stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nleaf:"..(current_leaf and current_leaf.id or -1),2,2,7)
 end
 
 -->8
@@ -395,16 +419,23 @@ function unpack_map()
   end)
 
   unpack_array(function(i)
-    local f={}
-    add(leaves,{
-      id=i-1,
+    local f,pvs,id={},{},i
+    leaves[id]={
+      id=id-1,
       contents=mpeek(),
-      faces=f
-    })
+      faces=f,
+      pvs=pvs
+    }
+    -- vislist
+    unpack_array(function()
+      pvs[unpack_variant()]=mpeek() --unpack_fixed()
+    end)
+    
     unpack_array(function()
       add(f,unpack_ref(faces))
     end)
   end)
+  printh(#leaves)
 
   unpack_array(function()
     add(nodes,{
@@ -423,7 +454,7 @@ function unpack_map()
       local refs=nodes
       if(leaf) refs=leaves
       local id=node.children[side]
-      node.children[side]=id>0 and refs[id] or nil
+      node.children[side]=refs[id]
     end
     attach_node(true,node.flags&0x1!=0)
     attach_node(false,node.flags&0x2!=0)
@@ -435,5 +466,5 @@ function unpack_map()
   end)
 
   -- get top level node
-  return models[1]
+  return models[1],leaves
 end

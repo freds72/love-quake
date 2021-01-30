@@ -172,7 +172,7 @@ class dmodel_t(LittleEndianStructure, StructHelper):
     ("bound",boundbox_t),          # The bounding box of the Model
     ("origin",vec3_t),             # origin of model, usually (0,0,0)
     ("headnode",c_int * MAX_MAP_HULLS),             # index of first BSP node
-    ("visleafs",c_int),             # number of BSP leaves
+    ("numleafs",c_int),             # number of BSP leaves
     ("firstface", c_int),             # index of Faces
     ("numfaces", c_int)             # number of Faces
   ]
@@ -273,11 +273,21 @@ def pack_face(face):
   
   return s
 
-def pack_leaf(leaf):
+def pack_leaf(id, leaf, vis):
   global faces_leaf
   s = ""
   # type
   s += "{:02x}".format(-leaf.contents)
+
+  # visibility info
+  s += pack_variant(len(vis))
+  for k,v in vis.items():
+    s += pack_variant(k)
+    # s += pack_int32(v)
+    s += "{:02x}".format(v)
+
+  #  id -= 1
+  #  print(vis[id>>3]&(1<<(id&7))!=0)
 
   # faces?
   s += pack_variant(leaf.face_num)
@@ -326,8 +336,57 @@ def pack_model(model):
   s += pack_variant(model.headnode[0]+1)
   return s
 
+# https://mrelusive.com/publications/papers/Run-Length-Compression-of-Large-Sparse-Potential-Visible-Sets.pdf
+def unpack_node_pvs(node, model, cache):
+  for k,child_id in enumerate(node.children):
+    if child_id & 0x8000 != 0:
+      child_id = ~child_id
+      if child_id != 0:
+        leaf = leaves[child_id]
+        if leaf.visofs!=-1 and child_id not in cache:
+          numbytes = (model.numleafs+7)>>3
+          # print("leafs: {} / bytes: {} / offset: {} / {}".format(model.numleafs, numbytes, leaf.visofs, len(visdata)))
+          vis = {}
+          i = 0
+          c_out = 0          
+          while c_out<numbytes:
+            ii = visdata[leaf.visofs+i]
+            if ii != 0:
+              # vis[c_out>>2] = vis.get(c_out>>2,0) | ii<<(8*(c_out%4))
+              vis[c_out] = ii
+              i += 1
+              c_out += 1
+              continue
+            # skip 0
+            i += 1
+            # number of bytes to skip
+            c = visdata[leaf.visofs+i]
+            # print("skipping: {}".format(c))
+            i += 1
+            c_out += c
+          # print("{}:{}".format(child_id,{k:"{:02x}".format(v) for k,v in vis.items()}))
+          s = ""        
+          for i in range(model.numleafs):
+            if vis.get(i>>3,0)&(1<<(i&7)):
+              s += "\t{}".format(i+1)
+            else:
+              s += "\t."
+          print("{}\t{}".format(child_id,s))
+          cache[child_id] = vis
+    else:
+      unpack_node_pvs(nodes[child_id], model, cache)
+
+def unpack_pvs(model, cache):
+  for root_id in model.headnode:    
+    if root_id<len(nodes): # ???      
+      unpack_node_pvs(nodes[root_id], model, cache)
+
 def pack_vec3(v):
   return pack_fixed(v.x) + pack_fixed(v.y) + pack_fixed(v.z)
+
+def read_bytes(f, entry):
+    f.seek(entry.offset)
+    return f.read(entry.size)
 
 def pack_bsp(filename):
   with open(filename,"rb") as f:
@@ -336,6 +395,7 @@ def pack_bsp(filename):
     # raw data
     global models
     global vertices
+    global visdata
     global nodes
     global faces
     global texinfo 
@@ -346,6 +406,8 @@ def pack_bsp(filename):
     global surfedges
     models = dmodel_t.read_all(f, header.models)
     vertices = vec3_t.read_all(f, header.vertices)
+    visdata = read_bytes(f, header.visilist)
+    print(visdata)
     nodes = dnode_t.read_all(f, header.nodes)
     faces = dface_t.read_all(f, header.faces)
     texinfo = texinfo_t.read_all(f, header.texinfo)
@@ -357,11 +419,13 @@ def pack_bsp(filename):
 
     s = ""
     # all vertices
+    logging.info("Packing vertices: {}".format(len(vertices)))
     s += pack_variant(len(vertices))
     for v in vertices:
       s += pack_vec3(v)
 
     # all planes
+    logging.info("Packing planes: {}".format(len(planes)))
     s += pack_variant(len(planes))
     for p in planes:
       s += pack_vec3(p.normal)
@@ -373,11 +437,17 @@ def pack_bsp(filename):
     for face in faces:
       s += pack_face(face)
 
+    # visibility data
+    logging.info("Packing visleafs: {}".format(len(visdata)))
+    vis_cache = {}
+    for model in models:
+      unpack_pvs(model, vis_cache)
+
     # all leaves
     logging.info("Packing leaves: {}".format(len(leaves)))
     s += pack_variant(len(leaves))
-    for l in leaves:
-      s += pack_leaf(l)
+    for i,l in enumerate(leaves):
+      s += pack_leaf(i, l, vis_cache.get(i,{}))
         
     # all nodes
     logging.info("Packing nodes: {}".format(len(nodes)))
