@@ -12,7 +12,7 @@ tools/__pycache__
 *.egg-info
 _label.png
 /bin
-/carts/qk8_*.p8
+/carts/q8k_*.p8
 
 
 
