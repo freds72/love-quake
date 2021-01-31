@@ -149,9 +149,9 @@ function make_cam()
     end,
     is_visible=function(self,bbox)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local p,outcode={},0xffff          
-      for _,v in pairs(bbox) do
-        local code,x,y,z=0,unpack(v)
+      local outcode=0xffff      
+      for i=1,24,3 do
+        local code,x,y,z=0,bbox[i],bbox[i+1],bbox[i+2]
         x,y,z=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
         if z<1 then code=2 end
@@ -161,17 +161,19 @@ function make_cam()
         if y>z then code|=16
         elseif y<-z then code|=32 end
         outcode&=code
+        -- visible?
+        if(outcode==0) return true
       end
-      return outcode==0
+      --return outcode==0
     end,
-    draw_faces=function(self,model)
+    draw_faces=function(self,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache={},{}
-      for j,leaf in ipairs(model) do
+      for j,leaf in ipairs(leaves) do
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
           -- make sure a face from a leaf is draw only once
-          if not f_cache[face] and v_dot(face.plane.n,self.pos)<face.cp!=face.side then
+          if not f_cache[face] and face.dot(self.pos)<face.cp!=face.side then
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0          
             -- local g={0,0,0}
@@ -277,17 +279,14 @@ function make_player(pos,a)
 end
 
 function visit_bsp(node,pos,visitor)
-  local plane=node.plane
-  local side=v_dot(plane.n,pos)<=plane.d
+  local side=node.dot(pos)<=node[4]
   visitor(node,side,pos,visitor)
   visitor(node,not side,pos,visitor)
 end
 
 function find_sub_sector(node,pos)
   while node do
-    local plane=node.plane
-    local side=v_dot(plane.n,pos)<=plane.d
-    local child=node.children[not side]
+    local child=node[not (node.dot(pos)<=node[4])]
     if child and child.contents then
       -- leaf?
       return child
@@ -323,15 +322,16 @@ function _draw()
   if current_leaf then
     local pvs=current_leaf.pvs
     visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
-      local child=node.children[side]
+      local child=node[side]
       if child and child.pvs then
         -- pvs skips leaf 0
         local id=child.id-1
         -- use band to handle no entry in pvs case
         if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
+          --if(_cam:is_visible(child.bbox)) add(leaves,child)
           add(leaves,child)
         end
-      elseif child and _cam:is_visible(child.bbox) then
+      elseif child then
         visit_bsp(child,pos,visitor)
       end
     end)
@@ -397,15 +397,15 @@ function unpack_bbox()
   local x0,y0,z0=unpack(unpack_v3())
   local x1,y1,z1=unpack(unpack_v3())
   return {
-    {x0,y0,z0},
-    {x1,y0,z0},
-    {x1,y0,z1},
-    {x0,y0,z1},
-    {x0,y1,z0},
-    {x1,y1,z0},
-    {x1,y1,z1},
-    {x0,y1,z1}
-  }
+    x0,y0,z0,
+    x1,y0,z0,
+    x1,y0,z1,
+    x0,y0,z1,
+    x0,y1,z0,
+    x1,y1,z0,
+    x1,y1,z1,
+    x0,y1,z1
+  }    
 end
 
 local colors={[0]=0,1,5,6,7}
@@ -418,26 +418,41 @@ function unpack_map()
   end)
 
   unpack_array(function()
-    add(planes,{
-      n=unpack_v3(),
-      d=unpack_fixed()
-    })
+    local t,p=mpeek()+1,unpack_v3() 
+    p[4]=unpack_fixed()
+    add(planes,p)
+    local dot=function(v)    
+      return p[1]*v[1]+p[2]*v[2]+p[3]*v[3]
+    end
+    if t==1 then    
+      dot=function(v)
+        return p[1]*v[1]
+      end
+    elseif t==2 then    
+      dot=function(v)
+        return p[2]*v[2]
+      end
+    elseif t==3 then    
+      dot=function(v)
+        return p[3]*v[3]
+      end
+    end
+    p.dot=dot
   end)
 
   unpack_array(function()
-    local v={}
-    local f=add(faces,{
+    local v,plane={},unpack_ref(planes)
+    local f=add(faces,setmetatable({
       -- normal
-      plane=unpack_ref(planes),
       side=mpeek()==0,
       color=colors[(5*(mpeek()))\0xff],
       verts=v
-    })
+    },{__index=plane}))
     unpack_array(function(i)
       -- reference to vertex
       add(v,unpack_ref(verts))
     end)
-    f.cp=v_dot(f.plane.n,v[1])    
+    f.cp=f.dot(v[1])
   end)
 
   unpack_array(function(i)
@@ -447,6 +462,7 @@ function unpack_map()
       -- leaf 0 is "solid" leaf
       id=i-1,
       contents=mpeek(),
+      bbox=unpack_bbox(),
       faces=f,
       pvs=pvs
     })
@@ -460,26 +476,23 @@ function unpack_map()
       add(f,unpack_ref(faces))
     end)
   end)
-  printh(#leaves)
 
   unpack_array(function()
-    add(nodes,{
-      plane=unpack_ref(planes), 
+    local plane=unpack_ref(planes)
+    -- merge plane and node
+    add(nodes,setmetatable({
       bbox=unpack_bbox(),
       flags=mpeek(),
-      children={
-        [true]=unpack_variant(),
-        [false]=unpack_variant()
-      }
-    })
+      [true]=unpack_variant(),
+      [false]=unpack_variant()
+    },{__index=plane}))
   end)
   -- attach nodes/leaves
   for _,node in pairs(nodes) do
     local function attach_node(side,leaf)
       local refs=nodes
       if(leaf) refs=leaves
-      local id=node.children[side]
-      node.children[side]=refs[id]
+      node[side]=refs[node[side]]
     end
     attach_node(true,node.flags&0x1!=0)
     attach_node(false,node.flags&0x2!=0)

@@ -264,7 +264,7 @@ class miptex_t(LittleEndianStructure, StructHelper):
   ]
 
 def pack_bbox(bbox):
-  return pack_vec3(bbox.min) + pack_vec3(bbox.max) 
+  return pack_vec3(bbox.min) + pack_vec3(bbox.max)
 
 def pack_face(face):
   s = ""
@@ -298,6 +298,8 @@ def pack_leaf(id, leaf, vis):
   s = ""
   # type
   s += "{:02x}".format(-leaf.contents)
+  # bounding box
+  s += pack_bbox(leaf.bound)
 
   # visibility info
   s += pack_variant(len(vis))
@@ -465,8 +467,10 @@ def pack_bsp(filename):
 
     # all planes
     logging.info("Packing planes: {}".format(len(planes)))
+    plane_types = [0,2,1,3,4,5]
     s += pack_variant(len(planes))
     for p in planes:
+      s += "{:02x}".format(plane_types[p.type])
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
 
