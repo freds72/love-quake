@@ -127,6 +127,7 @@ function make_m_from_v_angle(up,angle)
 	}
 end
 
+local _tri=0
 function make_cam()
   local up={0,1,0}
 	return {
@@ -200,8 +201,9 @@ function make_cam()
             if outcode==0 then            
               if(clipcode>0) p=z_poly_clip(8,p)
               if #p>2 then
-                polyfill(p,1+(i%14))
-                --polyline(p,c)
+                _tri+=1
+                polyfill(p,1+(leaf.id%14))
+                -- polyline(p,0)
                 -- v_scale(g,1/#face.verts)
                 -- local w=64/g[3]                
                 --if(w>0) print(leaf.id,63.5+g[1]*w,63.5-g[2]*w,c)
@@ -240,13 +242,15 @@ function z_poly_clip(znear,v)
 	return res
 end
 
-function make_player(x,y,z)
-  local angle,dangle={0,0,0},{0,0,0}
+function make_player(pos,a)
+  local angle,dangle={0,a,0},{0,0,0}
   local velocity={0,0,0,}
 
+  -- player height
+  pos=v_add(pos,{0,48,0})
   return {
-    pos={x,y,z},
-    m=make_m_from_euler(0,0,0),
+    pos=pos,
+    m=make_m_from_euler(unpack(angle)),
     update=function(self)
       -- damping
       v_scale(dangle,0.6)
@@ -300,10 +304,11 @@ function _init()
 
   -- 
   _cam=make_cam()
-  _plyr=make_player(0,10,0)
 
   -- unpack map
-  _model,_leaves=decompress("q8k",0,0,unpack_map)
+  _model,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
+
+  _plyr=make_player(pos,angle)
 end
 
 function _update()
@@ -314,27 +319,38 @@ end
 
 function _draw()
   cls()
-  local leaves={}
-  local current_leaf=find_sub_sector(_model,_cam.pos)
-  local pvs={}
-  if(current_leaf) pvs=current_leaf.pvs
-  visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
-    local child=node.children[side]
-    if child and child.pvs then
-      -- pvs skips leaf 0
-      local id=child.id-1
-      -- use band to handle no entry in pvs case
-      if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
-        add(leaves,child)
+  local leaves,current_leaf={},find_sub_sector(_model,_cam.pos)
+  if current_leaf then
+    local pvs=current_leaf.pvs
+    visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
+      local child=node.children[side]
+      if child and child.pvs then
+        -- pvs skips leaf 0
+        local id=child.id-1
+        -- use band to handle no entry in pvs case
+        if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
+          add(leaves,child)
+        end
+      elseif child and _cam:is_visible(child.bbox) then
+        visit_bsp(child,pos,visitor)
       end
-    elseif child and _cam:is_visible(child.bbox) then
-      visit_bsp(child,pos,visitor)
+    end)
+  else
+    leaves=_leaves
+  end
+  --[[
+  for id,vis in pairs(pvs) do
+    for i=1,32 do
+      if vis&i!=0 then
+        add(leaves,_leaves[(id<<5)+i-1])
+      end
     end
-  end)
-  
-  _cam:draw_faces(leaves)
+  end
+  ]]
 
-  print(stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nleaf:"..(current_leaf and current_leaf.id or -1),2,2,7)
+  _tri=0
+  _cam:draw_faces(leaves)
+  print(stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nleaf:"..(current_leaf and current_leaf.id or -1).."\npoly:".._tri,2,2,7)
 end
 
 -->8
@@ -392,6 +408,8 @@ function unpack_bbox()
   }
 end
 
+local colors={[0]=0,1,5,6,7}
+
 function unpack_map()
   local verts,planes,faces,leaves,nodes,models={},{},{},{},{},{}
 
@@ -412,6 +430,7 @@ function unpack_map()
       -- normal
       plane=unpack_ref(planes),
       side=mpeek()==0,
+      color=colors[(5*(mpeek()))\0xff],
       verts=v
     })
     unpack_array(function(i)
@@ -472,5 +491,20 @@ function unpack_map()
   end)
 
   -- get top level node
-  return models[1],leaves
+  -- unpack player position
+  return models[1],leaves,unpack_v3(),unpack_fixed()
 end
+__gfx__
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999999997777777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+__map__
+0201020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0201020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102010200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

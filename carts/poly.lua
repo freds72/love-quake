@@ -1,5 +1,5 @@
 -- polygon rasterization with tline uv coordinates
-function tpoly(v,_,uv)
+function tpoly(v,uv)
 	if(#v<3) return
 	local p0,spans=v[#v],{}
 	local x0,y0,w0=p0.x,p0.y,p0.w

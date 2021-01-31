@@ -6,6 +6,7 @@ import logging
 from ctypes import *
 from collections import namedtuple
 from python2pico import *
+from entity_reader import ENTITYReader
 
 # credits: https://gist.github.com/JonathonReinhart/b6f355f13021cd8ec5d0101e0e6675b2
 class StructHelper(object):
@@ -245,6 +246,23 @@ class texinfo_t(LittleEndianStructure, StructHelper):
     ("flags", c_int)
   ]
 
+class dmiptexlump_t(LittleEndianStructure, StructHelper):
+  _pack_ = 1
+  _fields_ = [
+    ("nummiptex", c_int),
+    ("dataofs", c_int * 4)
+  ]
+
+MIPLEVELS = 4
+class miptex_t(LittleEndianStructure, StructHelper):
+  _pack_ = 1
+  _fields_ = [
+    ("name", c_char*16),
+    ("width", c_uint),
+    ("height", c_uint),
+    ("offsets", c_uint * MIPLEVELS) # four mip maps stored
+  ]
+
 def pack_bbox(bbox):
   return pack_vec3(bbox.min) + pack_vec3(bbox.max) 
 
@@ -254,6 +272,8 @@ def pack_face(face):
   s += pack_variant(face.plane_id+1)
   # side
   s += "{:02x}".format(face.side)
+  # base light
+  s += "{:02x}".format(face.styles[1])
 
   # edge indirection
   # + skip last edge (duplicates start/end)
@@ -376,6 +396,19 @@ def unpack_pvs(model, cache):
     if root_id<len(nodes): # ???      
       unpack_node_pvs(nodes[root_id], model, cache)
 
+def pack_entities(entities):
+  s = ""
+  # player start?
+  classnames=['info_player_start','info_player_deathmatch','testplayerstart']
+  player_starts=[e for e in entities if e.classname in classnames]
+  if len(player_starts)==0:
+    raise Exception("Missing info_player_start entity in: {}".format(entities))
+  player_start = player_starts[0]
+  logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
+  s += pack_vec3(player_start.origin)
+  s += pack_fixed("angle" in player_start and player_start.angle or 0)
+  return s
+
 def pack_vec3(v):
   return pack_fixed(v.x) + pack_fixed(v.y) + pack_fixed(v.z)
 
@@ -394,6 +427,7 @@ def pack_bsp(filename):
     global nodes
     global faces
     global texinfo 
+    global miptex
     global planes
     global leaves
     global edges     
@@ -405,6 +439,7 @@ def pack_bsp(filename):
     nodes = dnode_t.read_all(f, header.nodes)
     faces = dface_t.read_all(f, header.faces)
     texinfo = texinfo_t.read_all(f, header.texinfo)
+    miptex = dmiptexlump_t.read_all(f, header.miptex)
     planes = dplane_t.read_all(f, header.planes)
     leaves = dleaf_t.read_all(f, header.leaves)
     edges = dedge_t.read_all(f, header.edges)
@@ -412,6 +447,16 @@ def pack_bsp(filename):
     surfedges = dsurfedge_t.read_all(f, header.surfedges)
 
     s = ""
+
+    # all textures    
+    # for t in texinfo:
+    #   mip = miptex[t.miptex]
+    #   print("animated:", mip.nummiptex>1)
+    #   for i in range(mip.nummiptex):
+    #     f.seek(mip.dataofs[i])
+    #     mipentry = dmiptexlump_t.read_from(f)
+    #     print(mipentry)
+
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
     s += pack_variant(len(vertices))
@@ -455,4 +500,8 @@ def pack_bsp(filename):
     for model in models:
       s += pack_model(model)
     
+    # level gameplay
+    entities = ENTITYReader(read_bytes(f, header.entities).decode('ascii')).entities
+    s += pack_entities(entities)
+
     return s
