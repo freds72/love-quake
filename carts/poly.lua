@@ -83,7 +83,6 @@ function tpoly(v,uv)
 end
 
 function polyfill(v,c)	
-	if(#v<3) return
 	color(c)
 	local p0,spans=v[#v],{}
 	local x0,y0=p0.x,p0.y

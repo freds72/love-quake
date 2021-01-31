@@ -267,12 +267,11 @@ end
 
 function find_sub_sector(node,pos)
   while node do
-    local child=node[not (node.dot(pos)<=node[4])]
-    if child and child.contents then
+    node=node[not (node.dot(pos)<=node[4])]
+    if node and node.contents then
       -- leaf?
-      return child
+      return node
     end
-    node=child
   end
 end
 
@@ -297,38 +296,48 @@ function _update()
   _cam:track(_plyr.pos,_plyr.m)
 end
 
+local _visframe=0
+local _prev_leaf
+local _vis_mask=split("0x0000.0002,0x0000.0004,0x0000.0008,0x0000.0010,0x0000.0020,0x0000.0040,0x0000.0080,0x0000.0100,0x0000.0200,0x0000.0400,0x0000.0800,0x0000.1000,0x0000.2000,0x0000.4000,0x0000.8000,0x0001.0000,0x0002.0000,0x0004.0000,0x0008.0000,0x0010.0000,0x0020.0000,0x0040.0000,0x0080.0000,0x0100.0000,0x0200.0000,0x0400.0000,0x0800.0000,0x1000.0000,0x2000.0000,0x4000.0000,0x8000.0000",",",1)
+_vis_mask[0]=0x0000.0001
+
 function _draw()
   --cls()
   local leaves,current_leaf={},find_sub_sector(_model,_cam.pos)
+  _visframe+=1
   if current_leaf then
-    local pvs=current_leaf.pvs
+    -- find all visible leaves
+    local visframe,vis_mask=_visframe,_vis_mask
+    for i,bits in pairs(current_leaf.pvs) do
+      for j,mask in pairs(vis_mask) do
+        if bits&mask!=0 then
+          local leaf=_leaves[(i<<5|j)+2]
+          -- tag visible parents
+          while leaf do
+            -- already tagged?
+            if(leaf.visframe==visframe) break
+            leaf.visframe=visframe
+            leaf=leaf.parent
+          end
+        end
+      end
+    end    
+    
+    -- sorted drawing
     visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
       local child=node[side]
-      if child then
+      if child and child.visframe==visframe then
         if child.pvs then
-          -- pvs skips leaf 0
-          local id=child.id-1
-          -- use band to handle no entry in pvs case
-          if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
-            add(leaves,child)
-          end
+          add(leaves,child)
         else
           visit_bsp(child,pos,visitor)
         end
       end
     end)
+    
   else
     leaves=_leaves
   end
-  --[[
-  for id,vis in pairs(pvs) do
-    for i=1,32 do
-      if vis&i!=0 then
-        add(leaves,_leaves[(id<<5)+i-1])
-      end
-    end
-  end
-  ]]
 
   _tri=0
   _cam:draw_faces(leaves)
@@ -410,7 +419,7 @@ function unpack_map()
   unpack_array(function()
     local v,plane={},unpack_ref(planes)
     local f=add(faces,setmetatable({
-      -- normal
+      -- face side vs supporting plane
       side=mpeek()==0,
       color=colors[(5*(mpeek()))\0xff],
       verts=v
@@ -433,7 +442,7 @@ function unpack_map()
       pvs=pvs
     })
 
-    -- potentially visible set
+    -- potentially visible set    
     unpack_array(function()
       pvs[unpack_variant()]=unpack_fixed()
     end)
@@ -457,7 +466,9 @@ function unpack_map()
     local function attach_node(side,leaf)
       local refs=nodes
       if(leaf) refs=leaves
-      node[side]=refs[node[side]]
+      local child=refs[node[side]]
+      node[side]=child
+      if(child) child.parent=node
     end
     attach_node(true,node.flags&0x1!=0)
     attach_node(false,node.flags&0x2!=0)
