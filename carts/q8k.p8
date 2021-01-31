@@ -147,33 +147,14 @@ function make_cam()
       })
       self.pos=pos
     end,
-    is_visible=function(self,bbox)
-      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local outcode=0xffff      
-      for i=1,24,3 do
-        local code,x,y,z=0,bbox[i],bbox[i+1],bbox[i+2]
-        x,y,z=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-
-        if z<1 then code=2 end
-        --if z>250 then code|=1 end
-        if x>z then code|=4
-        elseif x<-z then code|=8 end
-        if y>z then code|=16
-        elseif y<-z then code|=32 end
-        outcode&=code
-        -- visible?
-        if(outcode==0) return true
-      end
-      --return outcode==0
-    end,
     draw_faces=function(self,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local v_cache,f_cache={},{}
+      local v_cache,f_cache,pos={},{},self.pos
       for j,leaf in ipairs(leaves) do
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
           -- make sure a face from a leaf is draw only once
-          if not f_cache[face] and face.dot(self.pos)<face.cp!=face.side then
+          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0          
             -- local g={0,0,0}
@@ -181,18 +162,18 @@ function make_cam()
               local a=v_cache[v]
               if not a then
                 local code,x,y,z=0,v[1],v[2],v[3]
-                x,y,z=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
+                local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
-                if z<8 then code=2 end
+                if az<8 then code=2 end
                 --if z>250 then code|=1 end
-                if x>z then code|=4
-                elseif x<-z then code|=8 end
-                if y>z then code|=16
-                elseif y<-z then code|=32 end
+                if ax>az then code|=4
+                elseif ax<-az then code|=8 end
+                if ay>az then code|=16
+                elseif ay<-az then code|=32 end
                 -- save world space coords for clipping
                 -- to screen space
-                local w=64/z
-                a={x,y,z,x=63.5+x*w,y=63.5-y*w,w=w,outcode=code}    
+                local w=64/az
+                a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
                 v_cache[v]=a
               end
               outcode&=a.outcode
@@ -317,22 +298,23 @@ function _update()
 end
 
 function _draw()
-  cls()
+  --cls()
   local leaves,current_leaf={},find_sub_sector(_model,_cam.pos)
   if current_leaf then
     local pvs=current_leaf.pvs
     visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
       local child=node[side]
-      if child and child.pvs then
-        -- pvs skips leaf 0
-        local id=child.id-1
-        -- use band to handle no entry in pvs case
-        if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
-          --if(_cam:is_visible(child.bbox)) add(leaves,child)
-          add(leaves,child)
+      if child then
+        if child.pvs then
+          -- pvs skips leaf 0
+          local id=child.id-1
+          -- use band to handle no entry in pvs case
+          if band(pvs[id\32],0x0.0001<<(id&31))!=0 then
+            add(leaves,child)
+          end
+        else
+          visit_bsp(child,pos,visitor)
         end
-      elseif child then
-        visit_bsp(child,pos,visitor)
       end
     end)
   else
@@ -393,21 +375,6 @@ function unpack_v3()
   return {unpack_fixed(),unpack_fixed(),unpack_fixed()}
 end
 
-function unpack_bbox()
-  local x0,y0,z0=unpack(unpack_v3())
-  local x1,y1,z1=unpack(unpack_v3())
-  return {
-    x0,y0,z0,
-    x1,y0,z0,
-    x1,y0,z1,
-    x0,y0,z1,
-    x0,y1,z0,
-    x1,y1,z0,
-    x1,y1,z1,
-    x0,y1,z1
-  }    
-end
-
 local colors={[0]=0,1,5,6,7}
 
 function unpack_map()
@@ -462,7 +429,6 @@ function unpack_map()
       -- leaf 0 is "solid" leaf
       id=i-1,
       contents=mpeek(),
-      bbox=unpack_bbox(),
       faces=f,
       pvs=pvs
     })
@@ -481,7 +447,6 @@ function unpack_map()
     local plane=unpack_ref(planes)
     -- merge plane and node
     add(nodes,setmetatable({
-      bbox=unpack_bbox(),
       flags=mpeek(),
       [true]=unpack_variant(),
       [false]=unpack_variant()

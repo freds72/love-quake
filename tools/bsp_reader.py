@@ -298,8 +298,6 @@ def pack_leaf(id, leaf, vis):
   s = ""
   # type
   s += "{:02x}".format(-leaf.contents)
-  # bounding box
-  s += pack_bbox(leaf.bound)
 
   # visibility info
   s += pack_variant(len(vis))
@@ -318,8 +316,6 @@ def pack_node(node):
   s = ""
   # supporting plane
   s += pack_variant(node.plane_id+1)
-  # bounding box
-  s += pack_bbox(node.bound)
 
   flags = 0x0
   # todo: find out purpose of bsp node faces?
