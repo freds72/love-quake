@@ -57,8 +57,7 @@ def pack_archive(pico_path, carts_path, root, filename, mapname=None, compress=F
   game_data = compress and compress_byte_str(map_data, more=compress_more) or map_data
   
   # lightmap data
-  # lightmap_img.save("lightmap.png")
-  # print(pack_lightmap(lightmap_img))
+  print(pack_lightmap(lightmap_img))
 
   # export to game
   to_multicart(game_data, pico_path, carts_path, "q8k")  

@@ -284,13 +284,7 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-img_lightmap = Image.new('RGBA', (128,128), (0,0,0,0))
-img_x = 0
-img_max_height = 0
-img_y = 0
-all_lightmaps = []
-
-def pack_lightmap(id, face, tex):  
+def pack_lightmap(id, face, tex, atlas):  
   global img_lightmap  
   global img_x
   global img_max_height
@@ -332,28 +326,11 @@ def pack_lightmap(id, face, tex):
     for j in range(height):
       l = lightmaps[face.lightofs+i+j*width]      
       img.putpixel((i,j),(l,l,l,255))
-  img_max_height=max(img_max_height, height)
-  if img_x+width>128:
-    img_x=0
-    img_y+=img_max_height
-    img_max_height=0
-  img_lightmap.paste(img, (img_x, img_y))
+  mx,my = atlas.add(img)
+  # return base texture location + map space location
+  return dotdict({'u_min':u_min,'v_min':v_min,'mx':mx,'my':my})  
 
-  all_lightmaps.append(img)
-
-  # keep track of location  
-  lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
-  
-  # coordinates in lightmap space
-  # draw = ImageDraw.Draw(img_uv)
-  # draw.line([((v_dot(vertices[vi],tex.u_axis)+tex.u_offset)/16-u_min+img_x, (v_dot(vertices[vi],tex.v_axis)+tex.v_offset)/16-v_min+img_y) for vi in face_verts], width=1, fill=(255,0,0,255))
-
-  # print(128-u_min+img_x,128-v_min+img_y)
-  img_x += width
-  return lightmap_coords
-
-
-def pack_face(id, face):
+def pack_face(id, face, atlas):
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id+1)
@@ -388,9 +365,10 @@ def pack_face(id, face):
     # get texture
     s += pack_variant(face.tex_id+1)
     # extract lightmap + get extents    
-    lightmap_coords = pack_lightmap(id, face,textures[face.tex_id])
+    lightmap_coords = pack_lightmap(id, face,textures[face.tex_id], atlas)
     # texture coords "origin" (1/16 lightmap space)
     # + lightmap offset coords (map space)
+    
     s += "{:02x}{:02x}".format(min(255,128-lightmap_coords.u_min+lightmap_coords.mx),min(255,128-lightmap_coords.v_min+lightmap_coords.my))
     
   return s
@@ -591,18 +569,16 @@ def pack_bsp(filename):
     for tex in textures:
       s += pack_texture(tex)
 
+    # 
+    atlas = ImageAtlas(width=128, height=128)    
+
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
     for i,face in enumerate(faces):
-      s += pack_face(i, face)
+      s += pack_face(i, face, atlas)
 
-    # 
-    atlas = ImageAtlas(width=128, height=128)    
-    # sorted(all_lightmaps, key=lambda img: img.size)
-    for i in all_lightmaps:
-      atlas.add(i)  
-
+    # save atlas to picture
     atlas_img = Image.new('RGBA', (128,128), (255,0,0,255))
     draw_atlas(atlas, atlas_img)
     atlas_img.save("atlas.png")
@@ -635,4 +611,4 @@ def pack_bsp(filename):
     entities = ENTITYReader(read_bytes(f, header.entities).decode('ascii')).entities
     s += pack_entities(entities)
 
-    return (s, img_lightmap)
+    return (s, atlas_img)
