@@ -7,6 +7,7 @@ __lua__
 #include plain.lua
 
 local _model
+local _palette={[0]=0,128,130,133,5,5,5,134,134,134,134,6,6,6,7,7}
 
 -- maths & cam
 function lerp(a,b,t)
@@ -182,20 +183,11 @@ function make_cam()
               -- g=v_add(g,a)
             end
             if outcode==0 then 
-              local uv=face.uv
-              if(clipcode>0) p,uv=z_poly_clip(8,p,uv)
+              if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
                 _tri+=1
-                -- reset clipping
-                poke(0x5f20,0)
-                poke(0x5f22,128)
-                if uv then    
-                  local draw_face=face.draw or tpoly
-                  draw_face(p,uv)
-                else
-                  polyfill(p,1+(leaf.id%14))
-                end
+                polyfill(p,face.color)
                 -- polyline(p,0)
                 -- v_scale(g,1/#face.verts)
                 -- local w=64/g[3]                
@@ -209,11 +201,11 @@ function make_cam()
   }
 end
 
-function z_poly_clip(znear,v,uv)
-	local res,res_uv,v0,uv0={},{},v[#v],uv and uv[#v]
+function z_poly_clip(znear,v)
+	local res,v0={},v[#v]
 	local d0=v0[3]-znear
 	for i=1,#v do
-		local v1,uv1=v[i],uv and uv[i]
+		local v1=v[i]
 		local d1=v1[3]-znear
 		if d1>0 then
       if d0<=0 then
@@ -221,22 +213,18 @@ function z_poly_clip(znear,v,uv)
         local nv=v_lerp(v0,v1,t) 
         local w=64/nv[3]
         res[#res+1]={x=63.5+nv[1]*w,y=63.5-nv[2]*w,w=w}
-        if(uv) res_uv[#res_uv+1]=v2_lerp(uv0,uv1,t)
 			end
       res[#res+1]=v1
-      if(uv) res_uv[#res_uv+1]=uv1
 		elseif d0>0 then
       local t=d0/(d0-d1)
 			local nv=v_lerp(v0,v1,t)
       local w=64/nv[3]
       res[#res+1]={x=63.5+nv[1]*w,y=63.5-nv[2]*w,w=w}
-      if(uv) res_uv[#res_uv+1]=v2_lerp(uv0,uv1,t)
 		end
     v0=v1
 		d0=d1
-    uv0=uv1
 	end
-	return res,uv and res_uv
+	return res
 end
 
 function make_player(pos,a)
@@ -295,10 +283,8 @@ function _init()
   -- enable lock+button alias
   poke(0x5f2d,7)
 
-  pal({128,130,133,5,5,5,134,134,134,134,6,6,6,7},1)
-  
-  -- uv tests
-  palt(0,false)
+  pal(_palette,1)
+  fillp(0xa5a5)
 
   -- 
   _cam=make_cam()
@@ -408,10 +394,8 @@ function unpack_v3()
   return {unpack_fixed(),unpack_fixed(),unpack_fixed()}
 end
 
-local colors={[0]=0,1,5,6,7}
-
 function unpack_map()
-  local verts,planes,faces,textures,leaves,nodes,models={},{},{},{},{},{},{}
+  local verts,planes,faces,leaves,nodes,models={},{},{},{},{},{}
 
   unpack_array(function()
     add(verts,unpack_v3())
@@ -442,20 +426,11 @@ function unpack_map()
   end)
 
   unpack_array(function()
-    add(textures,{
-      u=unpack_v3(),
-      u_offset=unpack_fixed(),
-      v=unpack_v3(),
-      v_offset=unpack_fixed()
-    })
-  end)
-
-  unpack_array(function()
-    local face_verts,plane,flags={},unpack_ref(planes),mpeek()
+    local face_verts,plane,flags,color={},unpack_ref(planes),mpeek(),mpeek()/255
     local f=add(faces,setmetatable({
       -- face side vs supporting plane
       side=flags&0x1==0,
-      color=colors[(5*(mpeek()))\0xff],
+      color=_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color+0.5),0,15)]<<4,
       verts=face_verts
     },{__index=plane}))
 
@@ -464,20 +439,6 @@ function unpack_map()
       add(face_verts,unpack_ref(verts))
     end)
     f.cp=f.dot(face_verts[1])
-
-    -- lightmap?
-    if flags&0x2!=0 then
-      local texture=unpack_ref(textures)
-      local mx,my=mpeek()-128,mpeek()-128
-      local uv={}
-      for _,v in pairs(face_verts) do
-        add(uv,{
-          ((v_dot(v,texture.u)+texture.u_offset)>>4)+mx,
-          ((v_dot(v,texture.v)+texture.v_offset)>>4)+my
-        })
-      end
-      f.uv=uv
-    end
   end)
 
   unpack_array(function(i)
