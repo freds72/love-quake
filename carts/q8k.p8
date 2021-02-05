@@ -128,7 +128,6 @@ function make_m_from_v_angle(up,angle)
 	}
 end
 
-local _tri=0
 function make_cam()
   local up={0,1,0}
 	return {
@@ -152,13 +151,13 @@ function make_cam()
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,pos={},{},self.pos
       for j,leaf in ipairs(leaves) do
+        -- faces form a convex space, render in any order
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
           -- make sure a face from a leaf is draw only once
-          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then
+          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
             f_cache[face]=true
-            local p,outcode,clipcode={},0xffff,0          
-            -- local g={0,0,0}
+            local p,outcode,clipcode={},0xffff,0
             for k,v in pairs(face.verts) do
               local a=v_cache[v]
               if not a then
@@ -173,25 +172,19 @@ function make_cam()
                 elseif ay<-az then code|=32 end
                 -- save world space coords for clipping
                 -- to screen space
-                local w=64/az
-                a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
+                a={ax,ay,az,x=63.5+((ax/az)<<6),y=63.5-((ay/az)<<6),outcode=code}
                 v_cache[v]=a
               end
               outcode&=a.outcode
               clipcode+=a.outcode&2              
               p[k]=a
-              -- g=v_add(g,a)
             end
             if outcode==0 then 
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                _tri+=1
                 polyfill(p,face.color)
-                -- polyline(p,0)
-                -- v_scale(g,1/#face.verts)
-                -- local w=64/g[3]                
-                --if(w>0) print(leaf.id,63.5+g[1]*w,63.5-g[2]*w,c)
+                polyline(p,0)
               end
             end
           end
@@ -261,15 +254,9 @@ function make_player(pos,a)
 
 end
 
-function visit_bsp(node,pos,visitor)
-  local side=node.dot(pos)<=node[4]
-  visitor(node,side,pos,visitor)
-  visitor(node,not side,pos,visitor)
-end
-
 function find_sub_sector(node,pos)
   while node do
-    node=node[not (node.dot(pos)<=node[4])]
+    node=node[node.dot(pos)>node[4]]
     if node and node.contents then
       -- leaf?
       return node
@@ -308,16 +295,37 @@ function _update()
   _cam:track(_plyr.pos,_plyr.m)
 end
 
+function collect_bsp(node,pos,visframe,leaves)
+  local side=node.dot(pos)<=node[4]
+  local child=node[side]
+  if child and child.visframe==visframe then
+    if child.pvs then
+      add(leaves,child)
+    else
+      collect_bsp(child,pos,visframe,leaves)
+    end
+  end
+  local child=node[not side]
+  if child and child.visframe==visframe then
+    if child.pvs then
+      add(leaves,child)
+    else
+      collect_bsp(child,pos,visframe,leaves)
+    end
+  end
+end
 
 function _draw()
   --cls()
   local leaves,current_leaf={},find_sub_sector(_model,_cam.pos)  
-  if current_leaf then
+  if current_leaf!=_prev_leaf then
+    _prev_leaf=current_leaf
     _visframe+=1
     -- find all visible leaves
     local visframe,vis_mask=_visframe,_vis_mask
     for i,bits in pairs(current_leaf.pvs) do
       for j,mask in pairs(vis_mask) do
+        -- visible?
         if bits&mask!=0 then
           local leaf=_leaves[(i<<5|j)+2]
           -- tag visible parents
@@ -330,28 +338,15 @@ function _draw()
         end
       end
     end    
-    
-    -- sorted drawing
-    visit_bsp(_model,_cam.pos,function(node,side,pos,visitor)
-      local child=node[side]
-      if child and child.visframe==visframe then
-        if child.pvs then
-          add(leaves,child)
-        else
-          visit_bsp(child,pos,visitor)
-        end
-      end
-    end)
-    
-  else
-    leaves=_leaves
   end
 
-  _tri=0
+  -- sorted drawing
+  collect_bsp(_model,_cam.pos,_visframe,leaves)
+
   _cam:draw_faces(leaves)
-  local s=stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nleaf:"..(current_leaf and current_leaf.id or -1).."\npoly:".._tri
+  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves
   print(s,2,3,1)
-  print(s,2,2,7)
+  print(s,2,2,12)
 end
 
 -->8
@@ -430,7 +425,7 @@ function unpack_map()
     local f=add(faces,setmetatable({
       -- face side vs supporting plane
       side=flags&0x1==0,
-      color=_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color+0.5),0,15)]<<4,
+      color=_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
       verts=face_verts
     },{__index=plane}))
 

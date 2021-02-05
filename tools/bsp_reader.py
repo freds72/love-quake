@@ -506,13 +506,15 @@ def pack_bsp(filename):
     s = ""
 
     # all textures    
-    # for t in texinfo:
-    #   mip = miptex[t.miptex]
-    #   print("animated:", mip.nummiptex>1)
-    #   for i in range(mip.nummiptex):
-    #     f.seek(mip.dataofs[i])
-    #     mipentry = dmiptexlump_t.read_from(f)
-    #     print(mipentry)
+    # for t in textures:
+    #   print(t)
+    #   mip = miptex[t.miptex]      
+    #   print("animated:", mip)
+    #   for offset in mip.dataofs:
+    #     if offset!=-1:
+    #       f.seek(offset)
+    #       mipentry = miptex_t.read_from(f)
+    #       print(mipentry)
 
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
