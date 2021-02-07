@@ -9,6 +9,9 @@ __lua__
 local _model
 local _palette={[0]=0,129,1,133,5,5,5,134,134,134,134,6,6,6,7,7}
 
+local contents_empty=-1
+local contents_solid=-2
+
 -- maths & cam
 function lerp(a,b,t)
 	return a*(1-t)+b*t
@@ -153,8 +156,12 @@ function make_cam()
         local x,y,z=v[1],v[2],v[3]
         local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
         -- to screen space
-        if(az>0) circfill(63.5+((ax/az)<<6),63.5-((ay/az)<<6),4*64/az,7)
-        
+        if az>0 then
+          ax=63.5+((ax/az)<<6)       
+          ay=63.5-((ay/az)<<6)
+          circfill(ax,ay,4*64/az,7)
+          if (v.msg) print(v.msg,ax+4*64/az+1,ay,8)
+        end
       end
     end,
     draw_faces=function(self,leaves)
@@ -257,7 +264,12 @@ function make_player(pos,a)
       local c,s=cos(a),-sin(a)
       velocity=v_add(velocity,m_fwd(self.m),dz*8)
       -- velocity=v_add(velocity,{-dx*c,0,dx*s},1)
-      self.pos=v_add(self.pos,velocity)
+      -- check next position
+      local dx,dy,dz=unpack(velocity)
+      -- if(is_solid(_model.hull,v_add(_plyr.pos,{dx,0,0}),24)) dx=0
+      -- if(is_solid(_model.hull,v_add(_plyr.pos,{0,dy,0}),24)) dy=0
+      -- if(is_solid(_model.hull,v_add(_plyr.pos,{0,0,dz}),24)) dz=0
+      self.pos=v_add(self.pos,{dx,dy,dz})
       self.m=make_m_from_euler(unpack(angle))
     end
   }
@@ -272,6 +284,13 @@ function find_sub_sector(node,pos)
       return node
     end
   end
+end
+
+function is_solid(node,pos)
+  while node!=-1 and node!=-2 do
+    node=node[node.dot(pos)>node[4]]
+  end  
+  return node==contents_solid
 end
 
 
@@ -328,12 +347,12 @@ end
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
 -- hull location
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
-
+-- https://developer.valvesoftware.com/wiki/BSP
 function hitscan(node,p0,p1,out)
   -- is "solid" space
-  if(not node) return true
+  if(node==contents_solid) return true
   -- in "empty" space
-  if(node.pvs) return
+  if(node==contents_empty) return
 
   local dist,otherdist=node.dot(p0),node.dot(p1)
   local side,otherside=dist>node[4],otherdist>node[4]
@@ -341,14 +360,21 @@ function hitscan(node,p0,p1,out)
     -- go down this side
     return hitscan(node[side],p0,p1,out)
   end
-
-  local t=(dist-node[4])/(dist-otherdist)
-  local p10=v_lerp(p0,p1,t)
+  -- crossing a node
+  local t=dist-node[4]
+  if t<0 then
+    t-=0x0.01
+  else
+    t+=0x0.01
+  end  
+  local p10=v_lerp(p0,p1,mid(t/(dist-otherdist),0,1))
   --add(out,p10)
   local hit=hitscan(node[side],p0,p10,out)
-  local otherhit=hitscan(node[otherside],p10,p1,out)
-  if(hit!=otherhit) node.hit=time()
-  if(hit or otherhit) add(out,p10) return true
+  local otherhit=hitscan(node[otherside],p10,p1,out)  
+  if hit!=otherhit then
+    if(is_solid(_model.hull,p10)) out.hit=p10
+  end
+  return hit or otherhit
 end
 
 
@@ -380,17 +406,16 @@ function _draw()
   -- sorted drawing
   collect_bsp(_model,_cam.pos,_visframe,leaves)
 
-  _cam:draw_faces(leaves)
-
   local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
-  if hitscan(_model,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits) then
-    printh("hit")
-  end
+
+  local h=hitscan(_model.hull,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
+    
+  _cam:draw_faces(leaves)
   _cam:draw_points(hits)
   
-  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nhits:"..#hits
+  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nhits:"..#hits.."\n:hit"..tostr(h)
   print(s,2,3,1)
   print(s,2,2,12)
 end
@@ -529,7 +554,48 @@ function unpack_map()
   unpack_array(function()
     add(models,unpack_ref(nodes))
   end)
-
+  -- create hulls
+  for _,model in pairs(models) do
+    local function attach_hull(parent,side,src)
+      local child=src[side]
+      if child then
+        -- leaf: deflate
+        if child.pvs then
+          -- got over all planes, create nodes
+          local surfplanes={}
+          for _,face in pairs(child.faces) do
+            local plane=getmetatable(face).__index
+            -- avoid registering the same supporting plane mulitple times
+            if not surfplanes[plane] then
+              surfplanes[plane]=true              
+              parent[side]=setmetatable({
+                [face.side]=contents_empty,
+                [not face.side]=contents_solid},
+                {__index=plane})
+              -- move to next face (eg. create a new hull node)
+              parent=parent[side] 
+              side=face.side                    
+            end            
+          end
+        else
+          -- create new hull node
+          local hull=setmetatable({},{__index=child})
+          -- register into parent
+          parent[side]=hull
+          -- recurse down the tree
+          attach_hull(hull,true,child)          
+          attach_hull(hull,false,child)          
+        end
+      else
+        parent[side]=contents_solid
+      end
+    end    
+    local hull=setmetatable({},{__index=model})
+    attach_hull(hull,true,model)
+    attach_hull(hull,false,model)
+    model.hull=hull
+  end
+  
   -- get top level node
   -- unpack player position
   return models[1],leaves,unpack_v3(),unpack_fixed()

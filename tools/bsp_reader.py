@@ -362,7 +362,6 @@ def pack_leaf(id, leaf, vis):
   s = ""
   # type
   s += "{:02x}".format(128+leaf.contents)
-  print(leaf.contents)
 
   # visibility info
   s += pack_variant(len(vis))
