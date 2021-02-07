@@ -163,8 +163,8 @@ function make_cam()
           ay=63.5-((ay/az)<<6)
           circfill(ax,ay,4*64/az,7)
           if (v.msg) print(v.msg,ax+4*64/az+1,ay,8)
-          if v.plane then
-            local v1=v_add(v,v.plane,v.side and -16 or 16)
+          if v.n then
+            local v1=v_add(v,v.n,16)
             local x,y,z=v1[1],v1[2],v1[3]
             local ax1,ay1,az1=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
             if az1>0 then
@@ -277,11 +277,26 @@ function make_player(pos,a)
       velocity=v_add(velocity,m_fwd(self.m),dz*8)
       -- velocity=v_add(velocity,{-dx*c,0,dx*s},1)
       -- check next position
-      local dx,dy,dz=unpack(velocity)
-      -- if(is_solid(_model.hull,v_add(_plyr.pos,{dx,0,0}),24)) dx=0
-      -- if(is_solid(_model.hull,v_add(_plyr.pos,{0,dy,0}),24)) dy=0
-      -- if(is_solid(_model.hull,v_add(_plyr.pos,{0,0,dz}),24)) dz=0
-      self.pos=v_add(self.pos,{dx,dy,dz})
+      local vn,vl=v_normz(velocity)
+      if vl>0.1 then
+        -- check current to target pos
+        for i=1,3 do
+          local hits={}            
+          if hitscan(_model,self.pos,v_add(self.pos,velocity),hits) and hits.n then
+            local fix=v_dot(hits.n,velocity)
+            -- separating?
+            if fix<0 then
+              velocity=v_add(velocity,hits.n,-fix)
+            end
+          else
+            break
+          end
+        end
+      else
+        velocity={0,0,0}
+      end
+
+      self.pos=v_add(self.pos,velocity)
       self.m=make_m_from_euler(unpack(angle))
     end
   }
@@ -348,7 +363,9 @@ function hitscan(node,p0,p1,out)
   else
     t+=0x0.01
   end  
-  local p10=v_lerp(p0,p1,mid(t/(dist-otherdist),0,1))
+  -- cliping fraction
+  local frac=mid(t/(dist-otherdist),0,1)
+  local p10=v_lerp(p0,p1,frac)
   --add(out,p10)
   local hit=hitscan(node[side],p0,p10,out)
   local otherhit=hitscan(node[otherside],p10,p1,out)  
@@ -357,7 +374,12 @@ function hitscan(node,p0,p1,out)
     if not out.hit then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
-      if(not find_sub_sector(_model,p10) and not out.hit) p10.plane=node p10.side=t<0 out.hit=p10
+      if not find_sub_sector(_model,p10) then
+        out.hit=p10 
+        local scale=t<0 and -1 or 1
+        out.n={scale*node[1],scale*node[2],scale*node[3]}
+        out.t=frac
+      end
     end
   end
   return hit or otherhit
@@ -425,7 +447,11 @@ function _draw()
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
   fillp()
-  _cam:draw_points(hits)
+  if hits.hit then    
+    local p=v_clone(hits.hit)
+    p.n=hits.n
+    _cam:draw_points({p})
+  end
   
   local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\n:hit:"..tostr(h)
   print(s,2,3,1)
@@ -552,10 +578,10 @@ function unpack_map()
   -- attach nodes/leaves
   for _,node in pairs(nodes) do
     local function attach_node(side,leaf)
-      local refs=nodes
-      if(leaf) refs=leaves
+      local refs=leaf and leaves or nodes
       local child=refs[node[side]]
       node[side]=child
+      -- used to optimize bsp traversal for rendering
       if(child) child.parent=node
     end
     attach_node(true,node.flags&0x1!=0)
