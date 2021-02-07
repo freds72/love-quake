@@ -154,7 +154,7 @@ function make_cam()
     end,
     draw_points=function(self,points)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      for k,v in pairs(points) do
+      for k,v in ipairs(points) do
         local x,y,z=v[1],v[2],v[3]
         local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
         -- to screen space
@@ -212,8 +212,8 @@ function make_cam()
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                polyfill(p,0)
-                polyline(p,0x11)
+                polyfill(p,face.color)
+                --polyline(p,0x11)
               end
             end
           end
@@ -289,9 +289,12 @@ function make_player(pos,a)
               velocity=v_add(velocity,hits.n,-fix)
             end
           else
-            break
+            goto clear
           end
         end
+        -- cornered?
+        velocity={0,0,0}
+::clear::
       else
         velocity={0,0,0}
       end
@@ -371,19 +374,22 @@ function hitscan(node,p0,p1,out)
   local otherhit=hitscan(node[otherside],p10,p1,out)  
   if hit!=otherhit then
     -- not already registered?
-    if not out.hit then
+    if #out==0 then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
       if not find_sub_sector(_model,p10) then
-        out.hit=p10 
+        add(out,p10) 
         local scale=t<0 and -1 or 1
-        out.n={scale*node[1],scale*node[2],scale*node[3]}
+        local n={scale*node[1],scale*node[2],scale*node[3]}
+        p10.n=n
+        out.n=n
         out.t=frac
       end
     end
   end
   return hit or otherhit
 end
+
 
 function _init()
   -- capture mouse
@@ -447,11 +453,7 @@ function _draw()
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
   fillp()
-  if hits.hit then    
-    local p=v_clone(hits.hit)
-    p.n=hits.n
-    _cam:draw_points({p})
-  end
+  _cam:draw_points(hits)
   
   local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\n:hit:"..tostr(h)
   print(s,2,3,1)
