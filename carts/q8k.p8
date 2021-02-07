@@ -161,6 +161,16 @@ function make_cam()
           ay=63.5-((ay/az)<<6)
           circfill(ax,ay,4*64/az,7)
           if (v.msg) print(v.msg,ax+4*64/az+1,ay,8)
+          if v.plane then
+            local v1=v_add(v,v.plane,v.side and -16 or 16)
+            local x,y,z=v1[1],v1[2],v1[3]
+            local ax1,ay1,az1=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
+            if az1>0 then
+              ax1=63.5+((ax1/az1)<<6)       
+              ay1=63.5-((ay1/az1)<<6)
+              line(ax,ay,ax1,ay1,15)
+            end
+          end
         end
       end
     end,
@@ -372,7 +382,12 @@ function hitscan(node,p0,p1,out)
   local hit=hitscan(node[side],p0,p10,out)
   local otherhit=hitscan(node[otherside],p10,p1,out)  
   if hit!=otherhit then
-    if(is_solid(_model.hull,p10)) out.hit=p10
+    -- not already registered?
+    if not out.hit then
+      -- check if in global empty space
+      -- note: nodes do not have spatial relationships!!
+      if(is_solid(_model.hull,p10) and not out.hit) p10.plane=node p10.side=t<0 out.hit=p10
+    end
   end
   return hit or otherhit
 end
