@@ -3,10 +3,12 @@ import re
 import io
 import math
 import logging
+from dotdict import dotdict
 from ctypes import *
 from collections import namedtuple
 from python2pico import *
 from entity_reader import ENTITYReader
+from PIL import Image, ImageFilter, ImageDraw
 
 # credits: https://gist.github.com/JonathonReinhart/b6f355f13021cd8ec5d0101e0e6675b2
 class StructHelper(object):
@@ -97,7 +99,7 @@ class dheader_t(LittleEndianStructure, StructHelper):
     ("vertices",dentry_t), # Map Vertices.
     ("visilist",dentry_t), # Leaves Visibility lists.
     ("nodes",dentry_t), # BSP Nodes.
-    ("texinfo",dentry_t), # Texture Info for faces.
+    ("textures",dentry_t), # Texture Info for faces.
     ("faces",dentry_t), # Faces of each surface.
     ("lightmaps",dentry_t), # Wall Light Maps.
     ("clipnodes",dentry_t), # clip nodes, for Models.
@@ -136,6 +138,13 @@ class bboxshort_t(LittleEndianStructure, StructHelper):
   _fields_ = [
     ("min", vec3short_t),
     ("max", vec3short_t)
+  ]
+
+class dclipnode_t(LittleEndianStructure, StructHelper):
+  _pack_ = 1
+  _fields_ = [
+    ("plane_id", c_int),
+    ("children", c_short*2)  # negative numbers are contents (eg leafs)
   ]
 
 class dplane_t(LittleEndianStructure, StructHelper):
@@ -229,12 +238,13 @@ class dface_t(LittleEndianStructure, StructHelper):
     ("edge_id", c_int),        # first edge in the List of edges
                                  #           must be in [0,numledges[
     ("edge_num", c_short),     # number of edges in the List of edges
-    ("texinfo", c_short),    # index of the Texture info the face is part of
+    ("tex_id", c_short),    # index of the Texture info the face is part of
                                  #           must be in [0,numtexinfos[ 
-    ("styles", c_byte * MAXLIGHTMAPS),     # type of lighting, for the face
+    ("styles", c_ubyte * MAXLIGHTMAPS),     # type of lighting, for the face
     ("lightofs", c_int)    # Pointer inside the general light map, or -1       
   ]                             
 
+TEX_SPECIAL=1
 class texinfo_t(LittleEndianStructure, StructHelper):
   _pack_ = 1
   _fields_ = [
@@ -266,14 +276,56 @@ class miptex_t(LittleEndianStructure, StructHelper):
 def pack_bbox(bbox):
   return pack_vec3(bbox.min) + pack_vec3(bbox.max)
 
-def pack_face(face):
+def pack_texture(tex):
+  s = ""
+  s += pack_vec3(tex.u_axis)
+  s += pack_fixed(tex.u_offset)
+  s += pack_vec3(tex.v_axis)
+  s += pack_fixed(tex.v_offset)
+  return s
+
+def pack_tline(texture):
+  return "{:02x}{:02x}{:02x}{:02x}".format(texture.my,texture.mx,texture.height,texture.width)
+
+def v_dot(a,b):
+  return a.x*b.x+a.y*b.y+a.z*b.z
+
+def pack_lightmap(id, verts, lightofs, tex):  
+  u_min=float('inf')
+  u_max=float('-inf')
+  v_min=float('inf')
+  v_max=float('-inf')
+  for vi in verts:
+    u=v_dot(vertices[vi],tex.u_axis)+tex.u_offset
+    v=v_dot(vertices[vi],tex.v_axis)+tex.v_offset
+    u_min=min(u_min,u)
+    v_min=min(v_min,v)
+    u_max=max(u_max,u)
+    v_max=max(v_max,v)
+
+  u_min=math.floor(u_min/16)
+  v_min=math.floor(v_min/16)
+  u_max=math.ceil(u_max/16)
+  v_max=math.ceil(v_max/16)
+  
+  width,height=((u_max-u_min)+1, (v_max-v_min)+1)  
+  
+  # average lightmap luminance
+  lightmap = []
+  for i in range(width):
+    for j in range(height):
+      lightmap.append(lightmaps[lightofs+i+j*width])  
+  return sum(lightmap)/len(lightmap)
+
+def pack_face(id, face):
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id+1)
-  # side
-  s += "{:02x}".format(face.side)
-  # base light
-  s += "{:02x}".format(face.styles[1])
+  # flags
+  flags = 0
+  if face.side:
+    flags |=1
+  s += "{:02x}".format(flags)
 
   # edge indirection
   # + skip last edge (duplicates start/end)
@@ -285,7 +337,19 @@ def pack_face(face):
       face_verts.append(edge.v[0])      
     else:
       edge = edges[-edge_id]
-      face_verts.append(edge.v[1])      
+      face_verts.append(edge.v[1])   
+
+  # base color/lightmap?
+  color = face.styles[0]
+  if color==0:
+    #light map
+    color = math.floor(pack_lightmap(id, face_verts, face.lightofs, textures[face.tex_id]))
+  elif color==0xff:
+    color = face.styles[1]
+  else:
+    logging.warn("Light effect not supported: {}".format(color))
+  s += "{:02x}".format(color)
+
   # vertex indices
   s += pack_variant(len(face_verts))
   for vi in face_verts:
@@ -297,7 +361,7 @@ def pack_leaf(id, leaf, vis):
   global faces_leaf
   s = ""
   # type
-  s += "{:02x}".format(-leaf.contents)
+  s += "{:02x}".format(128+leaf.contents)
 
   # visibility info
   s += pack_variant(len(vis))
@@ -333,7 +397,7 @@ def pack_node(node):
         # leaf
         children += pack_variant(child_id+1)
       else:
-        # todo: optimize        
+        # todo: optimize (flag?)
         children += pack_variant(0)
     else:
       # node
@@ -348,6 +412,9 @@ def pack_model(model):
   s = ""
   # reference to root node
   s += pack_variant(model.headnode[0]+1)
+
+  # clip nodes
+
   return s
 
 # https://mrelusive.com/publications/papers/Run-Length-Compression-of-Large-Sparse-Potential-Visible-Sets.pdf
@@ -424,19 +491,22 @@ def pack_bsp(filename):
     global visdata
     global nodes
     global faces
-    global texinfo 
+    global textures 
     global miptex
     global planes
     global leaves
     global edges     
     global marksurfaces
     global surfedges
+    global lightmaps
     models = dmodel_t.read_all(f, header.models)
     vertices = vec3_t.read_all(f, header.vertices)
     visdata = read_bytes(f, header.visilist)
+    lightmaps = read_bytes(f, header.lightmaps)
     nodes = dnode_t.read_all(f, header.nodes)
+    clipnodes = dclipnode_t.read_all(f, header.clipnodes)
     faces = dface_t.read_all(f, header.faces)
-    texinfo = texinfo_t.read_all(f, header.texinfo)
+    textures = texinfo_t.read_all(f, header.textures)
     miptex = dmiptexlump_t.read_all(f, header.miptex)
     planes = dplane_t.read_all(f, header.planes)
     leaves = dleaf_t.read_all(f, header.leaves)
@@ -447,13 +517,15 @@ def pack_bsp(filename):
     s = ""
 
     # all textures    
-    # for t in texinfo:
-    #   mip = miptex[t.miptex]
-    #   print("animated:", mip.nummiptex>1)
-    #   for i in range(mip.nummiptex):
-    #     f.seek(mip.dataofs[i])
-    #     mipentry = dmiptexlump_t.read_from(f)
-    #     print(mipentry)
+    # for t in textures:
+    #   print(t)
+    #   mip = miptex[t.miptex]      
+    #   print("animated:", mip)
+    #   for offset in mip.dataofs:
+    #     if offset!=-1:
+    #       f.seek(offset)
+    #       mipentry = miptex_t.read_from(f)
+    #       print(mipentry)
 
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
@@ -473,8 +545,8 @@ def pack_bsp(filename):
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
-    for face in faces:
-      s += pack_face(face)
+    for i,face in enumerate(faces):
+      s += pack_face(i, face)
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
