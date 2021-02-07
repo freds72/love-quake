@@ -9,8 +9,10 @@ __lua__
 local _model
 local _palette={[0]=0,129,1,133,5,5,5,134,134,134,134,6,6,6,7,7}
 
-local contents_empty=-1
-local contents_solid=-2
+-- bsp drawing helpers
+local _visframe,_prev_leaf=0
+local _vis_mask=split("0x0000.0002,0x0000.0004,0x0000.0008,0x0000.0010,0x0000.0020,0x0000.0040,0x0000.0080,0x0000.0100,0x0000.0200,0x0000.0400,0x0000.0800,0x0000.1000,0x0000.2000,0x0000.4000,0x0000.8000,0x0001.0000,0x0002.0000,0x0004.0000,0x0008.0000,0x0010.0000,0x0020.0000,0x0040.0000,0x0080.0000,0x0100.0000,0x0200.0000,0x0400.0000,0x0800.0000,0x1000.0000,0x2000.0000,0x4000.0000,0x8000.0000",",",1)
+_vis_mask[0]=0x0000.0001
 
 -- maths & cam
 function lerp(a,b,t)
@@ -210,7 +212,7 @@ function make_cam()
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                if(leaf.hit==time()) polyfill(p,7)
+                polyfill(p,0)
                 polyline(p,0x11)
               end
             end
@@ -286,6 +288,10 @@ function make_player(pos,a)
 
 end
 
+-->8
+-- bsp functions
+
+-- find in what convex leaf pos is
 function find_sub_sector(node,pos)
   while node do
     node=node[node.dot(pos)>node[4]]
@@ -296,49 +302,13 @@ function find_sub_sector(node,pos)
   end
 end
 
-function is_solid(node,pos)
-  while node!=-1 and node!=-2 do
-    node=node[node.dot(pos)>node[4]]
-  end  
-  return node==contents_solid
-end
-
-
-function _init()
-  -- capture mouse
-  -- enable lock+button alias
-  poke(0x5f2d,7)
-
-  pal(_palette,1)
-  --fillp(0xa5a5)
-
-  -- 
-  _cam=make_cam()
-
-  -- unpack map
-  _model,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
-  -- restore spritesheet
-  reload()
-
-  _plyr=make_player(pos,angle)
-end
-
-local _visframe=0
-local _prev_leaf
-local _vis_mask=split("0x0000.0002,0x0000.0004,0x0000.0008,0x0000.0010,0x0000.0020,0x0000.0040,0x0000.0080,0x0000.0100,0x0000.0200,0x0000.0400,0x0000.0800,0x0000.1000,0x0000.2000,0x0000.4000,0x0000.8000,0x0001.0000,0x0002.0000,0x0004.0000,0x0008.0000,0x0010.0000,0x0020.0000,0x0040.0000,0x0080.0000,0x0100.0000,0x0200.0000,0x0400.0000,0x0800.0000,0x1000.0000,0x2000.0000,0x4000.0000,0x8000.0000",",",1)
-_vis_mask[0]=0x0000.0001
-
-function _update()
-  _plyr:update()
-
-  _cam:track(_plyr.pos,_plyr.m)
-end
-
+-- traverse bsp
+-- unrolled true/false children traversing for performance
 function collect_bsp(node,pos,visframe,leaves)
   local side=node.dot(pos)<=node[4]
   local child=node[side]
   if child and child.visframe==visframe then
-    if child.pvs then
+    if child.contents then
       add(leaves,child)
     else
       collect_bsp(child,pos,visframe,leaves)
@@ -346,7 +316,7 @@ function collect_bsp(node,pos,visframe,leaves)
   end
   local child=node[not side]
   if child and child.visframe==visframe then
-    if child.pvs then
+    if child.contents then
       add(leaves,child)
     else
       collect_bsp(child,pos,visframe,leaves)
@@ -358,11 +328,12 @@ end
 -- hull location
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
 -- https://developer.valvesoftware.com/wiki/BSP
+-- ray/bsp intersection
 function hitscan(node,p0,p1,out)
   -- is "solid" space
-  if(node==contents_solid) return true
+  if(not node) return true
   -- in "empty" space
-  if(node==contents_empty) return
+  if(node.pvs) return
 
   local dist,otherdist=node.dot(p0),node.dot(p1)
   local side,otherside=dist>node[4],otherdist>node[4]
@@ -386,12 +357,36 @@ function hitscan(node,p0,p1,out)
     if not out.hit then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
-      if(is_solid(_model.hull,p10) and not out.hit) p10.plane=node p10.side=t<0 out.hit=p10
+      if(not find_sub_sector(_model,p10) and not out.hit) p10.plane=node p10.side=t<0 out.hit=p10
     end
   end
   return hit or otherhit
 end
 
+function _init()
+  -- capture mouse
+  -- enable lock+button alias
+  poke(0x5f2d,7)
+
+  pal(_palette,1)
+  fillp(0xa5a5)
+
+  -- 
+  _cam=make_cam()
+
+  -- unpack map
+  _model,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
+  -- restore spritesheet
+  reload()
+
+  _plyr=make_player(pos,angle)
+end
+
+function _update()
+  _plyr:update()
+
+  _cam:track(_plyr.pos,_plyr.m)
+end
 
 function _draw()
   cls()
@@ -425,12 +420,14 @@ function _draw()
   local hits={}
   local up=m_up(_plyr.m)
 
-  local h=hitscan(_model.hull,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
-    
+  local h=hitscan(_model,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
+  
+  fillp(0xa5a5)  
   _cam:draw_faces(leaves)
+  fillp()
   _cam:draw_points(hits)
   
-  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nhits:"..#hits.."\n:hit"..tostr(h)
+  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\n:hit:"..tostr(h)
   print(s,2,3,1)
   print(s,2,2,12)
 end
@@ -569,47 +566,6 @@ function unpack_map()
   unpack_array(function()
     add(models,unpack_ref(nodes))
   end)
-  -- create hulls
-  for _,model in pairs(models) do
-    local function attach_hull(parent,side,src)
-      local child=src[side]
-      if child then
-        -- leaf: deflate
-        if child.pvs then
-          -- got over all planes, create nodes
-          local surfplanes={}
-          for _,face in pairs(child.faces) do
-            local plane=getmetatable(face).__index
-            -- avoid registering the same supporting plane mulitple times
-            if not surfplanes[plane] then
-              surfplanes[plane]=true              
-              parent[side]=setmetatable({
-                [face.side]=contents_empty,
-                [not face.side]=contents_solid},
-                {__index=plane})
-              -- move to next face (eg. create a new hull node)
-              parent=parent[side] 
-              side=face.side                    
-            end            
-          end
-        else
-          -- create new hull node
-          local hull=setmetatable({},{__index=child})
-          -- register into parent
-          parent[side]=hull
-          -- recurse down the tree
-          attach_hull(hull,true,child)          
-          attach_hull(hull,false,child)          
-        end
-      else
-        parent[side]=contents_solid
-      end
-    end    
-    local hull=setmetatable({},{__index=model})
-    attach_hull(hull,true,model)
-    attach_hull(hull,false,model)
-    model.hull=hull
-  end
   
   -- get top level node
   -- unpack player position
