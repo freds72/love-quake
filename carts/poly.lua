@@ -144,7 +144,7 @@ function polyfill(v,c)
 		-- sub-pix shift
 		x0+=(cy0-y0)*dx
 		if(y1>127) y1=127
-		for y=y0\1+1,y1 do
+		for y=cy0,y1 do
 			if spans[y] then
 				rectfill(x0,y,spans[y],y)
 			else

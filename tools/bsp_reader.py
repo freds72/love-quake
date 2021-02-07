@@ -140,6 +140,13 @@ class bboxshort_t(LittleEndianStructure, StructHelper):
     ("max", vec3short_t)
   ]
 
+class dclipnode_t(LittleEndianStructure, StructHelper):
+  _pack_ = 1
+  _fields_ = [
+    ("plane_id", c_int),
+    ("children", c_short*2)  # negative numbers are contents (eg leafs)
+  ]
+
 class dplane_t(LittleEndianStructure, StructHelper):
   _pack_ = 1
   _fields_ = [
@@ -354,7 +361,8 @@ def pack_leaf(id, leaf, vis):
   global faces_leaf
   s = ""
   # type
-  s += "{:02x}".format(-leaf.contents)
+  s += "{:02x}".format(128+leaf.contents)
+  print(leaf.contents)
 
   # visibility info
   s += pack_variant(len(vis))
@@ -390,7 +398,7 @@ def pack_node(node):
         # leaf
         children += pack_variant(child_id+1)
       else:
-        # todo: optimize        
+        # todo: optimize (flag?)
         children += pack_variant(0)
     else:
       # node
@@ -405,6 +413,9 @@ def pack_model(model):
   s = ""
   # reference to root node
   s += pack_variant(model.headnode[0]+1)
+
+  # clip nodes
+
   return s
 
 # https://mrelusive.com/publications/papers/Run-Length-Compression-of-Large-Sparse-Potential-Visible-Sets.pdf
@@ -494,6 +505,7 @@ def pack_bsp(filename):
     visdata = read_bytes(f, header.visilist)
     lightmaps = read_bytes(f, header.lightmaps)
     nodes = dnode_t.read_all(f, header.nodes)
+    clipnodes = dclipnode_t.read_all(f, header.clipnodes)
     faces = dface_t.read_all(f, header.faces)
     textures = texinfo_t.read_all(f, header.textures)
     miptex = dmiptexlump_t.read_all(f, header.miptex)
