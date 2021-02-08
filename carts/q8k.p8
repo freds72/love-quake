@@ -212,8 +212,8 @@ function make_cam()
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                polyfill(p,0)
-                polyline(p,0x11)
+                polyfill(p,face.color)
+                --polyline(p,0x11)
               end
             end
           end
@@ -264,17 +264,20 @@ function make_player(pos,a)
       v_scale(velocity,0.7)
 
       -- move
-      local dx,dz,a=0,0,angle[2]
+      local dx,dz,a,jmp=0,0,angle[2],0
       if(btn(0,1)) dx=1
       if(btn(1,1)) dx=-1
       if(btn(2,1)) dz=1
       if(btn(3,1)) dz=-1
+      if(btnp(4)) jmp=20
 
-      dangle=v_add(dangle,{stat(39),stat(38),dx})
+      dangle=v_add(dangle,{stat(39),stat(38),0})
       angle=v_add(angle,dangle,1/1024)
 
       local c,s=cos(a),-sin(a)
-      velocity=v_add(velocity,m_fwd(self.m),dz*8)
+      velocity=v_add(velocity,{s,0,c},dz*4)      
+      velocity=v_add(velocity,{-c,0,s},dx*4)      
+      velocity=v_add(velocity,{0,-2+jmp,0}) 
       -- velocity=v_add(velocity,{-dx*c,0,dx*s},1)
       -- check next position
       local vn,vl=v_normz(velocity)
@@ -320,11 +323,11 @@ function find_sub_sector(node,pos)
   end
 end
 
-function is_solid(node,pos)
+function is_empty(node,pos)
   while node!=-1 and node!=-2 do
     node=node[node.dot(pos)>node[4]]
   end  
-  return node==-2
+  return node!=-1
 end
 
 
@@ -387,7 +390,7 @@ function hitscan(node,p0,p1,out)
     if #out==0 then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
-      if is_solid(_model.clipnodes,p10) then
+      if is_empty(_model.clipnodes,p10) then
         add(out,p10) 
         local scale=t<0 and -1 or 1
         local n={scale*node[1],scale*node[2],scale*node[3]}
@@ -423,7 +426,7 @@ end
 function _update()
   _plyr:update()
 
-  _cam:track(_plyr.pos,_plyr.m)
+  _cam:track(v_add(_plyr.pos,{0,24,0}),_plyr.m)
 end
 
 function _draw()
@@ -457,14 +460,14 @@ function _draw()
   local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
-  local h=hitscan(_model.clipnodes,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
+  --local h=hitscan(_model.clipnodes,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
   
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
   fillp()
   _cam:draw_points(hits)
   
-  local h=is_solid(_model.clipnodes,_plyr.pos)
+  local h=is_empty(_model.clipnodes,_plyr.pos)
   local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nsolid:"..tostr(h)
   print(s,2,3,1)
   print(s,2,2,12)
