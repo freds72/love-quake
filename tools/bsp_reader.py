@@ -411,25 +411,19 @@ def pack_model(model):
   s = ""
   # reference to root node
   s += pack_variant(model.headnode[0]+1)
-
+  
   # clip nodes
   s += pack_variant(len(clipnodes))
   for c in clipnodes:
     s += pack_variant(c.plane_id+1)
     flags = 0
     sc = ""
-    child = c.children[0]
-    if child<0:
-      flags = -child
-      sc += "00"
-    else:
-      sc += pack_variant(child+1)
-    child = c.children[1]
-    if child<0:
-      flags |= (-child)<<4
-      sc += "00"
-    else:
-      sc += pack_variant(child+1)
+    for i in range(2):
+      child = c.children[i]
+      if child<0:
+        flags |= (-child)<<(4*i)
+      else:
+        sc += pack_variant(child+1)
     s += "{:02x}".format(flags)
     s += sc
   return s

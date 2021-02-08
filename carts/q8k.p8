@@ -212,8 +212,8 @@ function make_cam()
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                polyfill(p,face.color)
-                --polyline(p,0x11)
+                polyfill(p,0)
+                polyline(p,0x11)
               end
             end
           end
@@ -282,7 +282,7 @@ function make_player(pos,a)
         -- check current to target pos
         for i=1,3 do
           local hits={}            
-          if hitscan(_model,self.pos,v_add(self.pos,velocity),hits) and hits.n then
+          if hitscan(_model.clipnodes,self.pos,v_add(self.pos,velocity),hits) and hits.n then
             local fix=v_dot(hits.n,velocity)
             -- separating?
             if fix<0 then
@@ -320,6 +320,14 @@ function find_sub_sector(node,pos)
   end
 end
 
+function is_solid(node,pos)
+  while node!=-1 and node!=-2 do
+    node=node[node.dot(pos)>node[4]]
+  end  
+  return node==-2
+end
+
+
 -- traverse bsp
 -- unrolled true/false children traversing for performance
 function collect_bsp(node,pos,visframe,leaves)
@@ -349,9 +357,11 @@ end
 -- ray/bsp intersection
 function hitscan(node,p0,p1,out)
   -- is "solid" space
-  if(not node) return true
+  --if(not node) return true
+  if(node==-2) return true
   -- in "empty" space
-  if(node.pvs) return
+  --if(node.pvs) return
+  if(node==-1) return
 
   local dist,otherdist=node.dot(p0),node.dot(p1)
   local side,otherside=dist>node[4],otherdist>node[4]
@@ -377,7 +387,7 @@ function hitscan(node,p0,p1,out)
     if #out==0 then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
-      if not find_sub_sector(_model,p10) then
+      if is_solid(_model.clipnodes,p10) then
         add(out,p10) 
         local scale=t<0 and -1 or 1
         local n={scale*node[1],scale*node[2],scale*node[3]}
@@ -418,7 +428,7 @@ end
 
 function _draw()
   cls()
-  local leaves,current_leaf={},find_sub_sector(_model,_cam.pos)  
+  local leaves,current_leaf={},find_sub_sector(_model.bsp,_cam.pos)  
   if current_leaf and current_leaf!=_prev_leaf then
     _prev_leaf=current_leaf
     _visframe+=1
@@ -442,20 +452,20 @@ function _draw()
   end
 
   -- sorted drawing
-  collect_bsp(_model,_cam.pos,_visframe,leaves)
+  collect_bsp(_model.bsp,_cam.pos,_visframe,leaves)
 
   local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
-
-  local h=hitscan(_model,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
+  local h=hitscan(_model.clipnodes,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
   
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
   fillp()
   _cam:draw_points(hits)
   
-  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\n:hit:"..tostr(h)
+  local h=is_solid(_model.clipnodes,_plyr.pos)
+  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nsolid:"..tostr(h)
   print(s,2,3,1)
   print(s,2,2,12)
 end
@@ -592,18 +602,18 @@ function unpack_map()
   
   -- unpack models
   unpack_array(function()
-    local model=unpack_ref(nodes)
+    local bsp=unpack_ref(nodes)
     -- collision hull
     local clipnodes={}
     unpack_array(function()
-      local node,flags={},mpeek()
+      local node,flags=setmetatable({},{__index=unpack_ref(planes)}),mpeek()
       local contents=flags&0xf
       if contents!=0 then
         node[true]=-contents
       else
         node[true]=unpack_variant()
       end
-      local contents=(flags&0xf0)>>>4
+      contents=(flags&0xf0)>>4
       if contents!=0 then
         node[false]=-contents
       else
@@ -611,8 +621,14 @@ function unpack_map()
       end
       add(clipnodes,node)
     end)
-    --model.clipnodes=clipnodes    
-    add(models,model)
+    -- attach references
+    for _,node in pairs(clipnodes) do
+      local id=node[true]
+      if(id>0) node[true]=clipnodes[id]
+      local id=node[false]
+      if(id>0) node[false]=clipnodes[id]
+    end
+    add(models,{bsp=bsp,clipnodes=clipnodes[1]})
   end)
   
   -- get top level node
