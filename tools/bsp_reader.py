@@ -358,7 +358,6 @@ def pack_face(id, face):
   return s
 
 def pack_leaf(id, leaf, vis):
-  global faces_leaf
   s = ""
   # type
   s += "{:02x}".format(128+leaf.contents)
@@ -414,7 +413,25 @@ def pack_model(model):
   s += pack_variant(model.headnode[0]+1)
 
   # clip nodes
-
+  s += pack_variant(len(clipnodes))
+  for c in clipnodes:
+    s += pack_variant(c.plane_id+1)
+    flags = 0
+    sc = ""
+    child = c.children[0]
+    if child<0:
+      flags = -child
+      sc += "00"
+    else:
+      sc += pack_variant(child+1)
+    child = c.children[1]
+    if child<0:
+      flags |= (-child)<<4
+      sc += "00"
+    else:
+      sc += pack_variant(child+1)
+    s += "{:02x}".format(flags)
+    s += sc
   return s
 
 # https://mrelusive.com/publications/papers/Run-Length-Compression-of-Large-Sparse-Potential-Visible-Sets.pdf
@@ -490,6 +507,7 @@ def pack_bsp(filename):
     global vertices
     global visdata
     global nodes
+    global clipnodes
     global faces
     global textures 
     global miptex

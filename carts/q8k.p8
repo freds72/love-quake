@@ -592,7 +592,27 @@ function unpack_map()
   
   -- unpack models
   unpack_array(function()
-    add(models,unpack_ref(nodes))
+    local model=unpack_ref(nodes)
+    -- collision hull
+    local clipnodes={}
+    unpack_array(function()
+      local node,flags={},mpeek()
+      local contents=flags&0xf
+      if contents!=0 then
+        node[true]=-contents
+      else
+        node[true]=unpack_variant()
+      end
+      local contents=(flags&0xf0)>>>4
+      if contents!=0 then
+        node[false]=-contents
+      else
+        node[false]=unpack_variant()
+      end
+      add(clipnodes,node)
+    end)
+    --model.clipnodes=clipnodes    
+    add(models,model)
   end)
   
   -- get top level node
