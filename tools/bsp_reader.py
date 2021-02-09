@@ -9,7 +9,6 @@ from collections import namedtuple
 from python2pico import *
 from entity_reader import ENTITYReader
 from PIL import Image, ImageFilter, ImageDraw
-from atlas import ImageAtlas
 
 # credits: https://gist.github.com/JonathonReinhart/b6f355f13021cd8ec5d0101e0e6675b2
 class StructHelper(object):
@@ -234,7 +233,7 @@ class dface_t(LittleEndianStructure, StructHelper):
     ("edge_num", c_short),     # number of edges in the List of edges
     ("tex_id", c_short),    # index of the Texture info the face is part of
                                  #           must be in [0,numtexinfos[ 
-    ("styles", c_byte * MAXLIGHTMAPS),     # type of lighting, for the face
+    ("styles", c_ubyte * MAXLIGHTMAPS),     # type of lighting, for the face
     ("lightofs", c_int)    # Pointer inside the general light map, or -1       
   ]                             
 
@@ -284,34 +283,12 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-img_lightmap = Image.new('RGBA', (128,128), (0,0,0,0))
-img_x = 0
-img_max_height = 0
-img_y = 0
-all_lightmaps = []
-
-def pack_lightmap(id, face, tex):  
-  global img_lightmap  
-  global img_x
-  global img_max_height
-  global img_y
-  global all_lightmaps
-
-  face_verts=[]
-  for i in range(face.edge_num):
-    edge_id = surfedges[face.edge_id + i].edge_id
-    if edge_id>=0:
-      edge = edges[edge_id]
-      face_verts.append(edge.v[0])      
-    else:
-      edge = edges[-edge_id]
-      face_verts.append(edge.v[1])      
-
+def pack_lightmap(id, verts, lightofs, tex):  
   u_min=float('inf')
   u_max=float('-inf')
   v_min=float('inf')
   v_max=float('-inf')
-  for vi in face_verts:
+  for vi in verts:
     u=v_dot(vertices[vi],tex.u_axis)+tex.u_offset
     v=v_dot(vertices[vi],tex.v_axis)+tex.v_offset
     u_min=min(u_min,u)
@@ -326,32 +303,12 @@ def pack_lightmap(id, face, tex):
   
   width,height=((u_max-u_min)+1, (v_max-v_min)+1)  
   
-  # get lightmap data
-  img = Image.new('RGBA', (width,height), (0,0,0,0))
+  # average lightmap luminance
+  lightmap = []
   for i in range(width):
     for j in range(height):
-      l = lightmaps[face.lightofs+i+j*width]      
-      img.putpixel((i,j),(l,l,l,255))
-  img_max_height=max(img_max_height, height)
-  if img_x+width>128:
-    img_x=0
-    img_y+=img_max_height
-    img_max_height=0
-  img_lightmap.paste(img, (img_x, img_y))
-
-  all_lightmaps.append(img)
-
-  # keep track of location  
-  lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
-  
-  # coordinates in lightmap space
-  # draw = ImageDraw.Draw(img_uv)
-  # draw.line([((v_dot(vertices[vi],tex.u_axis)+tex.u_offset)/16-u_min+img_x, (v_dot(vertices[vi],tex.v_axis)+tex.v_offset)/16-v_min+img_y) for vi in face_verts], width=1, fill=(255,0,0,255))
-
-  # print(128-u_min+img_x,128-v_min+img_y)
-  img_x += width
-  return lightmap_coords
-
+      lightmap.append(lightmaps[lightofs+i+j*width])  
+  return sum(lightmap)/len(lightmap)
 
 def pack_face(id, face):
   s = ""
@@ -361,11 +318,7 @@ def pack_face(id, face):
   flags = 0
   if face.side:
     flags |=1
-  if face.lightofs!=-1:
-    flags |= 2
   s += "{:02x}".format(flags)
-  # base light
-  s += "{:02x}".format(face.styles[1])
 
   # edge indirection
   # + skip last edge (duplicates start/end)
@@ -377,22 +330,24 @@ def pack_face(id, face):
       face_verts.append(edge.v[0])      
     else:
       edge = edges[-edge_id]
-      face_verts.append(edge.v[1])      
+      face_verts.append(edge.v[1])   
+
+  # base color/lightmap?
+  color = face.styles[0]
+  if color==0:
+    #light map
+    color = math.floor(pack_lightmap(id, face_verts, face.lightofs, textures[face.tex_id]))
+  elif color==0xff:
+    color = face.styles[1]
+  else:
+    logging.warn("Light effect not supported: {}".format(color))
+  s += "{:02x}".format(color)
+
   # vertex indices
   s += pack_variant(len(face_verts))
   for vi in face_verts:
     s += pack_variant(vi+1)
   
-  # lightmap?
-  if flags&0x2:
-    # get texture
-    s += pack_variant(face.tex_id+1)
-    # extract lightmap + get extents    
-    lightmap_coords = pack_lightmap(id, face,textures[face.tex_id])
-    # texture coords "origin" (1/16 lightmap space)
-    # + lightmap offset coords (map space)
-    s += "{:02x}{:02x}".format(min(255,128-lightmap_coords.u_min+lightmap_coords.mx),min(255,128-lightmap_coords.v_min+lightmap_coords.my))
-    
   return s
 
 def pack_leaf(id, leaf, vis):
@@ -516,17 +471,6 @@ def read_bytes(f, entry):
     f.seek(entry.offset)
     return f.read(entry.size)
 
-def draw_atlas(node,img):
-  rc = node.rc
-  if node.img:
-    lightmap = node.img
-    width, height = lightmap.size
-    for i in range(width):
-      for j in range(height):
-        img.putpixel((rc.left+i,rc.top+j), lightmap.getpixel((i,j)))
-  for child in node.child:
-    draw_atlas(child,img)  
-
 def pack_bsp(filename):
   with open(filename,"rb") as f:
     header = dheader_t.read_from(f)
@@ -585,27 +529,11 @@ def pack_bsp(filename):
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
 
-    # all textures
-    logging.info("Packing textures: {}".format(len(textures)))
-    s += pack_variant(len(textures))
-    for tex in textures:
-      s += pack_texture(tex)
-
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
     for i,face in enumerate(faces):
       s += pack_face(i, face)
-
-    # 
-    atlas = ImageAtlas(width=128, height=128)    
-    # sorted(all_lightmaps, key=lambda img: img.size)
-    for i in all_lightmaps:
-      atlas.add(i)  
-
-    atlas_img = Image.new('RGBA', (128,128), (255,0,0,255))
-    draw_atlas(atlas, atlas_img)
-    atlas_img.save("atlas.png")
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
@@ -635,4 +563,4 @@ def pack_bsp(filename):
     entities = ENTITYReader(read_bytes(f, header.entities).decode('ascii')).entities
     s += pack_entities(entities)
 
-    return (s, img_lightmap)
+    return s
