@@ -8,6 +8,7 @@ __lua__
 
 local _model
 local _palette={[0]=0,129,1,133,5,5,5,134,134,134,134,6,6,6,7,7}
+local _content_types={{contents=-1},{contents=-2}}
 
 -- bsp drawing helpers
 local _visframe,_prev_leaf=0
@@ -323,10 +324,10 @@ function find_sub_sector(node,pos)
 end
 
 function is_empty(node,pos)
-  while node!=-1 and node!=-2 do
+  while node.contents==nil or node.contents>0 do
     node=node[node.dot(pos)>node[4]]
   end  
-  return node!=-1
+  return node.contents!=-1
 end
 
 
@@ -358,11 +359,15 @@ end
 -- https://developer.valvesoftware.com/wiki/BSP
 -- ray/bsp intersection
 function hitscan(node,p0,p1,out)
-  -- is "solid" space
-  if(node==-2) return true
-  -- in "empty" space
-  --if(node.pvs) return
-  if(node==-1) return
+  -- is "solid" space (bsp)
+  if(not node) return true
+  local contents=node.contents
+  if contents then
+  -- is "solid" space (bsp)
+     if(contents==-2) return true
+    -- in "empty" space
+    if(contents<0) return
+  end
 
   local dist,otherdist=node.dot(p0),node.dot(p1)
   local side,otherside=dist>node[4],otherdist>node[4]
@@ -458,7 +463,7 @@ function _draw()
   local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
-  local h=hitscan(_model.clipnodes,v_add(_plyr.pos,up,0),v_add(tgt,up,0),hits)
+  local h=hitscan(_model.bsp,v_add(_plyr.pos,up,0),v_add(tgt,up,0),hits)
   
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
@@ -623,10 +628,16 @@ function unpack_map()
     end)
     -- attach references
     for _,node in pairs(clipnodes) do
-      local id=node[true]
-      if(id>0) node[true]=clipnodes[id]
-      local id=node[false]
-      if(id>0) node[false]=clipnodes[id]
+      local function attach_node(side)
+        local id=node[side]
+        if id<0 then
+          node[side]=_content_types[-id]
+        else
+          node[side]=clipnodes[id]
+        end
+      end
+      attach_node(true)
+      attach_node(false)
     end
     add(models,{bsp=bsp,clipnodes=clipnodes[1]})
   end)
