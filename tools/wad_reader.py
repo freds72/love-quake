@@ -9,6 +9,7 @@ from collections import namedtuple
 from tqdm import tqdm
 from bsp_reader import pack_bsp
 from python2pico import *
+from lzs import Codec
 
 # compress the given byte string
 # raw = True returns an array of bytes (a byte string otherwise)

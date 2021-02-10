@@ -178,13 +178,13 @@ function make_cam()
     end,
     draw_faces=function(self,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local v_cache,f_cache,pos={},{},self.pos
+      local v_cache,f_cache,cx,cy,cz={},{},unpack(self.pos)
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
           -- make sure a face from a leaf is draw only once
-          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
+          if not f_cache[face] and face[1]*cx+face[2]*cy+face[3]*cz<face.cp!=face.side then            
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0
             for k,v in pairs(face.verts) do
@@ -194,7 +194,7 @@ function make_cam()
                 local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
                 if az<8 then code=2 end
-                --if z>250 then code|=1 end
+                --if az>512 then code|=1 end
                 if ax>az then code|=4
                 elseif ax<-az then code|=8 end
                 if ay>az then code|=16
@@ -213,7 +213,7 @@ function make_cam()
 
               if #p>2 then
                 polyfill(p,face.color)
-                --polyline(p,0x11)
+                --if(face[2]==0) polyline(p,0x11)
               end
             end
           end
@@ -278,7 +278,6 @@ function make_player(pos,a)
       velocity=v_add(velocity,{s,0,c},dz*4)      
       velocity=v_add(velocity,{-c,0,s},dx*4)      
       velocity=v_add(velocity,{0,-2+jmp,0}) 
-      -- velocity=v_add(velocity,{-dx*c,0,dx*s},1)
       -- check next position
       local vn,vl=v_normz(velocity)
       if vl>0.1 then
@@ -360,7 +359,6 @@ end
 -- ray/bsp intersection
 function hitscan(node,p0,p1,out)
   -- is "solid" space
-  --if(not node) return true
   if(node==-2) return true
   -- in "empty" space
   --if(node.pvs) return
@@ -430,7 +428,7 @@ function _update()
 end
 
 function _draw()
-  cls()
+  --cls()
   local leaves,current_leaf={},find_sub_sector(_model.bsp,_cam.pos)  
   if current_leaf and current_leaf!=_prev_leaf then
     _prev_leaf=current_leaf
@@ -460,7 +458,7 @@ function _draw()
   local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
-  --local h=hitscan(_model.clipnodes,v_add(_plyr.pos,up,-24),v_add(tgt,up,-24),hits)
+  local h=hitscan(_model.clipnodes,v_add(_plyr.pos,up,0),v_add(tgt,up,0),hits)
   
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
@@ -521,24 +519,23 @@ function unpack_map()
   end)
 
   unpack_array(function()
-    local t,p=mpeek()+1,unpack_v3() 
+    local t,p=mpeek(),add(planes,unpack_v3())
     p[4]=unpack_fixed()
-    add(planes,p)
+    local x,y,z=unpack(p)
     local dot=function(v)    
-      return p[1]*v[1]+p[2]*v[2]+p[3]*v[3]
+      return x*v[1]+y*v[2]+z*v[3]
     end
-    if t==1 then    
+    if t==0 then    
       dot=function(v)
-        return p[1]*v[1]
+        return x*v[1]
+      end
+    elseif t==1 then    
+      dot=function(v)
+        return y*v[2]
       end
     elseif t==2 then    
-      p.draw=tpoly_affine
       dot=function(v)
-        return p[2]*v[2]
-      end
-    elseif t==3 then    
-      dot=function(v)
-        return p[3]*v[3]
+        return z*v[3]
       end
     end
     p.dot=dot        
