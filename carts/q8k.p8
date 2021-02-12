@@ -51,12 +51,17 @@ function v_lerp(a,b,t)
 		lerp(a[3],b[3],t)
 	}
 end
-function v2_lerp(a,b,t)
+function v_uv_lerp(a,b,t)
 	return {
 		lerp(a[1],b[1],t),
-		lerp(a[2],b[2],t)
+		lerp(a[2],b[2],t),
+		lerp(a[3],b[3],t),
+    -- uv coords
+		lerp(a[4],b[4],t),
+		lerp(a[5],b[5],t)
 	}
 end
+
 function v_cross(a,b)
 	local ax,ay,az=a[1],a[2],a[3]
 	local bx,by,bz=b[1],b[2],b[3]
@@ -247,6 +252,11 @@ function make_cam()
             end
           end
         end
+        -- draw any "decoration" after convex faces
+        for _,fragment in pairs(leaf.fragments) do
+          self:draw_poly(fragment) 
+        end
+        leaf.fragments=nil
       end
     end
   }
@@ -278,7 +288,7 @@ function z_poly_clip(znear,v)
 	return res
 end
 
-function poly_clip(plane,v)
+function poly_uv_clip(plane,v)
   if(#v<3) return
 	local res,out_res,v0,dist={},{},v[#v],plane[4]
 	local d0=plane.dot(v0)-dist
@@ -290,13 +300,13 @@ function poly_clip(plane,v)
     end
 		if d1>0 then
       if d0<=0 then
-        add(out_res,v_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
-        res[#res+1]=v_lerp(v0,v1,(d0-0x0.01)/(d0-d1)) 
+        add(out_res,v_uv_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
+        res[#res+1]=v_uv_lerp(v0,v1,(d0-0x0.01)/(d0-d1)) 
 			end
       res[#res+1]=v1
 		elseif d0>0 then
-      add(out_res,v_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
-      res[#res+1]=v_lerp(v0,v1,(d0-0x0.01)/(d0-d1))
+      add(out_res,v_uv_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
+      res[#res+1]=v_uv_lerp(v0,v1,(d0-0x0.01)/(d0-d1))
 		end
     v0=v1
 		d0=d1
@@ -319,21 +329,26 @@ function leaf_clip(node,n,poly,out)
           return v_dot(plane,v)
         end
         plane[4]=v_dot(plane,v0)
-        fragment=select(face.side and 1 or 2,poly_clip(plane,fragment))
+        fragment=select(face.side and 1 or 2,poly_uv_clip(plane,fragment))
         if(not fragment) break
       end
-      add(out,fragment)
+      if fragment then
+        local fragments=node.fragments or {}
+        add(fragments,fragment)
+        node.fragments=fragments
+      end
+      --add(out,fragment)
     end
   end
 end
 
 function bsp_clip(node,n,poly,out)
-  local res_in,res_out=poly_clip(node,poly)
+  local res_in,res_out=poly_uv_clip(node,poly)
   if res_in then
     local child=node[true]
     if child then
       if child.contents then
-        if(child.contents==-1) leaf_clip(child,n,res_in,out)
+        leaf_clip(child,n,res_in,out)
       else
         bsp_clip(child,n,res_in,out)
       end
@@ -343,7 +358,7 @@ function bsp_clip(node,n,poly,out)
     local child=node[false]
     if child then
       if child.contents then
-        if(child.contents==-1) leaf_clip(child,n,res_out,out)
+        leaf_clip(child,n,res_out,out)
       else   
         bsp_clip(child,n,res_out,out)
       end
@@ -489,8 +504,8 @@ function hitscan(node,p0,p1,out)
   local frac=mid(t/(dist-otherdist),0,1)
   local p10=v_lerp(p0,p1,frac)
   --add(out,p10)
-  local hit=hitscan(node[side],p0,p10,out)
   local otherhit=hitscan(node[otherside],p10,p1,out)  
+  local hit=hitscan(node[side],p0,p10,out)
   if hit!=otherhit then
     -- not already registered?
     if #out==0 then
@@ -577,12 +592,17 @@ function _draw()
     local left=v_clone(right)
     v_scale(left,-1)
     local up=v_normz(v_cross(right,hits.n))
-    local p=v_add(hits[1],hits.n,0.1)
-    local tmp,scale={} ,32
-    add(tmp,v_add(p,v_add(right,up,1),scale))
-    add(tmp,v_add(p,v_add(right,up,-1),scale))
-    add(tmp,v_add(p,v_add(left,up,-1),scale))
-    add(tmp,v_add(p,v_add(left,up,1),scale))
+    local p=v_add(hits[#hits],hits.n,0.1)
+    local tmp,scale={},32
+    local function with_uv(p,u,v)
+      p[4]=u
+      p[5]=v
+      return p
+    end
+    add(tmp,with_uv(v_add(p,v_add(right,up,1),scale),4,0))
+    add(tmp,with_uv(v_add(p,v_add(right,up,-1),scale),4,4))
+    add(tmp,with_uv(v_add(p,v_add(left,up,-1),scale),0,0))
+    add(tmp,with_uv(v_add(p,v_add(left,up,1),scale),0,4))
 
     -- clip
     bsp_clip(_model.bsp,hits.n,tmp,fragments)
