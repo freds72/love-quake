@@ -504,8 +504,8 @@ function hitscan(node,p0,p1,out)
   local frac=mid(t/(dist-otherdist),0,1)
   local p10=v_lerp(p0,p1,frac)
   --add(out,p10)
-  local otherhit=hitscan(node[otherside],p10,p1,out)  
   local hit=hitscan(node[side],p0,p10,out)
+  local otherhit=hitscan(node[otherside],p10,p1,out)  
   if hit!=otherhit then
     -- not already registered?
     if #out==0 then
