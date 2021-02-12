@@ -307,8 +307,8 @@ end
 function leaf_clip(node,n,poly,out)
   for _,face in pairs(node.faces) do    
     -- todo: find out why planes are not matching?
-    if abs(v_dot(face,n))==1 then
-      local v,fragment=face.verts
+    if n[4]==face[4] and abs(v_dot(face,n))==1 then
+      local v,fragment=face.verts,poly
       local nv=#v
       for i=1,nv do
         local v0,v1=v[i%nv+1],v[i]
@@ -319,12 +319,7 @@ function leaf_clip(node,n,poly,out)
           return v_dot(plane,v)
         end
         plane[4]=v_dot(plane,v0)
-        res_in,res_out=poly_clip(plane,fragment or poly)
-        if face.side then
-          fragment=res_in
-        else
-          fragment=res_out
-        end
+        fragment=select(face.side and 1 or 2,poly_clip(plane,fragment))
         if(not fragment) break
       end
       add(out,fragment)
@@ -504,7 +499,7 @@ function hitscan(node,p0,p1,out)
       if is_empty(_model.clipnodes,p10) then
         add(out,p10) 
         local scale=t<0 and -1 or 1
-        local n={scale*node[1],scale*node[2],scale*node[3],dot=node.dot}
+        local n={scale*node[1],scale*node[2],scale*node[3],node[4],dot=node.dot}
         p10.n=n
         out.n=n
         out.t=frac
@@ -568,24 +563,26 @@ function _draw()
   -- sorted drawing
   collect_bsp(_model.bsp,_cam.pos,_visframe,leaves)
 
-  local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
+  local tgt=v_add(_cam.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
 
-  local h=hitscan(_model.bsp,v_add(_plyr.pos,up,0),v_add(tgt,up,0),hits)
+  local h=hitscan(_model.bsp,_cam.pos,v_add(tgt,up,0),hits)
   -- create portal plane
   local fragments={}
   if h then
-	  local right=v_normz(v_cross(hits.n,{0,1,0}))
+    local up={0,1,0}
+    if(abs(hits.n[2])==1) up={0,0,1}
+	  local right=v_normz(v_cross(hits.n,up))
     local left=v_clone(right)
     v_scale(left,-1)
     local up=v_normz(v_cross(right,hits.n))
     local p=v_add(hits[1],hits.n,0.1)
-    local tmp={} 
-    add(tmp,v_add(p,v_add(right,up,1),16))
-    add(tmp,v_add(p,v_add(right,up,-1),16))
-    add(tmp,v_add(p,v_add(left,up,-1),16))
-    add(tmp,v_add(p,v_add(left,up,1),16))
+    local tmp,scale={} ,32
+    add(tmp,v_add(p,v_add(right,up,1),scale))
+    add(tmp,v_add(p,v_add(right,up,-1),scale))
+    add(tmp,v_add(p,v_add(left,up,-1),scale))
+    add(tmp,v_add(p,v_add(left,up,1),scale))
 
     -- clip
     bsp_clip(_model.bsp,hits.n,tmp,fragments)
@@ -606,10 +603,13 @@ function _draw()
   for _,p in pairs(fragments) do
     _cam:draw_poly(p)
   end
+  if(h) _cam:draw_points(hits)
   
   local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves
   print(s,2,3,1)
   print(s,2,2,12)
+
+  pset(64,64,15)
 end
 
 -->8
