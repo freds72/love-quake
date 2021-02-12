@@ -62,14 +62,22 @@ function v_cross(a,b)
 	local bx,by,bz=b[1],b[2],b[3]
 	return {ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx}
 end
+-- safe for overflow (to some extent)
 function v_len(v)
 	local x,y,z=v[1],v[2],v[3]
-	return sqrt(x*x+y*y+z*z)
+  -- pick major
+  local d=max(max(abs(x),abs(y)),abs(z))
+  -- adjust
+  x/=d
+  y/=d
+  z/=d
+  -- actuel len
+  return sqrt(x*x+y*y+z*z)*d
 end
 
 function v_normz(v)
 	local x,y,z=v[1],v[2],v[3]
-	local d=sqrt(x*x+y*y+z*z)
+  local d=v_len(v)
 	return {x/d,y/d,z/d},d
 end
 
@@ -177,6 +185,26 @@ function make_cam()
         end
       end
     end,
+    draw_poly=function(self,points)
+      if(#points<2) return
+      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
+      local v0=points[#points]
+      local x0,y0,z0=unpack(v0)
+      local ax0,ay0,az0=m1*x0+m5*y0+m9*z0+m13,m2*x0+m6*y0+m10*z0+m14,m3*x0+m7*y0+m11*z0+m15
+      ax0=63.5+((ax0/az0)<<6)       
+      ay0=63.5-((ay0/az0)<<6)
+      for k,v1 in ipairs(points) do
+        local x1,y1,z1=unpack(v1)
+        local ax1,ay1,az1=m1*x1+m5*y1+m9*z1+m13,m2*x1+m6*y1+m10*z1+m14,m3*x1+m7*y1+m11*z1+m15
+        ax1=63.5+((ax1/az1)<<6)       
+        ay1=63.5-((ay1/az1)<<6)
+        -- to screen space
+        if az0>0 and az1>0 then
+          line(ax0,ay0,ax1,ay1,9)
+        end
+        ax0,ay0,az0=ax1,ay1,az1
+      end
+    end,
     draw_faces=function(self,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,cx,cy,cz={},{},unpack(self.pos)
@@ -213,8 +241,8 @@ function make_cam()
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                polyfill(p,face.color)
-                --if(face[2]==0) polyline(p,0x11)
+                polyfill(p,0)
+                polyline(p,0x11)
               end
             end
           end
@@ -248,6 +276,84 @@ function z_poly_clip(znear,v)
 		d0=d1
 	end
 	return res
+end
+
+function poly_clip(plane,v)
+  if(#v<3) return
+	local res,out_res,v0,dist={},{},v[#v],plane[4]
+	local d0=plane.dot(v0)-dist
+	for i=1,#v do
+		local v1=v[i]
+		local d1=plane.dot(v1)-dist  
+    if d0<=0 then
+      add(out_res,v0,1)
+    end
+		if d1>0 then
+      if d0<=0 then
+        add(out_res,v_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
+        res[#res+1]=v_lerp(v0,v1,(d0-0x0.01)/(d0-d1)) 
+			end
+      res[#res+1]=v1
+		elseif d0>0 then
+      add(out_res,v_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
+      res[#res+1]=v_lerp(v0,v1,(d0-0x0.01)/(d0-d1))
+		end
+    v0=v1
+		d0=d1
+	end
+	return res,out_res
+end
+
+function leaf_clip(node,n,poly,out)
+  for _,face in pairs(node.faces) do    
+    -- todo: find out why planes are not matching?
+    if abs(v_dot(face,n))==1 then
+      local v,fragment=face.verts
+      local nv=#v
+      for i=1,nv do
+        local v0,v1=v[i%nv+1],v[i]
+        -- todo: simpler?
+        local plane=v_normz(v_cross(n,make_v(v0,v1)))
+        v_scale(plane,face.side and -1 or 1)
+        plane.dot=function(v)
+          return v_dot(plane,v)
+        end
+        plane[4]=v_dot(plane,v0)
+        res_in,res_out=poly_clip(plane,fragment or poly)
+        if face.side then
+          fragment=res_in
+        else
+          fragment=res_out
+        end
+        if(not fragment) break
+      end
+      add(out,fragment)
+    end
+  end
+end
+
+function bsp_clip(node,n,poly,out)
+  local res_in,res_out=poly_clip(node,poly)
+  if res_in then
+    local child=node[true]
+    if child then
+      if child.contents then
+        if(child.contents==-1) leaf_clip(child,n,res_in,out)
+      else
+        bsp_clip(child,n,res_in,out)
+      end
+    end
+  end
+  if res_out then
+    local child=node[false]
+    if child then
+      if child.contents then
+        if(child.contents==-1) leaf_clip(child,n,res_out,out)
+      else   
+        bsp_clip(child,n,res_out,out)
+      end
+    end
+  end
 end
 
 function make_player(pos,a)
@@ -332,6 +438,8 @@ end
 
 
 -- traverse bsp
+
+
 -- unrolled true/false children traversing for performance
 function collect_bsp(node,pos,visframe,leaves)
   local side=node.dot(pos)<=node[4]
@@ -396,7 +504,7 @@ function hitscan(node,p0,p1,out)
       if is_empty(_model.clipnodes,p10) then
         add(out,p10) 
         local scale=t<0 and -1 or 1
-        local n={scale*node[1],scale*node[2],scale*node[3]}
+        local n={scale*node[1],scale*node[2],scale*node[3],dot=node.dot}
         p10.n=n
         out.n=n
         out.t=frac
@@ -463,15 +571,43 @@ function _draw()
   local tgt=v_add(_plyr.pos,m_fwd(_plyr.m),256)
   local hits={}
   local up=m_up(_plyr.m)
+
   local h=hitscan(_model.bsp,v_add(_plyr.pos,up,0),v_add(tgt,up,0),hits)
-  
+  -- create portal plane
+  local fragments={}
+  if h then
+	  local right=v_normz(v_cross(hits.n,{0,1,0}))
+    local left=v_clone(right)
+    v_scale(left,-1)
+    local up=v_normz(v_cross(right,hits.n))
+    local p=v_add(hits[1],hits.n,0.1)
+    local tmp={} 
+    add(tmp,v_add(p,v_add(right,up,1),16))
+    add(tmp,v_add(p,v_add(right,up,-1),16))
+    add(tmp,v_add(p,v_add(left,up,-1),16))
+    add(tmp,v_add(p,v_add(left,up,1),16))
+
+    -- clip
+    bsp_clip(_model.bsp,hits.n,tmp,fragments)
+    --[[
+    local plane={0,1,0,_plyr.pos[2]+24}
+    local x,y,z=unpack(plane)
+    local dot=function(v)    
+      return x*v[1]+y*v[2]+z*v[3]
+    end
+    plane.dot=dot
+    fragments={poly_clip(plane,tmp)}
+    ]]
+  end
+
   fillp(0xa5a5)  
   _cam:draw_faces(leaves)
   fillp()
-  _cam:draw_points(hits)
+  for _,p in pairs(fragments) do
+    _cam:draw_poly(p)
+  end
   
-  local h=is_empty(_model.clipnodes,_plyr.pos)
-  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves.."\nsolid:"..tostr(h)
+  local s="%:"..stat(1).."\n"..stat(0).."\nleaves:"..#leaves
   print(s,2,3,1)
   print(s,2,2,12)
 end
