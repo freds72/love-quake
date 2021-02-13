@@ -230,7 +230,7 @@ function make_cam()
       -- reset
       clip()
     end,
-    draw_faces=function(self,leaves)
+    draw_faces=function(self,leaves,pfill,portal)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,cx,cy,cz={},{},unpack(self.pos)
       for j,leaf in ipairs(leaves) do
@@ -266,15 +266,17 @@ function make_cam()
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                polyfill(p,face.color)
-                if(face[2]==0)polyline(p,0x11)
+                pfill(p,face.color)
+                --if(face[2]==0)polyline(p,0x11)
               end
             end
           end
         end
-        -- draw any "decoration" after convex faces
-        self:draw_uv_polys(leaf.fragments)
-        leaf.fragments=nil
+        if portal then
+          -- draw any "decoration" after convex faces
+          self:draw_uv_polys(leaf.fragments)
+          leaf.fragments=nil
+        end
       end
     end
   }
@@ -562,7 +564,7 @@ function _init()
   poke(0x5f2d,7)
 
   --pal(_palette,1)
-  fillp(0xa5a5)
+  --fillp(0xa5a5)
   pal(14,0)
 
   -- 
@@ -572,6 +574,12 @@ function _init()
   _model,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
   -- restore spritesheet
   reload()
+
+  for i=0,7 do
+    for j=0,7 do
+      mset(i,j,i+j*16+128)
+    end
+  end
 
   _plyr=make_player(pos,angle)
 end
@@ -631,9 +639,9 @@ function _draw()
       p[5]=v
       return p
     end
-    add(tmp,with_uv(v_add(p,v_add(right,up,1),scale),4,0))
-    add(tmp,with_uv(v_add(p,v_add(right,up,-1),scale),4,4))
-    add(tmp,with_uv(v_add(p,v_add(left,up,-1),scale),0,4))
+    add(tmp,with_uv(v_add(p,v_add(right,up,1),scale),8,0))
+    add(tmp,with_uv(v_add(p,v_add(right,up,-1),scale),8,8))
+    add(tmp,with_uv(v_add(p,v_add(left,up,-1),scale),0,8))
     add(tmp,with_uv(v_add(p,v_add(left,up,1),scale),0,0))
 
     -- clip
@@ -649,7 +657,9 @@ function _draw()
     ]]
   end
 
-  _cam:draw_faces(leaves)
+  _cam:draw_faces(leaves,mempoly)
+  _cam:draw_faces(leaves,polyfill,true)
+
   --if(h) _cam:draw_points(hits)
   
   local s="%:"..flr(100*stat(1)).."\n"..stat(0).."\nleaves:"..#leaves
