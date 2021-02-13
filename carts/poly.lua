@@ -34,12 +34,13 @@ end
 
 function tpoly(v)
 	local p0,spans=v[#v],{}
-	local x0,y0,w0,u0,w0=p0.x,p0.y,p0.w,p0.u,p0.v
+	local x0,y0,w0=p0.x,p0.y,p0.w
+	local u0,v0=p0.u*w0,p0.v*w0
 	-- ipairs is slower for small arrays
 	for i=1,#v do
 		local p1=v[i]
 		local x1,y1,w1=p1.x,p1.y,p1.w
-		local u1,v1=uv[i][1]*w1,uv[i][2]*w1
+		local u1,v1=p1.u*w1,p1.v*w1
 		local _x1,_y1,_w1,_u1,_v1=x1,y1,w1,u1,v1
 		if(y0>y1) x0,y0,x1,y1,w0,w1,u0,v0,u1,v1=x1,y1,x0,y0,w1,w0,u1,v1,u0,v0
 		local dy=y1-y0
