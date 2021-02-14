@@ -416,19 +416,17 @@ function make_player(pos,a)
 
       -- move
       local dx,dz,a,jmp=0,0,angle[2],0
-      if(btn(0,1)) dx=1
-      if(btn(1,1)) dx=-1
-      if(btn(2,1)) dz=1
-      if(btn(3,1)) dz=-1
+      if(btn(0,1)) dx=4
+      if(btn(1,1)) dx=-4
+      if(btn(2,1)) dz=4
+      if(btn(3,1)) dz=-4
       if(btnp(4)) jmp=20
 
       dangle=v_add(dangle,{stat(39),stat(38),0})
       angle=v_add(angle,dangle,1/1024)
 
       local c,s=cos(a),-sin(a)
-      velocity=v_add(velocity,{s,0,c},dz*4)      
-      velocity=v_add(velocity,{-c,0,s},dx*4)      
-      velocity=v_add(velocity,{0,-2+jmp,0}) 
+      velocity=v_add(velocity,{s*dz-c*dx,-2+jmp,c*dz+s*dx})      
       -- check next position
       local vn,vl=v_normz(velocity)
       if vl>0.1 then
