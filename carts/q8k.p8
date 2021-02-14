@@ -15,6 +15,8 @@ local _visframe,_prev_leaf=0
 local _vis_mask=split("0x0000.0002,0x0000.0004,0x0000.0008,0x0000.0010,0x0000.0020,0x0000.0040,0x0000.0080,0x0000.0100,0x0000.0200,0x0000.0400,0x0000.0800,0x0000.1000,0x0000.2000,0x0000.4000,0x0000.8000,0x0001.0000,0x0002.0000,0x0004.0000,0x0008.0000,0x0010.0000,0x0020.0000,0x0040.0000,0x0080.0000,0x0100.0000,0x0200.0000,0x0400.0000,0x0800.0000,0x1000.0000,0x2000.0000,0x4000.0000,0x8000.0000",",",1)
 _vis_mask[0]=0x0000.0001
 
+-- portal masks
+local _portaloutline,_portaloutline_mask={},{}
 -- maths & cam
 function lerp(a,b,t)
 	return a*(1-t)+b*t
@@ -230,7 +232,7 @@ function make_cam()
       -- reset
       clip()
     end,
-    draw_faces=function(self,leaves,pfill,portal)
+    draw_faces=function(self,leaves,pfill,outline,portal)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,cx,cy,cz={},{},unpack(self.pos)
       for j,leaf in ipairs(leaves) do
@@ -267,7 +269,7 @@ function make_cam()
 
               if #p>2 then
                 pfill(p,face.color)
-                --if(face[2]==0)polyline(p,0x11)
+                if(outline and face[2]==0)polyline(p,0x11)
               end
             end
           end
@@ -564,7 +566,6 @@ function _init()
   poke(0x5f2d,7)
 
   --pal(_palette,1)
-  --fillp(0xa5a5)
   pal(14,0)
 
   -- 
@@ -575,11 +576,31 @@ function _init()
   -- restore spritesheet
   reload()
 
+  -- portal textures
   for i=0,7 do
     for j=0,7 do
       mset(i,j,i+j*16+128)
     end
   end
+
+  -- portal masks
+  -- draw "portal" shape/color
+  cls()
+  -- mask
+  circfill(31,31,28,0xf)
+  local function grab_mask(mask)
+    for j=0,63 do
+      for i=0,7 do
+        local mem=i<<2|j<<6
+        mask[0x1000|mem]=$(0x6000|mem)
+      end
+    end
+  end
+  grab_mask(_portaloutline_mask)
+  cls(0xf)
+  circfill(31,31,31,12)
+  circfill(31,31,28,0)
+  grab_mask(_portaloutline)
 
   _plyr=make_player(pos,angle)
 end
@@ -633,7 +654,7 @@ function _draw()
     v_scale(left,-1)
     local up=v_normz(v_cross(right,hits.n))
     local p=v_add(hits[#hits],hits.n,0.1)
-    local tmp,scale={},30+2*cos(time()/4)
+    local tmp,scale={},32
     local function with_uv(p,u,v)
       p[4]=u
       p[5]=v
@@ -658,7 +679,13 @@ function _draw()
   end
 
   _cam:draw_faces(leaves,mempoly)
-  _cam:draw_faces(leaves,polyfill,true)
+  for k,v in pairs(_portaloutline) do
+    poke4(k,v|($k&_portaloutline_mask[k]))
+  end
+  fillp(0xa5a5)
+  palt(15,true)
+  _cam:draw_faces(leaves,polyfill,true,true)
+  fillp()
 
   --if(h) _cam:draw_points(hits)
   
