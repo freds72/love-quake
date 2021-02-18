@@ -585,7 +585,7 @@ def pack_bsp(filename):
       s += pack_model(model)
     
     # level gameplay
-    entities = ENTITYReader(read_bytes(f, header.entities).decode('ascii')).entities
+    entities = ENTITYReader(read_bytes(f, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
 
     return s
