@@ -192,55 +192,15 @@ function make_cam()
         end
       end
     end,
-    draw_uv_polys=function(self,polys)
+    draw_faces=function(self,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local v_cache,f_cache,cx,cy,cz={},{},unpack(self.pos)
-      for j,poly in pairs(polys) do
-        local p,outcode,clipcode={},0xffff,0
-        for k,v in pairs(poly) do
-          local a=v_cache[v]
-          if not a then
-            local code,x,y,z=0,v[1],v[2],v[3]
-            local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-
-            if az<8 then code=2 end
-            --if az>512 then code|=1 end
-            if ax>az then code|=4
-            elseif ax<-az then code|=8 end
-            if ay>az then code|=16
-            elseif ay<-az then code|=32 end
-            -- save world space coords for clipping
-            -- to screen space
-            local w=64/az
-            a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
-            v_cache[v]=a
-          end
-          outcode&=a.outcode
-          clipcode+=a.outcode&2              
-          -- uv coords cannot be shared
-          a.u=v[4]
-          a.v=v[5]          
-          p[k]=a
-        end
-        if outcode==0 then 
-          if(clipcode>0) p=z_poly_clip(8,p)
-          if #p>2 then
-            tpoly(p)
-          end
-        end
-      end
-      -- reset
-      clip()
-    end,
-    draw_faces=function(self,leaves,pfill,outline,portal)
-      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local v_cache,f_cache,cx,cy,cz={},{},unpack(self.pos)
+      local v_cache,f_cache,pos={},{},self.pos
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
-          -- make sure a face from a leaf is draw only once
-          if not f_cache[face] and face[1]*cx+face[2]*cy+face[3]*cz<face.cp!=face.side then            
+          -- make sure a face from a leaf is drawn only once
+          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0
             for k,v in pairs(face.verts) do
@@ -261,15 +221,15 @@ function make_cam()
                 v_cache[v]=a
               end
               outcode&=a.outcode
-              clipcode+=a.outcode&2              
+              clipcode+=a.outcode&2
               p[k]=a
             end
             if outcode==0 then 
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                pfill(p,face.color)
-                if(outline and face[2]==0)polyline(p,0x11)
+                polyfill(p,face.color)
+                polyline(p,0x11)
               end
             end
           end
@@ -294,110 +254,24 @@ function z_poly_clip(znear,v)
       if d0<=0 then
         local t=d0/(d0-d1)
         local nv=v_lerp(v0,v1,t) 
-        local w=64/nv[3]
         res[#res+1]={
-          x=63.5+nv[1]*w,
-          y=63.5-nv[2]*w,
-          w=w,
-          u=v0.u and lerp(v0.u,v1.u,t),
-          v=v0.v and lerp(v0.v,v1.v,t)
+          x=63.5+nv[1]*8,
+          y=63.5-nv[2]*8
         }
 			end
       res[#res+1]=v1
 		elseif d0>0 then
       local t=d0/(d0-d1)
 			local nv=v_lerp(v0,v1,t)
-      local w=64/nv[3]
       res[#res+1]={
-        x=63.5+nv[1]*w,
-        y=63.5-nv[2]*w,
-        w=w,
-        u=v0.u and lerp(v0.u,v1.u,t),
-        v=v0.v and lerp(v0.v,v1.v,t)
+        x=63.5+nv[1]*8,
+        y=63.5-nv[2]*8
       }
     end
     v0=v1
 		d0=d1
 	end
 	return res
-end
-
-function poly_uv_clip(plane,v)
-  if(#v<3) return
-	local res,out_res,v0,dist={},{},v[#v],plane[4]
-	local d0=plane.dot(v0)-dist
-	for i=1,#v do
-		local v1=v[i]
-		local d1=plane.dot(v1)-dist  
-    if d0<=0 then
-      add(out_res,v0,1)
-    end
-		if d1>0 then
-      if d0<=0 then
-        add(out_res,v_uv_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
-        res[#res+1]=v_uv_lerp(v0,v1,(d0-0x0.01)/(d0-d1)) 
-			end
-      res[#res+1]=v1
-		elseif d0>0 then
-      add(out_res,v_uv_lerp(v0,v1,(d0+0x0.01)/(d0-d1)),1)
-      res[#res+1]=v_uv_lerp(v0,v1,(d0-0x0.01)/(d0-d1))
-		end
-    v0=v1
-		d0=d1
-	end
-	return res,out_res
-end
-
-function leaf_clip(node,n,poly,out)
-  for _,face in pairs(node.faces) do    
-    -- todo: find out why planes are not matching?
-    if n[4]==face[4] and abs(v_dot(face,n))==1 then
-      local v,fragment=face.verts,poly
-      local nv=#v
-      for i=1,nv do
-        local v0,v1=v[i%nv+1],v[i]
-        -- todo: simpler?
-        local plane=v_normz(v_cross(n,make_v(v0,v1)))
-        v_scale(plane,face.side and -1 or 1)
-        plane.dot=function(v)
-          return v_dot(plane,v)
-        end
-        plane[4]=v_dot(plane,v0)
-        fragment=select(face.side and 1 or 2,poly_uv_clip(plane,fragment))
-        if(not fragment) break
-      end
-      if fragment then
-        local fragments=node.fragments or {}
-        add(fragments,fragment)
-        node.fragments=fragments
-      end
-      --add(out,fragment)
-    end
-  end
-end
-
-function bsp_clip(node,n,poly,out)
-  local res_in,res_out=poly_uv_clip(node,poly)
-  if res_in then
-    local child=node[true]
-    if child then
-      if child.contents then
-        leaf_clip(child,n,res_in,out)
-      else
-        bsp_clip(child,n,res_in,out)
-      end
-    end
-  end
-  if res_out then
-    local child=node[false]
-    if child then
-      if child.contents then
-        leaf_clip(child,n,res_out,out)
-      else   
-        bsp_clip(child,n,res_out,out)
-      end
-    end
-  end
 end
 
 function make_player(pos,a)
@@ -563,43 +437,13 @@ function _init()
   -- enable lock+button alias
   poke(0x5f2d,7)
 
-  --pal(_palette,1)
-  pal(14,0)
-
-  -- 
-  _cam=make_cam()
-
   -- unpack map
   _model,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
   -- restore spritesheet
   reload()
 
-  -- portal textures
-  for i=0,7 do
-    for j=0,7 do
-      mset(i,j,i+j*16+128)
-    end
-  end
-
-  -- portal masks
-  -- draw "portal" shape/color
-  cls()
-  -- mask
-  circfill(31,31,28,0xf)
-  local function grab_mask(mask)
-    for j=0,63 do
-      for i=0,7 do
-        local mem=i<<2|j<<6
-        mask[0x1000|mem]=$(0x6000|mem)
-      end
-    end
-  end
-  grab_mask(_portaloutline_mask)
-  cls(0xf)
-  circfill(31,31,31,12)
-  circfill(31,31,28,0)
-  grab_mask(_portaloutline)
-
+  -- 
+  _cam=make_cam()
   _plyr=make_player(pos,angle)
 end
 
@@ -637,57 +481,12 @@ function _draw()
   -- sorted drawing
   collect_bsp(_model.bsp,_cam.pos,_visframe,leaves)
 
-  local tgt=v_add(_cam.pos,m_fwd(_plyr.m),1024)
-  local hits={}
-  local up=m_up(_plyr.m)
-
-  local h=hitscan(_model.bsp,_cam.pos,v_add(tgt,up,0),hits)
-  -- create portal plane
-  local fragments={}
-  if h then
-    local up={0,1,0}
-    if(abs(hits.n[2])==1) up={0,0,1}
-	  local right=v_normz(v_cross(hits.n,up))
-    local left=v_clone(right)
-    v_scale(left,-1)
-    local up=v_normz(v_cross(right,hits.n))
-    local p=v_add(hits[#hits],hits.n,0.1)
-    local tmp,scale={},32
-    local function with_uv(p,u,v)
-      p[4]=u
-      p[5]=v
-      return p
-    end
-    add(tmp,with_uv(v_add(p,v_add(right,up,1),scale),8,0))
-    add(tmp,with_uv(v_add(p,v_add(right,up,-1),scale),8,8))
-    add(tmp,with_uv(v_add(p,v_add(left,up,-1),scale),0,8))
-    add(tmp,with_uv(v_add(p,v_add(left,up,1),scale),0,0))
-
-    -- clip
-    bsp_clip(_model.bsp,hits.n,tmp,fragments)
-    --[[
-    local plane={0,1,0,_plyr.pos[2]+24}
-    local x,y,z=unpack(plane)
-    local dot=function(v)    
-      return x*v[1]+y*v[2]+z*v[3]
-    end
-    plane.dot=dot
-    fragments={poly_clip(plane,tmp)}
-    ]]
-  end
-
-  _cam:draw_faces(leaves,mempoly)
-  for k,v in pairs(_portaloutline) do
-    poke4(k,v|($k&_portaloutline_mask[k]))
-  end
-  fillp(0xa5a5)
-  palt(15,true)
-  _cam:draw_faces(leaves,polyfill,true,true)
-  fillp()
+  --fillp(0xa5a5)
+  _cam:draw_faces(leaves)
 
   --if(h) _cam:draw_points(hits)
   
-  local s="%:"..flr(100*stat(1)).."\n"..stat(0).."\nleaves:"..#leaves
+  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#leaves
   print(s,2,3,1)
   print(s,2,2,12)
 
