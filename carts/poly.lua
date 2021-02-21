@@ -13,8 +13,9 @@ function polyfill(v,c)
 		x0+=(cy0-y0)*dx
 		if(y1>127) y1=127
 		for y=cy0,y1 do
-			if spans[y] then
-				rectfill(x0,y,spans[y],y)
+			local x1=spans[y]
+			if x1 then
+				rectfill(x0,y,x1,y)
 			else
 				spans[y]=x0
 			end

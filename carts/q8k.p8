@@ -6,7 +6,7 @@ __lua__
 #include poly.lua
 #include plain.lua
 
-local _model
+local _model,_leaves
 local _palette={[0]=0,129,1,133,5,5,5,134,134,134,134,6,6,6,7,7}
 local _content_types={{contents=-1},{contents=-2}}
 
@@ -229,15 +229,10 @@ function make_cam()
 
               if #p>2 then
                 polyfill(p,face.color)
-                polyline(p,0x11)
+                --if(face[2]!=0)polyline(p,0x11)
               end
             end
           end
-        end
-        if portal then
-          -- draw any "decoration" after convex faces
-          self:draw_uv_polys(leaf.fragments)
-          leaf.fragments=nil
         end
       end
     end
@@ -252,20 +247,18 @@ function z_poly_clip(znear,v)
 		local d1=v1[3]-znear
 		if d1>0 then
       if d0<=0 then
-        local t=d0/(d0-d1)
-        local nv=v_lerp(v0,v1,t) 
+        local nv=v_lerp(v0,v1,d0/(d0-d1)) 
         res[#res+1]={
-          x=63.5+nv[1]*8,
-          y=63.5-nv[2]*8
+          x=63.5+(nv[1]<<3),
+          y=63.5-(nv[2]<<3)
         }
 			end
       res[#res+1]=v1
 		elseif d0>0 then
-      local t=d0/(d0-d1)
-			local nv=v_lerp(v0,v1,t)
+			local nv=v_lerp(v0,v1,d0/(d0-d1)) 
       res[#res+1]={
-        x=63.5+nv[1]*8,
-        y=63.5-nv[2]*8
+        x=63.5+(nv[1]<<3),
+        y=63.5-(nv[2]<<3)
       }
     end
     v0=v1
@@ -279,7 +272,7 @@ function make_player(pos,a)
   local velocity={0,0,0,}
 
   -- player height
-  pos=v_add(pos,{0,48,0})
+  pos=v_add(pos,{0,24,0})
   return {
     pos=pos,
     m=make_m_from_euler(unpack(angle)),
@@ -300,7 +293,7 @@ function make_player(pos,a)
       angle=v_add(angle,dangle,1/1024)
 
       local c,s=cos(a),-sin(a)
-      velocity=v_add(velocity,{s*dz-c*dx,-2+jmp,c*dz+s*dx})      
+      velocity=v_add(velocity,{s*dz-c*dx,jmp-2,c*dz+s*dx})      
       -- check next position
       local vn,vl=v_normz(velocity)
       if vl>0.1 then
@@ -455,17 +448,18 @@ end
 
 function _draw()
   --cls()
-  local leaves,current_leaf={},find_sub_sector(_model.bsp,_cam.pos)  
+  local current_leaf=find_sub_sector(_model.bsp,_cam.pos)  
+  -- changed sector?
   if current_leaf and current_leaf!=_prev_leaf then
     _prev_leaf=current_leaf
     _visframe+=1
     -- find all visible leaves
-    local visframe,vis_mask=_visframe,_vis_mask
+    local visframe,vis_mask,leaves=_visframe,_vis_mask,_leaves
     for i,bits in pairs(current_leaf.pvs) do
       for j,mask in pairs(vis_mask) do
         -- visible?
         if bits&mask!=0 then
-          local leaf=_leaves[(i<<5|j)+2]
+          local leaf=leaves[(i<<5|j)+2]
           -- tag visible parents
           while leaf do
             -- already tagged?
@@ -478,15 +472,17 @@ function _draw()
     end    
   end
 
-  -- sorted drawing
-  collect_bsp(_model.bsp,_cam.pos,_visframe,leaves)
+  -- collect convex spaces back to front
+  local visleaves={}
+  collect_bsp(_model.bsp,_cam.pos,_visframe,visleaves)
 
-  --fillp(0xa5a5)
-  _cam:draw_faces(leaves)
+  fillp(0xa5a5)
+  _cam:draw_faces(visleaves)
 
   --if(h) _cam:draw_points(hits)
-  
-  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#leaves
+  --pal(_palette,1)
+
+  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves
   print(s,2,3,1)
   print(s,2,2,12)
 
@@ -564,11 +560,29 @@ function unpack_map()
   end)
 
   unpack_array(function()
-    local face_verts,plane,flags,color={},unpack_ref(planes),mpeek(),1-mpeek()/255
+    local face_verts,plane,flags,color={},unpack_ref(planes),mpeek(),mpeek()/255
+    --if color>0.75 then
+    --  color=0x77
+    --elseif color>0.25 then
+    --  color=0x17
+    --else
+    --  color=0
+    --end
+    local c,side=0x00,flags&0x1==0 
+    if(plane[2]>0==side) c=0x62
+    if(plane[2]>0.7==side) c=0x76
+    if((plane[2]==1)==side) c=0x77
+    if plane[2]==0 then
+      c=0x88
+      if(0.7*plane[1]+0.7*plane[3]>-0.25==side) c=0x82
+      if(0.7*plane[1]+0.7*plane[3]>0==side) c=0x22
+      --if(face[3]>0.75==face.side) c=0x81
+    end
+
     local f=add(faces,setmetatable({
       -- face side vs supporting plane
-      side=flags&0x1==0,
-      color=_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
+      side=side,
+      color=c,--_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
       verts=face_verts
     },{__index=plane}))
 
