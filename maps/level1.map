@@ -3,7 +3,7 @@
 // entity 0
 {
 "classname" "worldspawn"
-"_tb_def" "builtin:Quake.fgd"
+"_tb_def" "external:entities.fgd"
 // brush 0
 {
 ( -64 160 16 ) ( -64 -160 16 ) ( -64 -160 -16 ) __TB_empty 0 0 0 1 1
@@ -329,7 +329,7 @@
 // entity 1
 {
 "classname" "info_player_start"
-"origin" "240 32 40"
+"origin" "80 -40 112"
 }
 // entity 2
 {
@@ -350,4 +350,29 @@
 {
 "classname" "light_flame_small_white"
 "origin" "424 -44 132"
+}
+// entity 6
+{
+"classname" "spirit_human"
+"origin" "680 -8 56"
+}
+// entity 7
+{
+"classname" "spirit_human"
+"origin" "216 24 72"
+}
+// entity 8
+{
+"classname" "spirit_human"
+"origin" "464 -120 72"
+}
+// entity 9
+{
+"classname" "spirit_human"
+"origin" "368 -8 64"
+}
+// entity 10
+{
+"classname" "spirit_human"
+"origin" "368 -104 64"
 }

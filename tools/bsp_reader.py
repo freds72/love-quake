@@ -56,6 +56,11 @@ class StructHelper(object):
       return result
 
   @classmethod
+  def read_one(cls, f, entry):
+    f.seek(entry.offset)
+    return cls.read_from(f)
+
+  @classmethod
   def read_all(cls, f, entry):
     f.seek(entry.offset)
     result = []
@@ -325,8 +330,16 @@ def pack_face(id, face):
   flags = 0
   if face.side:
     flags |=1
-  s += "{:02x}".format(flags)
 
+  # find texture
+  if face.tex_id!=-1:
+    tex = textures[face.tex_id]
+    mip = miptex[tex.miptex-1]
+    if "sky" in str(mip.name):
+      flags |= 2
+  
+  s += "{:02x}".format(flags)
+  
   # edge indirection
   # + skip last edge (duplicates start/end)
   face_verts = []
@@ -483,6 +496,7 @@ def pack_entities(entities):
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   s += pack_vec3(player_start.origin)
   s += pack_fixed("angle" in player_start and player_start.angle or 0)
+    
   return s
 
 def pack_vec3(v):
@@ -491,6 +505,22 @@ def pack_vec3(v):
 def read_bytes(f, entry):
     f.seek(entry.offset)
     return f.read(entry.size)
+
+def read_miptex(f, entry):
+  f.seek(entry.offset)
+  nummiptex = c_int()
+  f.readinto(nummiptex)
+  mips = []
+  for i in range(nummiptex.value):
+    f.seek(entry.offset + 4 + 4*i)
+    offset = c_int()
+    f.readinto(offset) 
+    offset = offset.value
+    if offset==-1:
+      continue
+    f.seek(entry.offset + offset)
+    mips.append(miptex_t.read_from(f))
+  return mips
 
 def pack_bsp(filename):
   with open(filename,"rb") as f:
@@ -519,7 +549,7 @@ def pack_bsp(filename):
     clipnodes = dclipnode_t.read_all(f, header.clipnodes)
     faces = dface_t.read_all(f, header.faces)
     textures = texinfo_t.read_all(f, header.textures)
-    miptex = dmiptexlump_t.read_all(f, header.miptex)
+    miptex = read_miptex(f, header.miptex)
     planes = dplane_t.read_all(f, header.planes)
     leaves = dleaf_t.read_all(f, header.leaves)
     edges = dedge_t.read_all(f, header.edges)
@@ -527,17 +557,7 @@ def pack_bsp(filename):
     surfedges = dsurfedge_t.read_all(f, header.surfedges)
 
     s = ""
-
-    # all textures    
-    # for t in textures:
-    #   print(t)
-    #   mip = miptex[t.miptex]      
-    #   print("animated:", mip)
-    #   for offset in mip.dataofs:
-    #     if offset!=-1:
-    #       f.seek(offset)
-    #       mipentry = miptex_t.read_from(f)
-    #       print(mipentry)
+    print(miptex)
 
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))

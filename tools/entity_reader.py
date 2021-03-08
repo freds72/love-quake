@@ -14,6 +14,7 @@ class ENTITYWalker(ENTITYListener):
       self.result = []
 
     def exitBlock(self, ctx):
+      # entity properties
       properties=dotdict({})
       for pair in ctx.pair():
         attribute = pair.keyword().getText().lower().strip('"')
