@@ -33,7 +33,6 @@ local _palette={[0]=0,[5]=134,[13]=133}
 local _content_types={{contents=-1},{contents=-2}}
 
 -- bsp drawing helpers
-local _visframe,_prev_leaf=0
 local _vis_mask=split("0x0000.0002,0x0000.0004,0x0000.0008,0x0000.0010,0x0000.0020,0x0000.0040,0x0000.0080,0x0000.0100,0x0000.0200,0x0000.0400,0x0000.0800,0x0000.1000,0x0000.2000,0x0000.4000,0x0000.8000,0x0001.0000,0x0002.0000,0x0004.0000,0x0008.0000,0x0010.0000,0x0020.0000,0x0040.0000,0x0080.0000,0x0100.0000,0x0200.0000,0x0400.0000,0x0800.0000,0x1000.0000,0x2000.0000,0x4000.0000,0x8000.0000",",",1)
 _vis_mask[0]=0x0000.0001
 
@@ -171,9 +170,32 @@ function make_m_from_v_angle(up,angle)
 	}
 end
 
-function make_cam()
+function make_cam(name)
   local up={0,1,0}
-  local offset=0
+  local visleaves,visframe,prev_leaf={},0
+
+  -- traverse bsp
+  -- unrolled true/false children traversing for performance
+  local function collect_bsp(node,pos)
+    local side=node.dot(pos)>node[4]
+    local child=node[not side]
+    if child and child[name]==visframe then
+      if child.contents then
+        visleaves[#visleaves+1]=child
+      else
+        collect_bsp(child,pos)
+      end
+    end
+    local child=node[side]
+    if child and child[name]==visframe then
+      if child.contents then
+        visleaves[#visleaves+1]=child
+      else
+        collect_bsp(child,pos)
+      end
+    end
+  end
+
 	return {
 		pos={0,0,0},    
 		track=function(self,pos,m)
@@ -192,6 +214,35 @@ function make_cam()
       })
       self.pos=pos
     end,
+    collect_leaves=function(self,bsp)
+      local current_leaf=find_sub_sector(bsp,self.pos)  
+      -- changed sector?
+      if current_leaf and current_leaf!=prev_leaf then
+        prev_leaf=current_leaf
+        visframe+=1
+        -- find all visible leaves
+        local vis_mask,leaves=_vis_mask,_leaves
+        for i,bits in pairs(current_leaf.pvs) do
+          for j,mask in pairs(vis_mask) do
+            -- visible?
+            if bits&mask!=0 then
+              local leaf=leaves[(i<<5|j)+2]
+              -- tag visible parents
+              while leaf do
+                -- already tagged?
+                if(leaf[name]==visframe) break
+                leaf[name]=visframe
+                leaf=leaf.parent
+              end
+            end
+          end
+        end    
+        -- collect convex spaces back to front
+        visleaves={}
+        collect_bsp(bsp,self.pos)
+      end
+      return visleaves
+    end,  
     draw_points=function(self,points)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       for k,v in ipairs(points) do
@@ -220,14 +271,12 @@ function make_cam()
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,pos={},{},self.pos
       
-      local sun=v_normz({0.5,-0.5,0})
-      if(btnp(5)) offset+=1
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
           -- make sure a face from a leaf is drawn only once
-          if not face.sky and not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
+          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0
             for k,v in pairs(face.verts) do
@@ -236,6 +285,7 @@ function make_cam()
                 local code,x,y,z=0,v[1],v[2],v[3]
                 local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
+                -- znear=8
                 if az<8 then code=2 end
                 -- if az>2048 then code|=1 end
                 if ax>az then code|=4
@@ -245,7 +295,7 @@ function make_cam()
                 -- save world space coords for clipping
                 -- to screen space
                 local w=64/az
-                a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,u=x>>3,v=(face[2]<0.7 and y or z)>>3,outcode=code}
+                a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
                 v_cache[v]=a
               end
               outcode&=a.outcode
@@ -253,16 +303,10 @@ function make_cam()
               p[k]=a
             end
             if outcode==0 then 
-              if(clipcode>0) p=z_poly_clip(8,p)
+              if(clipcode>0) p=z_poly_clip(p)
 
               if #p>2 then
-                --local flip=face.side and -1 or 1
-                --local light=(flr(11*((flip*face.dot(sun)+1)/2))+offset)
-                --if(light>10) light=10-(light%11)
-                --local c=sget(light*8,0)|sget(light*8+1,0)<<4
                 polyfill(p,face.color)
-                --tpoly(p)
-                --if(face[2]!=1)polyline(p,0x0)
               end
             end
           end
@@ -276,34 +320,28 @@ function make_cam()
   }
 end
 
-function z_poly_clip(znear,v)
+function z_poly_clip(v)
 	local res,v0={},v[#v]
-	local d0=v0[3]-znear
+	local d0=v0[3]-8
 	for i=1,#v do
 		local v1=v[i]
-		local d1=v1[3]-znear
+		local d1=v1[3]-8
 		if d1>0 then
       if d0<=0 then
-        local t=d0/(d0-d1)
-        local nv=v_lerp(v0,v1,t)         
+        local nv=v_lerp(v0,v1,d0/(d0-d1))         
         res[#res+1]={
           x=63.5+(nv[1]<<3),
           y=63.5-(nv[2]<<3),
-          w=8,
-          u=lerp(v0.u,v1.u,t),
-          v=lerp(v0.v,v1.v,t)
+          w=8
         }
 			end
       res[#res+1]=v1
 		elseif d0>0 then
-      local t=d0/(d0-d1)
-      local nv=v_lerp(v0,v1,t)         
+      local nv=v_lerp(v0,v1,d0/(d0-d1))
       res[#res+1]={
         x=63.5+(nv[1]<<3),
         y=63.5-(nv[2]<<3),
-        w=8,
-        u=lerp(v0.u,v1.u,t),
-        v=lerp(v0.v,v1.v,t)
+        w=8
       }
     end
     v0=v1
@@ -381,62 +419,6 @@ function make_player(pos,a)
 
 end
 
-function make_spirit(pos)
-  local x,y,z=unpack(pos)
-  local particles={
-    {x,y,z,0,0,0,16,1}
-  }
-
-  return {
-    x,y,z,
-    nodes={},  
-    update=function(self)
-      if #particles<20 then
-        add(particles,{
-          x,y,z,
-          -- dx/dy/dz
-          (1-rnd())/4,
-          -2+rnd(),
-          (1-rnd())/4,
-          -- radius
-          16,
-          -- dr
-          0.85+rnd(0.1)
-        })
-      end   
-      for p in all(particles) do
-        p[1]+=p[4]
-        p[2]+=p[5]
-        p[3]+=p[6]
-        p[7]*=p[8]
-        if p[7]<=0.5 then
-          del(particles,p)
-        end
-      end
-    end,
-    draw=function(self,m)
-      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
-      local cache={}
-      for _,p in pairs(particles) do
-        local x,y,z=p[1],p[2],p[3]
-        local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-        -- to screen space
-        if az>0 then
-          cache[#cache+1]={63.5+((ax/az)<<6),63.5-((ay/az)<<6),p[7]*64/az}
-        end
-      end
-      --outline
-      for _,c in pairs(cache) do
-        circfill(c[1],c[2],c[3],0x00)
-      end
-      -- fill
-      for _,c in pairs(cache) do
-        circfill(c[1],c[2],c[3]-1,0x77)
-      end
-    end
-  }
-end
-
 -->8
 -- bsp functions
 
@@ -488,30 +470,6 @@ function register_thing_subs(node,thing,radius)
   end
 end
 
-
--- traverse bsp
-
-
--- unrolled true/false children traversing for performance
-function collect_bsp(node,pos,visframe,leaves)
-  local side=node.dot(pos)<=node[4]
-  local child=node[side]
-  if child and child.visframe==visframe then
-    if child.contents then
-      add(leaves,child)
-    else
-      collect_bsp(child,pos,visframe,leaves)
-    end
-  end
-  local child=node[not side]
-  if child and child.visframe==visframe then
-    if child.contents then
-      add(leaves,child)
-    else
-      collect_bsp(child,pos,visframe,leaves)
-    end
-  end
-end
 
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
 -- hull location
@@ -573,18 +531,13 @@ function _init()
   -- enable lock+button alias
   poke(0x5f2d,7)
 
-  poke(0x5f3a, 0)
-	poke(0x5f3b, 0)
-  poke(0x5f38, 4)
-	poke(0x5f39, 4)
-
   -- unpack map
   _model,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
   -- restore spritesheet
   reload()
 
   -- 
-  _cam=make_cam()
+  _cam=make_cam("main")
   _plyr=make_player(pos,angle)
 
 end
@@ -604,36 +557,9 @@ function _update()
 end
 
 function _draw()
-  cls(1)
-  local current_leaf=find_sub_sector(_model.bsp,_cam.pos)  
-  -- changed sector?
-  if current_leaf and current_leaf!=_prev_leaf then
-    _prev_leaf=current_leaf
-    _visframe+=1
-    -- find all visible leaves
-    local visframe,vis_mask,leaves=_visframe,_vis_mask,_leaves
-    for i,bits in pairs(current_leaf.pvs) do
-      for j,mask in pairs(vis_mask) do
-        -- visible?
-        if bits&mask!=0 then
-          local leaf=leaves[(i<<5|j)+2]
-          -- tag visible parents
-          while leaf do
-            -- already tagged?
-            if(leaf.visframe==visframe) break
-            leaf.visframe=visframe
-            leaf=leaf.parent
-          end
-        end
-      end
-    end    
-  end
-
-  -- collect convex spaces back to front
-  local visleaves={}
-  collect_bsp(_model.bsp,_cam.pos,_visframe,visleaves)
 
   fillp(0xa5a5)
+  local visleaves=_cam:collect_leaves(_model.bsp)
   _cam:draw_faces(visleaves)
 
   -- _cam:draw_points({_plyr.pos})
@@ -741,7 +667,7 @@ function unpack_map()
       sky=flags&0x2!=0,
       -- face side vs supporting plane
       side=side,
-      color=(rnd(15)&0xf)*0x11,--_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
+      color=flr(rnd(15))*0x11,--_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
       verts=face_verts
     },{__index=plane}))
 
