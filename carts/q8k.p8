@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 30
+version 31
 __lua__
 -- quake engine
 -- by @freds72
@@ -7,7 +7,29 @@ __lua__
 #include plain.lua
 
 local _model,_leaves
-local _palette={[0]=0}
+
+--[[
+local fadetable={
+ {0,0,0,0,129,129,129,129,129,129,129,1,131,131,131},
+ {129,129,129,129,129,1,1,1,1,1,131,131,131,131,131},
+ {140,140,140,140,140,140,140,131,131,131,131,131,131,131,131},
+ {12,12,12,12,12,140,140,140,140,140,140,131,131,131,131},
+ {133,133,133,133,133,133,133,1,1,131,131,131,131,131,131},
+ {5,5,5,5,5,5,5,5,131,131,131,131,131,131,131},
+ {134,134,134,134,13,5,5,5,5,5,5,131,131,131,131},
+ {7,7,6,6,6,6,6,13,13,13,13,5,5,131,131},
+ {136,136,2,2,2,2,2,2,141,133,133,133,131,131,131},
+ {8,8,136,136,136,136,2,2,2,2,5,133,133,131,131},
+ {9,9,9,9,4,4,4,4,5,5,5,5,5,131,131},
+ {10,10,138,138,138,138,138,134,134,5,5,5,5,131,131},
+ {138,138,138,138,138,138,5,5,5,5,5,5,131,131,131},
+ {3,3,3,3,3,3,3,3,131,131,131,131,131,131,131},
+ {4,4,4,4,5,5,5,5,5,5,5,5,131,131,131},
+ {14,14,14,134,134,134,13,13,141,141,5,5,5,131,131}
+}
+]]
+
+local _palette={[0]=0,[5]=134,[13]=133}
 local _content_types={{contents=-1},{contents=-2}}
 
 -- bsp drawing helpers
@@ -238,9 +260,9 @@ function make_cam()
                 --local light=(flr(11*((flip*face.dot(sun)+1)/2))+offset)
                 --if(light>10) light=10-(light%11)
                 --local c=sget(light*8,0)|sget(light*8+1,0)<<4
-                -- polyfill(p,face.color)
-                tpoly(p)
-                --if(face[2]==1)polyline(p,0x0)
+                polyfill(p,face.color)
+                --tpoly(p)
+                --if(face[2]!=1)polyline(p,0x0)
               end
             end
           end
@@ -293,6 +315,7 @@ end
 function make_player(pos,a)
   local angle,dangle={0,a,0},{0,0,0}
   local velocity={0,0,0,}
+  local wall_run
 
   -- start above floor
   pos=v_add(pos,{0,1,0})
@@ -313,13 +336,14 @@ function make_player(pos,a)
       if(btn(3,1)) dz=-4
       if(btnp(4)) jmp=20
 
-      dangle=v_add(dangle,{stat(39),stat(38),0})
+      dangle=v_add(dangle,{stat(39),stat(38),wall_run and -4 or 0})
       angle=v_add(angle,dangle,1/1024)
 
       local c,s=cos(a),-sin(a)
       velocity=v_add(velocity,{s*dz-c*dx,jmp-2,c*dz+s*dx})      
       -- check next position
       local vn,vl=v_normz(velocity)
+      wall_run=false
       if vl>0.1 then
         -- check current to target pos
         for i=1,3 do
@@ -329,6 +353,15 @@ function make_player(pos,a)
             -- separating?
             if fix<0 then
               velocity=v_add(velocity,hits.n,-fix)
+
+              if abs(hits.n[2])<0.2 then
+                local wall_v=v_clone(vn,hits.n)
+                if abs(wall_v[2])<0.25 then
+                  velocity[2]+=10
+                  printh("wall run")
+                  -- wall_run=true
+                end
+              end
             end
           else
             goto clear
@@ -603,7 +636,7 @@ function _draw()
   fillp(0xa5a5)
   _cam:draw_faces(visleaves)
 
-  _cam:draw_points({_plyr.pos})
+  -- _cam:draw_points({_plyr.pos})
 
   pal(_palette,1)
 
@@ -694,21 +727,21 @@ function unpack_map()
     --  color=0
     --end
     
-    local c,side=0,flags&0x1==0 
-    if(plane[2]>0==side) c=0x62
-    if(plane[2]>0.7==side) c=0x3b
-    if((plane[2]==1)==side) c=0xbb
+    local c,side=0x66,flags&0x1==0
+    if(plane[2]>0==side) c=0x55
+    if(plane[2]>0.7==side) c=0xd5
+    if((plane[2]==1)==side) c=0xdd
     if plane[2]==0 then
-      c=0x44
-      if(0.7*plane[1]+0.7*plane[3]>-0.25==side) c=0x94
-      if(0.7*plane[1]+0.7*plane[3]>0==side) c=0x99
+      c=0x55
+      if(0.7*plane[1]+0.7*plane[3]>-0.25==side) c=0x65
+      if(0.7*plane[1]+0.7*plane[3]>0==side) c=0x77
       --if(face[3]>0.75==face.side) c=0x81
     end
     local f=add(faces,setmetatable({
       sky=flags&0x2!=0,
       -- face side vs supporting plane
       side=side,
-      color=c,--_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
+      color=(rnd(15)&0xf)*0x11,--_palette[mid(flr(16*color),0,15)]|_palette[mid(flr(16*color)+1,0,15)]<<4,
       verts=face_verts
     },{__index=plane}))
 
