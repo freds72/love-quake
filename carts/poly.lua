@@ -2,8 +2,8 @@
 -- credits: 
 function polyfill(p,c)
 	color(c)
-	local miny,maxy,mini=32000,-32000
-	local minx,maxx,minix=32000,-32000
+	local miny,maxy,minx,maxx,mini,minix=32000,-32000,32000,-32000
+	-- find extent
 	for i,v in pairs(p) do
 		local x,y=v.x,v.y
 		if (x<minx) minix,minx=i,x
@@ -12,13 +12,13 @@ function polyfill(p,c)
 		if (y>maxy) maxy=y
 	end
 
-	--
+	-- find smallest iteration area
 	if abs(minx-maxx)<abs(miny-maxy) then
 		--data for left and right edges:
 		local np,li,lj,ri,rj,lx,rx,ly,ldy,ry,rdy=#p,minix,minix,minix,minix,minx-1,minx-1
 
 		--step through scanlines.
-		for x=max(0,minx\1+1),min(maxx\1,127) do
+		for x=max(0,minx\1+1),min(maxx,127) do
 			--maybe update to next vert
 			while lx<x do
 				li=lj
@@ -55,7 +55,7 @@ function polyfill(p,c)
 		local np,li,lj,ri,rj,ly,ry,lx,ldx,rx,rdx=#p,mini,mini,mini,mini,miny-1,miny-1
 
 		--step through scanlines.
-		for y=max(0,miny\1+1),min(maxy\1,127) do
+		for y=max(0,miny\1+1),min(maxy,127) do
 			--maybe update to next vert
 			while ly<y do
 				li=lj

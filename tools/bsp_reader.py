@@ -334,9 +334,10 @@ def pack_face(id, face):
   # find texture
   if face.tex_id!=-1:
     tex = textures[face.tex_id]
-    mip = miptex[tex.miptex-1]
-    if "sky" in str(mip.name):
-      flags |= 2
+    if tex.miptex>0:
+      mip = miptex[tex.miptex-1]
+      if "sky" in str(mip.name):
+        flags |= 2
   
   s += "{:02x}".format(flags)
   
@@ -491,7 +492,12 @@ def pack_entities(entities):
   classnames=['info_player_start','info_player_deathmatch','testplayerstart']
   player_starts=[e for e in entities if e.classname in classnames]
   if len(player_starts)==0:
-    raise Exception("Missing info_player_start entity in: {}".format(entities))
+    logging.warning("Missing info_player_start entity in: {}".format(entities))
+    player_starts=[dotdict({
+      'classname':'debug_player_start',
+      'origin':dotdict({'x':0,'y':0,'z':0}),
+      'angle':0
+    })]
   player_start = player_starts[0]
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   s += pack_vec3(player_start.origin)
@@ -557,7 +563,7 @@ def pack_bsp(filename):
     surfedges = dsurfedge_t.read_all(f, header.surfedges)
 
     s = ""
-    print(miptex)
+    # print(textures)
 
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
