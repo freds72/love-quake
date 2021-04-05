@@ -334,7 +334,7 @@ def pack_face(id, face):
   # find texture
   if face.tex_id!=-1:
     tex = textures[face.tex_id]
-    if tex.miptex>0:
+    if tex.miptex>0 and tex.miptex<=len(miptex):
       mip = miptex[tex.miptex-1]
       if "sky" in str(mip.name):
         flags |= 2
