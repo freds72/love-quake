@@ -295,7 +295,29 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-def pack_lightmap(id, verts, lightofs, tex):  
+img_lightmap = Image.new('RGBA', (128,128), (0,0,0,0))
+img_x = 0
+img_max_height = 0
+img_y = 0
+all_lightmaps = []
+
+def pack_lightmap(id, face, tex, atlas):  
+  global img_lightmap  
+  global img_x
+  global img_max_height
+  global img_y
+  global all_lightmaps
+
+  face_verts=[]
+  for i in range(face.edge_num):
+    edge_id = surfedges[face.edge_id + i].edge_id
+    if edge_id>=0:
+      edge = edges[edge_id]
+      face_verts.append(edge.v[0])      
+    else:
+      edge = edges[-edge_id]
+      face_verts.append(edge.v[1])      
+
   u_min=float('inf')
   u_max=float('-inf')
   v_min=float('inf')
@@ -315,12 +337,38 @@ def pack_lightmap(id, verts, lightofs, tex):
   
   width,height=((u_max-u_min)+1, (v_max-v_min)+1)  
   
-  # average lightmap luminance
-  lightmap = []
+  # get lightmap data
+  img = Image.new('RGBA', (width,height), (0,0,0,0))
+  all_black = True
+  avg_light = 0
   for i in range(width):
     for j in range(height):
-      lightmap.append(lightmaps[lightofs+i+j*width])  
-  return sum(lightmap)/len(lightmap)
+      l = lightmaps[face.lightofs+i+j*width]
+      avg_light += l
+      if l!=0:
+        all_black=False
+      # l = lightmaps[face.lightofs+i+j*width]
+      img.putpixel((i,j),(l,l,l,255))
+  img_max_height=max(img_max_height, height)
+  if img_x+width>128:
+    img_x=0
+    img_y+=img_max_height
+    img_max_height=0
+  img_lightmap.paste(img, (img_x, img_y))
+
+  if not all_black: all_lightmaps.append((width*height, img))
+
+  # keep track of location  
+  lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
+  
+  # coordinates in lightmap space
+  # draw = ImageDraw.Draw(img_uv)
+  # draw.line([((v_dot(vertices[vi],tex.u_axis)+tex.u_offset)/16-u_min+img_x, (v_dot(vertices[vi],tex.v_axis)+tex.v_offset)/16-v_min+img_y) for vi in face_verts], width=1, fill=(255,0,0,255))
+  
+  # print(128-u_min+img_x,128-v_min+img_y)
+
+  img_x += width
+  return lightmap_coords
 
 def pack_face(id, face):
   s = ""
@@ -528,6 +576,40 @@ def read_miptex(f, entry):
     mips.append(miptex_t.read_from(f))
   return mips
 
+def pack_tiles(img):
+  width, height = img.size
+  # extract tiles
+  pico_gfx = []
+  pico_map = []
+  for j in range(0,math.floor(height/8)):
+    for i in range(0,math.floor(width/8)):
+      data = bytes([])
+      for y in range(8):
+        # read nimbles
+        for x in range(0,8,2):
+          # print("{}/{}".format(i+x,j+y))
+          # image is using the pico palette (+transparency)
+          low = img.getpixel((i*8 + x, j*8 + y))
+          low = int(low[0]/16)          
+          high = img.getpixel((i*8 + x + 1, j*8 + y))
+          high = int(high[0]/16)
+          data += bytes([high|low<<4])
+
+      # not referenced zone
+      if all(b==0 for b in data):
+        pico_map.append(0)
+      else:          
+        tile = 0
+        # known tile?
+        if data in pico_gfx:
+          tile = pico_gfx.index(data)
+        else:
+          tile = len(pico_gfx)
+          pico_gfx.append(data) 
+        # tiles are in spritesheet 2+3
+        pico_map.append(tile)  
+  print("packed: ", len(pico_gfx), " tiles")
+
 def pack_bsp(filename):
   with open(filename,"rb") as f:
     header = dheader_t.read_from(f)
@@ -585,7 +667,17 @@ def pack_bsp(filename):
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
     for i,face in enumerate(faces):
-      s += pack_face(i, face)
+      s += pack_face(i, face, atlas)
+
+    # debug
+    # for img in sorted(all_lightmaps, key=lambda item: -item[0]):
+    for img in all_lightmaps:
+      atlas.add(img[1])
+
+    atlas_img = Image.new('RGBA', (128, 128), (0,0,0,255))
+    draw_atlas(atlas, atlas_img)
+    atlas_img.save("atlas.png")
+    pack_tiles(atlas_img)
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
@@ -615,4 +707,4 @@ def pack_bsp(filename):
     entities = ENTITYReader(read_bytes(f, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
 
-    return s
+    return (s, img_lightmap)

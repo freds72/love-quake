@@ -35,6 +35,22 @@ def compress_byte_str(s,raw=False,more=False):
     return compressed
   return "".join(map("{:02x}".format, compressed))
 
+def pack_lightmap(img):
+  map_data = []
+  width, height = img.size
+  for i in range(width):
+    for j in range(height):
+      light = img.getpixel((j, i))
+      # scale to 1-16
+      map_data.append(math.floor(light[0]/16)+1)      
+  cart = ""
+  # pad map
+  map_data = ["".join(map("{:02x}".format,map_data[i:i+width] + [0]*(128-width))) for i in range(0,len(map_data),width)]
+  map_data = "".join(map_data)
+  cart += "__map__\n"
+  cart += re.sub("(.{256})", "\\1\n", map_data, 0, re.DOTALL)
+  return cart
+
 def pack_archive(pico_path, carts_path, root, filename, mapname=None, compress=False, release=None, dump_lightmaps=False, compress_more=False):
   # extract data
   map_data= pack_bsp(filename)
