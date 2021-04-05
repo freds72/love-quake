@@ -563,7 +563,8 @@ def pack_bsp(filename):
     surfedges = dsurfedge_t.read_all(f, header.surfedges)
 
     s = ""
-    # print(textures)
+    print("textures",textures)
+    print("mips",miptex)
 
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
