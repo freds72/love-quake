@@ -328,9 +328,15 @@ def pack_lightmap(id, face, tex):
   
   # get lightmap data
   img = Image.new('RGBA', (width,height), (0,0,0,0))
+  all_black = True
+  avg_light = 0
   for i in range(width):
     for j in range(height):
-      l = lightmaps[face.lightofs+i+j*width]      
+      l = lightmaps[face.lightofs+i+j*width]
+      avg_light += l
+      if l!=0:
+        all_black=False
+      # l = lightmaps[face.lightofs+i+j*width]
       img.putpixel((i,j),(l,l,l,255))
   img_max_height=max(img_max_height, height)
   if img_x+width>128:
@@ -339,7 +345,7 @@ def pack_lightmap(id, face, tex):
     img_max_height=0
   img_lightmap.paste(img, (img_x, img_y))
 
-  all_lightmaps.append(img)
+  if not all_black: all_lightmaps.append((avg_light/(width*height), img))
 
   # keep track of location  
   lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
@@ -527,6 +533,40 @@ def draw_atlas(node,img):
   for child in node.child:
     draw_atlas(child,img)  
 
+def pack_tiles(img):
+  width, height = img.size
+  # extract tiles
+  pico_gfx = []
+  pico_map = []
+  for j in range(0,math.floor(height/8)):
+    for i in range(0,math.floor(width/8)):
+      data = bytes([])
+      for y in range(8):
+        # read nimbles
+        for x in range(0,8,2):
+          # print("{}/{}".format(i+x,j+y))
+          # image is using the pico palette (+transparency)
+          low = img.getpixel((i*8 + x, j*8 + y))
+          low = int(low[0]/16)          
+          high = img.getpixel((i*8 + x + 1, j*8 + y))
+          high = int(high[0]/16)
+          data += bytes([high|low<<4])
+
+      # not referenced zone
+      if all(b==0 for b in data):
+        pico_map.append(0)
+      else:          
+        tile = 0
+        # known tile?
+        if data in pico_gfx:
+          tile = pico_gfx.index(data)
+        else:
+          tile = len(pico_gfx)
+          pico_gfx.append(data) 
+        # tiles are in spritesheet 2+3
+        pico_map.append(tile)  
+  print("packed: ", len(pico_gfx), " tiles")
+
 def pack_bsp(filename):
   with open(filename,"rb") as f:
     header = dheader_t.read_from(f)
@@ -598,14 +638,15 @@ def pack_bsp(filename):
       s += pack_face(i, face)
 
     # 
-    atlas = ImageAtlas(width=128, height=128)    
-    # sorted(all_lightmaps, key=lambda img: img.size)
+    atlas = ImageAtlas(width=128, height=512)    
     for i in all_lightmaps:
-      atlas.add(i)  
+    # for i in sorted(all_lightmaps, key=lambda item: item[0]):
+      atlas.add(i[1])  
 
-    atlas_img = Image.new('RGBA', (128,128), (255,0,0,255))
+    atlas_img = Image.new('RGBA', (128, 512), (0,0,0,255))
     draw_atlas(atlas, atlas_img)
     atlas_img.save("atlas.png")
+    pack_tiles(atlas_img)
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
