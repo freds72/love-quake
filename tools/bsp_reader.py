@@ -284,6 +284,12 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
+img_lightmap = Image.new('RGBA', (128,128), (0,0,0,0))
+img_x = 0
+img_max_height = 0
+img_y = 0
+all_lightmaps = []
+
 def pack_lightmap(id, face, tex, atlas):  
   global img_lightmap  
   global img_x
@@ -339,7 +345,7 @@ def pack_lightmap(id, face, tex, atlas):
     img_max_height=0
   img_lightmap.paste(img, (img_x, img_y))
 
-  if not all_black: all_lightmaps.append((avg_light/(width*height), img))
+  if not all_black: all_lightmaps.append((width*height, img))
 
   # keep track of location  
   lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
@@ -347,6 +353,11 @@ def pack_lightmap(id, face, tex, atlas):
   # coordinates in lightmap space
   # draw = ImageDraw.Draw(img_uv)
   # draw.line([((v_dot(vertices[vi],tex.u_axis)+tex.u_offset)/16-u_min+img_x, (v_dot(vertices[vi],tex.v_axis)+tex.v_offset)/16-v_min+img_y) for vi in face_verts], width=1, fill=(255,0,0,255))
+  
+  # print(128-u_min+img_x,128-v_min+img_y)
+
+  img_x += width
+  return lightmap_coords
 
 def pack_face(id, face, atlas):
   s = ""
@@ -622,19 +633,17 @@ def pack_bsp(filename):
       s += pack_texture(tex)
 
     # 
-    atlas = ImageAtlas(width=128, height=128)    
+    atlas = ImageAtlas(width=128, height=512)    
 
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
     for i,face in enumerate(faces):
-      s += pack_face(i, face)
+      s += pack_face(i, face, atlas)
 
-    # 
-    atlas = ImageAtlas(width=128, height=512)    
-    for i in all_lightmaps:
-    # for i in sorted(all_lightmaps, key=lambda item: item[0]):
-      atlas.add(i[1])  
+    # debug
+    for img in sorted(all_lightmaps, key=lambda item: -item[0]):
+      atlas.add(img[1])
 
     atlas_img = Image.new('RGBA', (128, 512), (0,0,0,255))
     draw_atlas(atlas, atlas_img)
@@ -669,4 +678,4 @@ def pack_bsp(filename):
     entities = ENTITYReader(read_bytes(f, header.entities).decode('ascii')).entities
     s += pack_entities(entities)
 
-    return (s, atlas_img)
+    return (s, img_lightmap)
