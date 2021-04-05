@@ -633,7 +633,7 @@ def pack_bsp(filename):
       s += pack_texture(tex)
 
     # 
-    atlas = ImageAtlas(width=128, height=512)    
+    atlas = ImageAtlas(width=128, height=128)    
 
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
@@ -642,10 +642,11 @@ def pack_bsp(filename):
       s += pack_face(i, face, atlas)
 
     # debug
-    for img in sorted(all_lightmaps, key=lambda item: -item[0]):
+    # for img in sorted(all_lightmaps, key=lambda item: -item[0]):
+    for img in all_lightmaps:
       atlas.add(img[1])
 
-    atlas_img = Image.new('RGBA', (128, 512), (0,0,0,255))
+    atlas_img = Image.new('RGBA', (128, 128), (0,0,0,255))
     draw_atlas(atlas, atlas_img)
     atlas_img.save("atlas.png")
     pack_tiles(atlas_img)

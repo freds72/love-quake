@@ -40,7 +40,7 @@ def pack_lightmap(img):
   for i in range(width):
     for j in range(height):
       light = img.getpixel((j, i))
-      # scale to 0-16
+      # scale to 1-16
       map_data.append(math.floor(light[0]/16)+1)      
   cart = ""
   # pad map

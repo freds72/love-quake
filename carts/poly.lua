@@ -40,10 +40,10 @@ function tpoly(v,uv)
 					av+=sa*dav
 					aw+=sa*daw
 					
-					-- 4-pixel stride deltas
-					dau<<=2
-					dav<<=2
-					daw<<=2
+					-- 8-pixel stride deltas
+					dau<<=3
+					dav<<=3
+					daw<<=3
 
 						-- faster but produces edge artifacts
 						-- local du,dv=(bu/bw-au/aw)/dab,(bv/bw-av/aw)/dab
@@ -51,10 +51,10 @@ function tpoly(v,uv)
 					-- clip right span edge
 					poke(0x5f22,x1+1)
 
-					for x=x0,x1,4 do
+					for x=x0,x1,8 do
 						local u,v=au/aw,av/aw
 						aw+=daw
-						tline(x,y,x+3,y,u,v,((dau-u*daw)>>2)/aw,((dav-v*daw)>>2)/aw)
+						tline(x,y,x+7,y,u,v,((dau-u*daw)>>3)/aw,((dav-v*daw)>>3)/aw)
 						au+=dau
 						av+=dav
 					end
