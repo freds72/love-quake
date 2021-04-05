@@ -9,6 +9,7 @@ from collections import namedtuple
 from python2pico import *
 from entity_reader import ENTITYReader
 from PIL import Image, ImageFilter, ImageDraw
+from atlas import ImageAtlas
 
 # credits: https://gist.github.com/JonathonReinhart/b6f355f13021cd8ec5d0101e0e6675b2
 class StructHelper(object):
@@ -322,7 +323,7 @@ def pack_lightmap(id, face, tex, atlas):
   u_max=float('-inf')
   v_min=float('inf')
   v_max=float('-inf')
-  for vi in verts:
+  for vi in face_verts:
     u=v_dot(vertices[vi],tex.u_axis)+tex.u_offset
     v=v_dot(vertices[vi],tex.v_axis)+tex.v_offset
     u_min=min(u_min,u)
@@ -370,7 +371,7 @@ def pack_lightmap(id, face, tex, atlas):
   img_x += width
   return lightmap_coords
 
-def pack_face(id, face):
+def pack_face(id, face, atlas):
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id+1)
@@ -378,6 +379,8 @@ def pack_face(id, face):
   flags = 0
   if face.side:
     flags |=1
+  if face.lightofs!=-1:
+    flags |= 2
 
   # find texture
   if face.tex_id!=-1:
@@ -385,7 +388,7 @@ def pack_face(id, face):
     if tex.miptex>0 and tex.miptex<=len(miptex):
       mip = miptex[tex.miptex-1]
       if "sky" in str(mip.name):
-        flags |= 2
+        flags |= 4
   
   s += "{:02x}".format(flags)
   
@@ -403,12 +406,9 @@ def pack_face(id, face):
 
   # base color/lightmap?
   color = face.styles[0]
-  if color==0:
-    #light map
-    color = math.floor(pack_lightmap(id, face_verts, face.lightofs, textures[face.tex_id]))
-  elif color==0xff:
+  if color==0xff:
     color = face.styles[1]
-  else:
+  elif color!=0:
     logging.warn("Light effect not supported: {}".format(color))
   s += "{:02x}".format(color)
 
@@ -417,6 +417,17 @@ def pack_face(id, face):
   for vi in face_verts:
     s += pack_variant(vi+1)
   
+  # lightmap?
+  if flags&0x2:
+    # get texture
+    s += pack_variant(face.tex_id+1)
+    # extract lightmap + get extents    
+    lightmap_coords = pack_lightmap(id, face,textures[face.tex_id], atlas)
+    # texture coords "origin" (1/16 lightmap space)
+    # + lightmap offset coords (map space)
+    
+    s += "{:02x}{:02x}".format(min(255,128-lightmap_coords.u_min+lightmap_coords.mx),min(255,128-lightmap_coords.v_min+lightmap_coords.my))
+    
   return s
 
 def pack_leaf(id, leaf, vis):
@@ -576,6 +587,17 @@ def read_miptex(f, entry):
     mips.append(miptex_t.read_from(f))
   return mips
 
+def draw_atlas(node,img):
+  rc = node.rc
+  if node.img:
+    lightmap = node.img
+    width, height = lightmap.size
+    for i in range(width):
+      for j in range(height):
+        img.putpixel((rc.left+i,rc.top+j), lightmap.getpixel((i,j)))
+  for child in node.child:
+    draw_atlas(child,img) 
+
 def pack_tiles(img):
   width, height = img.size
   # extract tiles
@@ -663,6 +685,15 @@ def pack_bsp(filename):
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
 
+    # all textures
+    logging.info("Packing textures: {}".format(len(textures)))
+    s += pack_variant(len(textures))
+    for tex in textures:
+      s += pack_texture(tex)
+
+    # 
+    atlas = ImageAtlas(width=128, height=512)   
+
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
@@ -674,7 +705,7 @@ def pack_bsp(filename):
     for img in all_lightmaps:
       atlas.add(img[1])
 
-    atlas_img = Image.new('RGBA', (128, 128), (0,0,0,255))
+    atlas_img = Image.new('RGBA', (128, 512), (0,0,0,255))
     draw_atlas(atlas, atlas_img)
     atlas_img.save("atlas.png")
     pack_tiles(atlas_img)
