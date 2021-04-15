@@ -363,9 +363,9 @@ def pack_lightmap(id, face, tex, atlas):
   lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
   
   # coordinates in lightmap space
-  # draw = ImageDraw.Draw(img_uv)
+  # draw = ImageDraw.Draw(img_lightmap)
   # draw.line([((v_dot(vertices[vi],tex.u_axis)+tex.u_offset)/16-u_min+img_x, (v_dot(vertices[vi],tex.v_axis)+tex.v_offset)/16-v_min+img_y) for vi in face_verts], width=1, fill=(255,0,0,255))
-  
+
   # print(128-u_min+img_x,128-v_min+img_y)
 
   img_x += width
@@ -737,5 +737,7 @@ def pack_bsp(filename):
     # level gameplay
     entities = ENTITYReader(read_bytes(f, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
+
+    # img_lightmap.save("lightmaps.png")
 
     return (s, img_lightmap)

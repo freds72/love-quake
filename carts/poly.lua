@@ -151,7 +151,7 @@ function polyfill(p,c)
 		local np,li,lj,ri,rj,lx,rx,ly,ldy,ry,rdy=#p,minix,minix,minix,minix,minx-1,minx-1
 
 		--step through scanlines.
-		for x=max(0,minx\1+1),min(maxx,127) do
+		for x=max(0,1+minx&-1),min(maxx,127) do
 			--maybe update to next vert
 			while lx<x do
 				li=lj
@@ -159,7 +159,7 @@ function polyfill(p,c)
 				if (lj>np) lj=1
 				local v0,v1=p[li],p[lj]
 				local x0,x1=v0.x,v1.x
-				lx=x1\1
+				lx=x1&-1
 				ly=v0.y
 				ldy=(v1.y-ly)/(x1-x0)
 				--sub-pixel correction
@@ -171,7 +171,7 @@ function polyfill(p,c)
 				if (rj<1) rj=np
 				local v0,v1=p[ri],p[rj]
 				local x0,x1=v0.x,v1.x
-				rx=x1\1
+				rx=x1&-1
 				ry=v0.y
 				rdy=(v1.y-ry)/(x1-x0)
 				--sub-pixel correction
@@ -188,7 +188,7 @@ function polyfill(p,c)
 		local np,li,lj,ri,rj,ly,ry,lx,ldx,rx,rdx=#p,mini,mini,mini,mini,miny-1,miny-1
 
 		--step through scanlines.
-		for y=max(0,miny\1+1),min(maxy,127) do
+		for y=max(0,1+miny&-1),min(maxy,127) do
 			--maybe update to next vert
 			while ly<y do
 				li=lj
@@ -196,7 +196,7 @@ function polyfill(p,c)
 				if (lj>np) lj=1
 				local v0,v1=p[li],p[lj]
 				local y0,y1=v0.y,v1.y
-				ly=y1\1
+				ly=y1&-1
 				lx=v0.x
 				ldx=(v1.x-lx)/(y1-y0)
 				--sub-pixel correction
@@ -208,7 +208,7 @@ function polyfill(p,c)
 				if (rj<1) rj=np
 				local v0,v1=p[ri],p[rj]
 				local y0,y1=v0.y,v1.y
-				ry=y1\1
+				ry=y1&-1
 				rx=v0.x
 				rdx=(v1.x-rx)/(y1-y0)
 				--sub-pixel correction
