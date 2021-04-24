@@ -69,17 +69,6 @@ function tpoly(v,uv)
 		end
 		x0,y0,w0,u0,v0=_x1,_y1,_w1,_u1,_v1
 	end
-	--[[
-	local v0,v1,v2,v3=
-		v[1],
-		v[2],
-		v[3],
-		v[4]
-	line(v0.x,v0.y,v1.x,v1.y,7)
-	line(v1.x,v1.y,v2.x,v2.y,7)
-	line(v2.x,v2.y,v3.x,v3.y,7)
-	line(v3.x,v3.y,v0.x,v0.y,7)
-	]]
 end
 
 function tpoly_affine(v,uv)
@@ -134,7 +123,6 @@ end
 -- plain color polygon rasterization
 -- credits: 
 function polyfill(p,c)
-	color(c)
 	local miny,maxy,minx,maxx,mini,minix=32000,-32000,32000,-32000
 	-- find extent
 	for i,v in pairs(p) do
@@ -149,7 +137,7 @@ function polyfill(p,c)
 	if abs(minx-maxx)<abs(miny-maxy) then
 		--data for left and right edges:
 		local np,li,lj,ri,rj,lx,rx,ly,ldy,ry,rdy=#p,minix,minix,minix,minix,minx-1,minx-1
-
+		local prev_ly,prev_ry,le,re
 		--step through scanlines.
 		for x=max(0,1+minx&-1),min(maxx,127) do
 			--maybe update to next vert
@@ -161,6 +149,8 @@ function polyfill(p,c)
 				local x0,x1=v0.x,v1.x
 				lx=x1&-1
 				ly=v0.y
+				le=v0.edge
+				prev_ly=ly
 				ldy=(v1.y-ly)/(x1-x0)
 				--sub-pixel correction
 				ly+=(x-x0)*ldy
@@ -173,19 +163,23 @@ function polyfill(p,c)
 				local x0,x1=v0.x,v1.x
 				rx=x1&-1
 				ry=v0.y
+				re=v1.edge
+				prev_ry=ry
 				rdy=(v1.y-ry)/(x1-x0)
 				--sub-pixel correction
 				ry+=(x-x0)*rdy
 			end
-			rectfill(x,ly,x,ry)
-			--pset(x,ly,0)
-			--pset(x,ry,0)
+			rectfill(x,ly,x,ry,c)
+			if(le)rectfill(x,ly,x,prev_ly,1)			
+			if(re)rectfill(x,ry,x,prev_ry,1)
+			prev_ly,prev_ry=ly,ry
 			ly+=ldy
 			ry+=rdy
 		end
 	else
 		--data for left & right edges:
 		local np,li,lj,ri,rj,ly,ry,lx,ldx,rx,rdx=#p,mini,mini,mini,mini,miny-1,miny-1
+		local prev_lx,prev_rx,le,re
 
 		--step through scanlines.
 		for y=max(0,1+miny&-1),min(maxy,127) do
@@ -198,6 +192,8 @@ function polyfill(p,c)
 				local y0,y1=v0.y,v1.y
 				ly=y1&-1
 				lx=v0.x
+				le=v0.edge
+				prev_lx=lx
 				ldx=(v1.x-lx)/(y1-y0)
 				--sub-pixel correction
 				lx+=(y-y0)*ldx
@@ -210,13 +206,16 @@ function polyfill(p,c)
 				local y0,y1=v0.y,v1.y
 				ry=y1&-1
 				rx=v0.x
+				re=v1.edge
+				prev_rx=rx
 				rdx=(v1.x-rx)/(y1-y0)
 				--sub-pixel correction
 				rx+=(y-y0)*rdx
 			end
-			rectfill(lx,y,rx,y)
-			--pset(lx,y,0)
-			--pset(rx,y,0)
+			rectfill(lx,y,rx,y,c)
+			if(le)rectfill(lx,y,prev_lx,y,1)
+			if(re)rectfill(rx,y,prev_rx,y,1)
+			prev_lx,prev_rx=lx,rx
 			lx+=ldx
 			rx+=rdx
 		end
