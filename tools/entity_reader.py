@@ -21,7 +21,7 @@ class ENTITYWalker(ENTITYListener):
         value = pair.args().getText().lower().strip('"')
         # decode special attributes
         if attribute in ['origin']:
-          x,y,z=[int(v) for v in value.split(' ')]
+          x,y,z=[float(v) for v in value.split(' ')]
           # fix Quake y/z orientation
           value=dotdict({'x':x,'y':z,'z':y})
         elif attribute in ['angle','speed','spawnflags']:

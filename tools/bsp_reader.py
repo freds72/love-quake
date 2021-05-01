@@ -6,6 +6,7 @@ import logging
 from dotdict import dotdict
 from ctypes import *
 from collections import namedtuple
+from collections import defaultdict
 from python2pico import *
 from entity_reader import ENTITYReader
 from PIL import Image, ImageFilter, ImageDraw
@@ -254,7 +255,7 @@ TEX_SPECIAL=1
 class texinfo_t(LittleEndianStructure, StructHelper):
   _pack_ = 1
   _fields_ = [
-    ("u_axis", vec3_t),
+    ("u_axis",  vec3_t),
     ("u_offset", c_float),
     ("v_axis", vec3_t),
     ("v_offset", c_float),
@@ -336,15 +337,20 @@ def pack_lightmap(id, face, tex, atlas):
   u_max=math.ceil(u_max/16)
   v_max=math.ceil(v_max/16)
   
-  width,height=((u_max-u_min)+1, (v_max-v_min)+1)  
+  width,height=((u_max-u_min)+1, (v_max-v_min)+1) 
   
   # get lightmap data
   img = Image.new('RGBA', (width,height), (0,0,0,0))
   all_black = True
   avg_light = 0
+  # print("lightmap:", width, "x", height, " (",face.lightofs, "/", len(lightmaps), ")")
   for i in range(width):
     for j in range(height):
-      l = lightmaps[face.lightofs+i+j*width]
+      idx = face.lightofs+i+j*width
+      l = 0
+      # todo: fix
+      if idx < len(lightmaps):
+        l = lightmaps[idx]
       avg_light += l
       if l!=0:
         all_black=False
@@ -371,7 +377,7 @@ def pack_lightmap(id, face, tex, atlas):
   img_x += width
   return lightmap_coords
 
-def pack_face(id, face, atlas):
+def pack_face(id, face, hard_edges, atlas):  
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id+1)
@@ -392,18 +398,6 @@ def pack_face(id, face, atlas):
   
   s += "{:02x}".format(flags)
   
-  # edge indirection
-  # + skip last edge (duplicates start/end)
-  face_verts = []
-  for i in range(face.edge_num):
-    edge_id = surfedges[face.edge_id + i].edge_id
-    if edge_id>=0:
-      edge = edges[edge_id]
-      face_verts.append(edge.v[0])      
-    else:
-      edge = edges[-edge_id]
-      face_verts.append(edge.v[1])   
-
   # base color/lightmap?
   color = face.styles[0]
   if color==0xff:
@@ -411,6 +405,26 @@ def pack_face(id, face, atlas):
   elif color!=0:
     logging.warn("Light effect not supported: {}".format(color))
   s += "{:02x}".format(color)
+
+  # hard edges
+  edge_flags = 0
+
+  # edge indirection
+  # + skip last edge (duplicates start/end)
+  face_verts = []
+  for i in range(face.edge_num):
+    edge_id = surfedges[face.edge_id + i].edge_id    
+    if edge_id>=0:
+      edge = edges[edge_id]
+      face_verts.append(edge.v[0])      
+    else:
+      edge = edges[-edge_id]
+      face_verts.append(edge.v[1])   
+    if abs(edge_id) in hard_edges:
+      edge_flags |= 1<<i
+
+  # todo: fix large polygons
+  s += "{:02x}".format(edge_flags&0xff)
 
   # vertex indices
   s += pack_variant(len(face_verts))
@@ -422,11 +436,12 @@ def pack_face(id, face, atlas):
     # get texture
     s += pack_variant(face.tex_id+1)
     # extract lightmap + get extents    
-    lightmap_coords = pack_lightmap(id, face,textures[face.tex_id], atlas)
+    lightmap_coords = pack_lightmap(id, face, textures[face.tex_id], atlas)
     # texture coords "origin" (1/16 lightmap space)
     # + lightmap offset coords (map space)
-    
-    s += "{:02x}{:02x}".format(min(255,128-lightmap_coords.u_min+lightmap_coords.mx),min(255,128-lightmap_coords.v_min+lightmap_coords.my))
+    u = 128-lightmap_coords.u_min+lightmap_coords.mx
+    v = 128-lightmap_coords.v_min+lightmap_coords.my
+    s += "{:02x}{:02x}".format(min(255,u),min(255,v))
     
   return s
 
@@ -549,7 +564,7 @@ def pack_entities(entities):
   s = ""
   # player start?
   classnames=['info_player_start','info_player_deathmatch','testplayerstart']
-  player_starts=[e for e in entities if e.classname in classnames]
+  player_starts=[e for e in entities if "classname" in e and e.classname in classnames]
   if len(player_starts)==0:
     logging.warning("Missing info_player_start entity in: {}".format(entities))
     player_starts=[dotdict({
@@ -633,8 +648,8 @@ def pack_tiles(img):
   print("packed: ", len(pico_gfx), " tiles")
 
 def pack_bsp(filename):
-  with open(filename,"rb") as f:
-    header = dheader_t.read_from(f)
+  with open(filename,"rb") as bsp_handle:
+    header = dheader_t.read_from(bsp_handle)
 
     # raw data
     global models
@@ -651,20 +666,20 @@ def pack_bsp(filename):
     global marksurfaces
     global surfedges
     global lightmaps
-    models = dmodel_t.read_all(f, header.models)
-    vertices = vec3_t.read_all(f, header.vertices)
-    visdata = read_bytes(f, header.visilist)
-    lightmaps = read_bytes(f, header.lightmaps)
-    nodes = dnode_t.read_all(f, header.nodes)
-    clipnodes = dclipnode_t.read_all(f, header.clipnodes)
-    faces = dface_t.read_all(f, header.faces)
-    textures = texinfo_t.read_all(f, header.textures)
-    miptex = read_miptex(f, header.miptex)
-    planes = dplane_t.read_all(f, header.planes)
-    leaves = dleaf_t.read_all(f, header.leaves)
-    edges = dedge_t.read_all(f, header.edges)
-    marksurfaces = dmarksurface_t.read_all(f, header.marksurfaces)
-    surfedges = dsurfedge_t.read_all(f, header.surfedges)
+    models = dmodel_t.read_all(bsp_handle, header.models)
+    vertices = vec3_t.read_all(bsp_handle, header.vertices)
+    visdata = read_bytes(bsp_handle, header.visilist)
+    lightmaps = read_bytes(bsp_handle, header.lightmaps)
+    nodes = dnode_t.read_all(bsp_handle, header.nodes)
+    clipnodes = dclipnode_t.read_all(bsp_handle, header.clipnodes)
+    faces = dface_t.read_all(bsp_handle, header.faces)
+    textures = texinfo_t.read_all(bsp_handle, header.textures)
+    miptex = read_miptex(bsp_handle, header.miptex)
+    planes = dplane_t.read_all(bsp_handle, header.planes)
+    leaves = dleaf_t.read_all(bsp_handle, header.leaves)
+    edges = dedge_t.read_all(bsp_handle, header.edges)
+    marksurfaces = dmarksurface_t.read_all(bsp_handle, header.marksurfaces)
+    surfedges = dsurfedge_t.read_all(bsp_handle, header.surfedges)
 
     s = ""
     print("textures",textures)
@@ -692,20 +707,41 @@ def pack_bsp(filename):
       s += pack_texture(tex)
 
     # 
-    atlas = ImageAtlas(width=128, height=512)   
+    atlas = ImageAtlas(width=256, height=1024)   
 
+    # create edges to faces dictionary
+    shared_edges = defaultdict(list)
+    for i,face in enumerate(faces):
+      for j in range(face.edge_num):
+        id = abs(surfedges[face.edge_id + j].edge_id)
+        if face not in shared_edges[id]:
+          shared_edges[id].append(face)
+    # find hard edges
+    hard_edges = set()
+    for id in shared_edges:
+      shared_faces = shared_edges[id]
+      if len(shared_faces)>0:
+        f = shared_faces[0]
+        n = planes[f.plane_id].normal
+        for other_face in shared_faces:
+          if f!=other_face:
+            other_n = planes[other_face.plane_id].normal
+            if abs(v_dot(n, other_n))<0.7:
+              hard_edges.add(id)
+              break
+# 
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
     for i,face in enumerate(faces):
-      s += pack_face(i, face, atlas)
+      s += pack_face(i, face, hard_edges, atlas)
 
     # debug
-    # for img in sorted(all_lightmaps, key=lambda item: -item[0]):
-    for img in all_lightmaps:
+    for img in sorted(all_lightmaps, key=lambda item: -item[0]):
+    # for img in all_lightmaps:
       atlas.add(img[1])
 
-    atlas_img = Image.new('RGBA', (128, 512), (0,0,0,255))
+    atlas_img = Image.new('RGBA', (256, 1024), (0,0,0,255))
     draw_atlas(atlas, atlas_img)
     atlas_img.save("atlas.png")
     pack_tiles(atlas_img)
@@ -735,7 +771,7 @@ def pack_bsp(filename):
       s += pack_model(model)
     
     # level gameplay
-    entities = ENTITYReader(read_bytes(f, header.entities).decode('iso-8859-1')).entities
+    entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
 
     # img_lightmap.save("lightmaps.png")
