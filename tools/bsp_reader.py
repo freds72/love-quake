@@ -10,7 +10,6 @@ from collections import defaultdict
 from python2pico import *
 from entity_reader import ENTITYReader
 from PIL import Image, ImageFilter, ImageDraw
-from atlas import ImageAtlas
 
 # credits: https://gist.github.com/JonathonReinhart/b6f355f13021cd8ec5d0101e0e6675b2
 class StructHelper(object):
@@ -297,87 +296,7 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-img_lightmap = Image.new('RGBA', (128,128), (0,0,0,0))
-img_x = 0
-img_max_height = 0
-img_y = 0
-all_lightmaps = []
-
-def pack_lightmap(id, face, tex, atlas):  
-  global img_lightmap  
-  global img_x
-  global img_max_height
-  global img_y
-  global all_lightmaps
-
-  face_verts=[]
-  for i in range(face.edge_num):
-    edge_id = surfedges[face.edge_id + i].edge_id
-    if edge_id>=0:
-      edge = edges[edge_id]
-      face_verts.append(edge.v[0])      
-    else:
-      edge = edges[-edge_id]
-      face_verts.append(edge.v[1])      
-
-  u_min=float('inf')
-  u_max=float('-inf')
-  v_min=float('inf')
-  v_max=float('-inf')
-  for vi in face_verts:
-    u=v_dot(vertices[vi],tex.u_axis)+tex.u_offset
-    v=v_dot(vertices[vi],tex.v_axis)+tex.v_offset
-    u_min=min(u_min,u)
-    v_min=min(v_min,v)
-    u_max=max(u_max,u)
-    v_max=max(v_max,v)
-
-  u_min=math.floor(u_min/16)
-  v_min=math.floor(v_min/16)
-  u_max=math.ceil(u_max/16)
-  v_max=math.ceil(v_max/16)
-  
-  width,height=((u_max-u_min)+1, (v_max-v_min)+1) 
-  
-  # get lightmap data
-  img = Image.new('RGBA', (width,height), (0,0,0,0))
-  all_black = True
-  avg_light = 0
-  # print("lightmap:", width, "x", height, " (",face.lightofs, "/", len(lightmaps), ")")
-  for i in range(width):
-    for j in range(height):
-      idx = face.lightofs+i+j*width
-      l = 0
-      # todo: fix
-      if idx < len(lightmaps):
-        l = lightmaps[idx]
-      avg_light += l
-      if l!=0:
-        all_black=False
-      # l = lightmaps[face.lightofs+i+j*width]
-      img.putpixel((i,j),(l,l,l,255))
-  img_max_height=max(img_max_height, height)
-  if img_x+width>128:
-    img_x=0
-    img_y+=img_max_height
-    img_max_height=0
-  img_lightmap.paste(img, (img_x, img_y))
-
-  if not all_black: all_lightmaps.append((width*height, img))
-
-  # keep track of location  
-  lightmap_coords=dotdict({'u_min':u_min,'v_min':v_min,'mx':img_x,'my':img_y,'width':width,'height':height})
-  
-  # coordinates in lightmap space
-  # draw = ImageDraw.Draw(img_lightmap)
-  # draw.line([((v_dot(vertices[vi],tex.u_axis)+tex.u_offset)/16-u_min+img_x, (v_dot(vertices[vi],tex.v_axis)+tex.v_offset)/16-v_min+img_y) for vi in face_verts], width=1, fill=(255,0,0,255))
-
-  # print(128-u_min+img_x,128-v_min+img_y)
-
-  img_x += width
-  return lightmap_coords
-
-def pack_face(id, face, hard_edges, atlas):  
+def pack_face(id, face, hard_edges):  
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id+1)
@@ -385,8 +304,6 @@ def pack_face(id, face, hard_edges, atlas):
   flags = 0
   if face.side:
     flags |=1
-  if face.lightofs!=-1:
-    flags |= 2
 
   # find texture
   if face.tex_id!=-1:
@@ -394,7 +311,8 @@ def pack_face(id, face, hard_edges, atlas):
     if tex.miptex>0 and tex.miptex<=len(miptex):
       mip = miptex[tex.miptex-1]
       if "sky" in str(mip.name):
-        flags |= 4
+        flags |= 2
+      # todo: extract color from texture name
   
   s += "{:02x}".format(flags)
   
@@ -423,25 +341,13 @@ def pack_face(id, face, hard_edges, atlas):
     if abs(edge_id) in hard_edges:
       edge_flags |= 1<<i
 
-  # todo: fix large polygons
+  # todo: fix large polygons (32 edges)
   s += "{:02x}".format(edge_flags&0xff)
 
   # vertex indices
   s += pack_variant(len(face_verts))
   for vi in face_verts:
-    s += pack_variant(vi+1)
-  
-  # lightmap?
-  if flags&0x2:
-    # get texture
-    s += pack_variant(face.tex_id+1)
-    # extract lightmap + get extents    
-    lightmap_coords = pack_lightmap(id, face, textures[face.tex_id], atlas)
-    # texture coords "origin" (1/16 lightmap space)
-    # + lightmap offset coords (map space)
-    u = 128-lightmap_coords.u_min+lightmap_coords.mx
-    v = 128-lightmap_coords.v_min+lightmap_coords.my
-    s += "{:02x}{:02x}".format(min(255,u),min(255,v))
+    s += pack_variant(vi)
     
   return s
 
@@ -602,51 +508,6 @@ def read_miptex(f, entry):
     mips.append(miptex_t.read_from(f))
   return mips
 
-def draw_atlas(node,img):
-  rc = node.rc
-  if node.img:
-    lightmap = node.img
-    width, height = lightmap.size
-    for i in range(width):
-      for j in range(height):
-        img.putpixel((rc.left+i,rc.top+j), lightmap.getpixel((i,j)))
-  for child in node.child:
-    draw_atlas(child,img) 
-
-def pack_tiles(img):
-  width, height = img.size
-  # extract tiles
-  pico_gfx = []
-  pico_map = []
-  for j in range(0,math.floor(height/8)):
-    for i in range(0,math.floor(width/8)):
-      data = bytes([])
-      for y in range(8):
-        # read nimbles
-        for x in range(0,8,2):
-          # print("{}/{}".format(i+x,j+y))
-          # image is using the pico palette (+transparency)
-          low = img.getpixel((i*8 + x, j*8 + y))
-          low = int(low[0]/16)          
-          high = img.getpixel((i*8 + x + 1, j*8 + y))
-          high = int(high[0]/16)
-          data += bytes([high|low<<4])
-
-      # not referenced zone
-      if all(b==0 for b in data):
-        pico_map.append(0)
-      else:          
-        tile = 0
-        # known tile?
-        if data in pico_gfx:
-          tile = pico_gfx.index(data)
-        else:
-          tile = len(pico_gfx)
-          pico_gfx.append(data) 
-        # tiles are in spritesheet 2+3
-        pico_map.append(tile)  
-  print("packed: ", len(pico_gfx), " tiles")
-
 def pack_bsp(filename):
   with open(filename,"rb") as bsp_handle:
     header = dheader_t.read_from(bsp_handle)
@@ -682,8 +543,6 @@ def pack_bsp(filename):
     surfedges = dsurfedge_t.read_all(bsp_handle, header.surfedges)
 
     s = ""
-    print("textures",textures)
-    print("mips",miptex)
 
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
@@ -699,15 +558,6 @@ def pack_bsp(filename):
       s += "{:02x}".format(plane_types[p.type])
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
-
-    # all textures
-    logging.info("Packing textures: {}".format(len(textures)))
-    s += pack_variant(len(textures))
-    for tex in textures:
-      s += pack_texture(tex)
-
-    # 
-    atlas = ImageAtlas(width=256, height=1024)   
 
     # create edges to faces dictionary
     shared_edges = defaultdict(list)
@@ -729,22 +579,12 @@ def pack_bsp(filename):
             if abs(v_dot(n, other_n))<0.7:
               hard_edges.add(id)
               break
-# 
+
     # all faces
     logging.info("Packing faces: {}".format(len(faces)))
     s += pack_variant(len(faces))
     for i,face in enumerate(faces):
-      s += pack_face(i, face, hard_edges, atlas)
-
-    # debug
-    for img in sorted(all_lightmaps, key=lambda item: -item[0]):
-    # for img in all_lightmaps:
-      atlas.add(img[1])
-
-    atlas_img = Image.new('RGBA', (256, 1024), (0,0,0,255))
-    draw_atlas(atlas, atlas_img)
-    atlas_img.save("atlas.png")
-    pack_tiles(atlas_img)
+      s += pack_face(i, face, hard_edges)
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
@@ -774,6 +614,4 @@ def pack_bsp(filename):
     entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
 
-    # img_lightmap.save("lightmaps.png")
-
-    return (s, img_lightmap)
+    return s

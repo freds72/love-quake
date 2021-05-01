@@ -262,7 +262,7 @@ function make_cam(name)
         end
       end
     end,
-    draw_faces=function(self,leaves)
+    draw_faces=function(self,verts,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,pos={},{},self.pos
       
@@ -274,10 +274,12 @@ function make_cam(name)
           if not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
             f_cache[face]=true
             local p,outcode,clipcode={},0xffff,0
-            for k,v in pairs(face.verts) do
-              local a=v_cache[v]
+            for k=1,face.nv do
+              -- base index in verts array
+              local vi=face[k]
+              local a=v_cache[vi]
               if not a then
-                local code,x,y,z=0,v[1],v[2],v[3]
+                local code,x,y,z=0,verts[vi],verts[vi+1],verts[vi+2]
                 local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
                 -- znear=8
@@ -291,7 +293,7 @@ function make_cam(name)
                 -- to screen space
                 local w=64/az
                 a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
-                v_cache[v]=a
+                v_cache[vi]=a
               end
               outcode&=a.outcode
               clipcode+=a.outcode&2
@@ -604,7 +606,7 @@ function _draw()
 
   --fillp(0xa5a5)
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
-  _cam:draw_faces(visleaves)
+  _cam:draw_faces(_model.verts,visleaves)
 
   -- _cam:draw_points({_plyr.pos})
 
@@ -634,10 +636,12 @@ function unpack_fixed()
 end
 
 -- unpack an array of bytes
-function unpack_array(fn)
+function unpack_array(fn,name)
+  local mem0=stat(0)
 	for i=1,unpack_variant() do
 		fn(i)
 	end
+  if(name) printh(name..":"..stat(0)-mem0.."kb")
 end
 
 function unpack_chr()
@@ -660,10 +664,16 @@ end
 function unpack_map()
   local verts,planes,faces,textures,leaves,nodes,models={},{},{},{},{},{},{}
 
+  printh("------------------------")
+  -- vertices
   unpack_array(function()
-    add(verts,unpack_v3())
-  end)
+    local x,y,z=unpack(unpack_v3())
+    add(verts,x)
+    add(verts,y)
+    add(verts,z)
+  end,"verts")
 
+  -- planes
   unpack_array(function()
     local t,p=mpeek(),add(planes,unpack_v3())
     p[4]=unpack_fixed()
@@ -686,20 +696,11 @@ function unpack_map()
       end
     end
     p.dot=dot        
-  end)
+  end,"planes")  
 
-  -- texture coordinates
+  -- faces
   unpack_array(function()
-    add(textures,{
-      u=unpack_v3(),
-      u_offset=unpack_fixed(),
-      v=unpack_v3(),
-      v_offset=unpack_fixed()
-    })
-  end)
-
-  unpack_array(function()
-    local face_verts,plane,flags,color,edges={},unpack_ref(planes),mpeek(),mpeek(),mpeek()
+    local plane,flags,color,edges=unpack_ref(planes),mpeek(),mpeek(),mpeek()
     
     local c,side,sky=0x55,flags&0x1==0,flags&0x4!=0
     if(plane[2]>0==side) c=0x62
@@ -718,30 +719,17 @@ function unpack_map()
       side=side,
       color=c,
       -- visible edges bitfield
-      edges=edges,
-      verts=face_verts
+      edges=edges      
     },{__index=plane}))
 
-    unpack_array(function(i)
-      -- reference to vertex
-      add(face_verts,unpack_ref(verts))
-    end)
-    f.cp=f.dot(face_verts[1])
-
-    -- lightmap?
-    if flags&0x2!=0 then
-      local uv,texture={},unpack_ref(textures)
-      local mx,my=mpeek()-128,mpeek()-128
-      --[[
-      for _,v in pairs(face_verts) do
-        add(uv,{
-          ((v_dot(v,texture.u)+texture.u_offset)>>4)+mx,
-          ((v_dot(v,texture.v)+texture.v_offset)>>4)+my
-        })     end
-      f.uv=uv
-      ]]
-    end    
-  end)
+    local n=unpack_variant()
+    f.nv=n
+    for i=1,n do      
+      add(f,3*unpack_variant()+1)
+    end
+    local i=f[1]
+    f.cp=f.dot({verts[i],verts[i+1],verts[i+2]})  
+  end,"faces")
 
   unpack_array(function(i)
     local f,pvs={},{}
@@ -762,7 +750,7 @@ function unpack_map()
     unpack_array(function()
       add(f,unpack_ref(faces))
     end)
-  end)
+  end,"leaves")
 
   unpack_array(function()
     local plane=unpack_ref(planes)
@@ -772,7 +760,7 @@ function unpack_map()
       [true]=unpack_variant(),
       [false]=unpack_variant()
     },{__index=plane}))
-  end)
+  end,"nodes")
   -- attach nodes/leaves
   for _,node in pairs(nodes) do
     local function attach_node(side,leaf)
@@ -820,8 +808,8 @@ function unpack_map()
       attach_node(true)
       attach_node(false)
     end
-    add(models,{bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
-  end)
+    add(models,{verts=verts,bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
+  end,"models")
 
   -- get top level node
   -- unpack player position
