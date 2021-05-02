@@ -679,14 +679,22 @@ function unpack_map()
   end,"verts")
 
   -- planes
-  local plane_sizeof=4
+  local plane_sizeof=5
   plane_get=function(pi)
     return planes[pi],planes[pi+1],planes[pi+2]
   end
   plane_dot=function(pi,v)
+    local t=planes[pi+4]
+    if t<3 then    
+      return planes[pi+t]*v[t+1],planes[pi+3]
+    end
     return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3],planes[pi+3]
   end
   plane_isfront=function(pi,v)
+    local t=planes[pi+4]
+    if t<3 then
+      return planes[pi+t]*v[t+1]>planes[pi+3]
+    end
     return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3]>planes[pi+3]
   end
 
@@ -697,6 +705,7 @@ function unpack_map()
     add(planes,y)
     add(planes,z)
     add(planes,unpack_fixed())
+    add(planes,t)
   end,"planes")  
 
   -- faces
