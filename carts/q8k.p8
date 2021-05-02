@@ -8,6 +8,7 @@ __lua__
 
 -- game globals
 local _particles,_cam,_plyr,_model={}
+local plane_dot,plane_isfront,plane_get
 
 --[[
 local fadetable={
@@ -172,7 +173,7 @@ function make_cam(name)
   -- traverse bsp
   -- unrolled true/false children traversing for performance
   local function collect_bsp(node,pos)
-    local side=node.dot(pos)>node[4]
+    local side=plane_isfront(node.plane,pos)
     local child=node[not side]
     if child and child[name]==visframe then
       if child.contents then
@@ -271,8 +272,9 @@ function make_cam(name)
         for i,face in pairs(leaf.faces) do    
           -- some sectors are sharing faces
           -- make sure a face from a leaf is drawn only once
-          if not f_cache[face] and face.dot(pos)<face.cp!=face.side then            
+          if not f_cache[face] and plane_dot(face.plane,pos)<face.cp!=face.side then            
             f_cache[face]=true
+            
             local p,outcode,clipcode={},0xffff,0
             for k=1,face.nv do
               -- base index in verts array
@@ -463,7 +465,7 @@ end
 -- find in what convex leaf pos is
 function find_sub_sector(node,pos)
   while node do
-    node=node[node.dot(pos)>node[4]]
+    node=node[plane_isfront(node.plane,pos)]
     if node and node.contents then
       -- leaf?
       return node
@@ -473,7 +475,7 @@ end
 
 function is_empty(node,pos)
   while node.contents==nil or node.contents>0 do
-    node=node[node.dot(pos)>node[4]]
+    node=node[plane_isfront(node.plane,pos)]
   end  
   return node.contents!=-1
 end
@@ -497,7 +499,7 @@ function register_thing_subs(node,thing,radius)
     return
   end
 
-  local dist,d=node.dot(thing.pos),node[4]
+  local dist,d=plane_dot(node.plane,thing.pos)
   local side,otherside=dist>d-radius,dist>d+radius
   
   register_thing_subs(node[side],thing,radius)
@@ -525,14 +527,15 @@ function hitscan(node,p0,p1,out)
     if(contents<0) return
   end
 
-  local dist,otherdist=node.dot(p0),node.dot(p1)
-  local side,otherside=dist>node[4],otherdist>node[4]
+  local dist,node_dist=plane_dot(node.plane,p0)
+  local otherdist=plane_dot(node.plane,p1)
+  local side,otherside=dist>node_dist,otherdist>node_dist
   if side==otherside then
     -- go down this side
     return hitscan(node[side],p0,p1,out)
   end
   -- crossing a node
-  local t=dist-node[4]
+  local t=dist-node_dist
   if t<0 then
     t-=0x0.01
   else
@@ -551,7 +554,8 @@ function hitscan(node,p0,p1,out)
       if is_empty(_model.clipnodes,p10) then
         add(out,p10) 
         local scale=t<0 and -1 or 1
-        local n={scale*node[1],scale*node[2],scale*node[3],node[4],dot=node.dot}
+        local nx,ny,nz=plane_get(node.plane)
+        local n={scale*nx,scale*ny,scale*nz,node_dist}
         p10.n=n
         p10.msg=tostr(frac)
         out.n=n
@@ -666,6 +670,7 @@ function unpack_map()
 
   printh("------------------------")
   -- vertices
+  local vert_sizeof=3
   unpack_array(function()
     local x,y,z=unpack(unpack_v3())
     add(verts,x)
@@ -674,61 +679,59 @@ function unpack_map()
   end,"verts")
 
   -- planes
-  unpack_array(function()
-    local t,p=mpeek(),add(planes,unpack_v3())
-    p[4]=unpack_fixed()
-    local x,y,z=unpack(p)
-    local dot=function(v)    
-      return x*v[1]+y*v[2]+z*v[3]
-    end
-    if t==0 then    
-      dot=function(v)
-        return x*v[1]
-      end
-    elseif t==1 then    
-      p.draw=tpoly_affine
-      dot=function(v)
-        return y*v[2]
-      end
-    elseif t==2 then    
-      dot=function(v)
-        return z*v[3]
-      end
-    end
-    p.dot=dot        
+  local plane_sizeof=4
+  plane_get=function(pi)
+    return planes[pi],planes[pi+1],planes[pi+2]
+  end
+  plane_dot=function(pi,v)
+    return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3],planes[pi+3]
+  end
+  plane_isfront=function(pi,v)
+    return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3]>planes[pi+3]
+  end
+
+  unpack_array(function()  
+    local t=mpeek()
+    local x,y,z=unpack(unpack_v3())
+    add(planes,x)
+    add(planes,y)
+    add(planes,z)
+    add(planes,unpack_fixed())
   end,"planes")  
 
   -- faces
-  unpack_array(function()
-    local plane,flags,color,edges=unpack_ref(planes),mpeek(),mpeek(),mpeek()
+  unpack_array(function(fi)
+    local pi,flags,color,edges=plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),mpeek()
     
     local c,side,sky=0x55,flags&0x1==0,flags&0x4!=0
-    if(plane[2]>0==side) c=0x62
-    if(plane[2]>0.7==side) c=0x56
-    if((plane[2]==1)==side) c=0x66
-    if plane[2]==0 then
-      c=0x88
-      if(0.7*plane[1]+0.7*plane[3]>-0.25==side) c=0x82
-      if(0.7*plane[1]+0.7*plane[3]>0==side) c=0x22
-      --if(face[3]>0.75==face.side) c=0x81
-    end
+    --if(plane[2]>0==side) c=0x62
+    --if(plane[2]>0.7==side) c=0x56
+    --if((plane[2]==1)==side) c=0x66
+    --if plane[2]==0 then
+    --  c=0x88
+    --  if(0.7*plane[1]+0.7*plane[3]>-0.25==side) c=0x82
+    --  if(0.7*plane[1]+0.7*plane[3]>0==side) c=0x22
+    --  --if(face[3]>0.75==face.side) c=0x81
+    --end
     if(sky) c=0xdd
-    local f=add(faces,setmetatable({
+    local f=add(faces,{
       sky=sky,
       -- face side vs supporting plane
       side=side,
-      color=c,
+      color=flr(rnd(16))*0x11,
       -- visible edges bitfield
-      edges=edges      
-    },{__index=plane}))
+      edges=edges,
+      plane=pi      
+    })
 
     local n=unpack_variant()
     f.nv=n
     for i=1,n do      
-      add(f,3*unpack_variant()+1)
+      -- index to vertex in global table
+      add(f,vert_sizeof*unpack_variant()+1)
     end
-    local i=f[1]
-    f.cp=f.dot({verts[i],verts[i+1],verts[i+2]})  
+    local vi=f[1]
+    f.cp=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
   end,"faces")
 
   unpack_array(function(i)
@@ -753,13 +756,14 @@ function unpack_map()
   end,"leaves")
 
   unpack_array(function()
-    local plane=unpack_ref(planes)
+    local pi=plane_sizeof*unpack_variant()+1
     -- merge plane and node
-    add(nodes,setmetatable({
+    add(nodes,{
       flags=mpeek(),
       [true]=unpack_variant(),
-      [false]=unpack_variant()
-    },{__index=plane}))
+      [false]=unpack_variant(),
+      plane=pi
+    })
   end,"nodes")
   -- attach nodes/leaves
   for _,node in pairs(nodes) do
@@ -780,7 +784,10 @@ function unpack_map()
     -- collision hull
     local clipnodes={}
     unpack_array(function()
-      local node,flags=setmetatable({},{__index=unpack_ref(planes)}),mpeek()
+      local pi=plane_sizeof*unpack_variant()+1
+      local node,flags={
+        plane=pi
+      },mpeek()
       local contents=flags&0xf
       if contents!=0 then
         node[true]=-contents
@@ -808,7 +815,7 @@ function unpack_map()
       attach_node(true)
       attach_node(false)
     end
-    add(models,{verts=verts,bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
+    add(models,{verts=verts,planes=planes,bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
   end,"models")
 
   -- get top level node

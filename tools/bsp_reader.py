@@ -299,7 +299,7 @@ def v_dot(a,b):
 def pack_face(id, face, hard_edges):  
   s = ""
   # supporting plane index
-  s += pack_variant(face.plane_id+1)
+  s += pack_variant(face.plane_id)
   # flags
   flags = 0
   if face.side:
@@ -372,7 +372,7 @@ def pack_leaf(id, leaf, vis):
 def pack_node(node):
   s = ""
   # supporting plane
-  s += pack_variant(node.plane_id+1)
+  s += pack_variant(node.plane_id)
 
   flags = 0x0
   # todo: find out purpose of bsp node faces?
@@ -409,7 +409,7 @@ def pack_model(model):
   # clip nodes
   s += pack_variant(len(clipnodes))
   for c in clipnodes:
-    s += pack_variant(c.plane_id+1)
+    s += pack_variant(c.plane_id)
     flags = 0
     sc = ""
     for i in range(2):

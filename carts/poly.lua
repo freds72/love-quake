@@ -123,6 +123,7 @@ end
 -- plain color polygon rasterization
 -- credits: 
 function polyfill(p,c)
+	color(c)
 	local miny,maxy,minx,maxx,mini,minix=32000,-32000,32000,-32000
 	-- find extent
 	for i,v in pairs(p) do
@@ -138,7 +139,9 @@ function polyfill(p,c)
 		--data for left and right edges:
 		local np,lj,rj,lx,rx,ly,ldy,ry,rdy=#p,minix,minix,minx,minx
 		--step through scanlines.
-		for x=max(0,1+minx&-1),min(maxx,127) do
+		if(maxx>127) maxx=127
+		if(minx<0) minx=-1
+		for x=1+minx&-1,maxx do
 			--maybe update to next vert
 			while lx<x do
 				local v0=p[lj]
@@ -164,7 +167,11 @@ function polyfill(p,c)
 				--sub-pixel correction
 				ry+=(x-x0)*rdy
 			end
-			rectfill(x,ly,x,ry,c)
+			--do
+			--	local ly,ry=ly&-1,ry&-1
+			--	if(ry-ly>=1) rectfill(x,ly,x,ry)
+			--end
+			rectfill(x,ly,x,ry)
 			ly+=ldy
 			ry+=rdy
 		end
@@ -173,7 +180,9 @@ function polyfill(p,c)
 		--data for left & right edges:
 		local np,lj,rj,ly,ry,lx,ldx,rx,rdx=#p,mini,mini,miny,miny
 		--step through scanlines.
-		for y=max(0,1+miny&-1),min(maxy,127) do
+		if(maxy>127) maxy=127
+		if(miny<0) miny=-1
+		for y=1+miny&-1,maxy do
 			--maybe update to next vert
 			while ly<y do
 				local v0=p[lj]
@@ -199,8 +208,11 @@ function polyfill(p,c)
 				--sub-pixel correction
 				rx+=(y-y0)*rdx
 			end
-			rectfill(lx,y,rx,y,c)
-			
+			--do
+			--	local lx,rx=lx&-1,rx&-1
+			--	if(lx-rx>=1) rectfill(rx,y,lx-1,y)
+			--end
+			rectfill(rx,y,lx,y)
 			lx+=ldx
 			rx+=rdx
 		end
@@ -245,11 +257,11 @@ function polyfill2(p,c)
 		for y=cy0,y1 do
 			local span=spans[y]
 			if span then
-				--local x0=x0\1
-				--span\=1
-				--if(x0>span) x0,span=span,x0
-				--if(span-x0>=1) rectfill(x0,y,span-1,y)				
-				rectfill(x0,y,span,y)			
+				local x0=x0\1
+				span\=1
+				if(x0>span) x0,span=span,x0
+				if(span-x0>=1) rectfill(x0,y,span-1,y)				
+				--rectfill(x0,y,span,y)			
 			else
 				spans[y]=x0
 			end
