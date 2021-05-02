@@ -268,8 +268,9 @@ function make_cam(name)
       local v_cache,f_cache,pos={},{},self.pos
       
       for j,leaf in ipairs(leaves) do
-        -- faces form a convex space, render in any order
-        for i,face in pairs(leaf.faces) do    
+        -- faces form a convex space, render in any order        
+        for i=1,leaf.nf do
+          local face=leaf[i]  
           -- some sectors are sharing faces
           -- make sure a face from a leaf is drawn only once
           if not f_cache[face] and plane_dot(face.plane,pos)<face.cp!=face.side then            
@@ -744,13 +745,12 @@ function unpack_map()
   end,"faces")
 
   unpack_array(function(i)
-    local f,pvs={},{}
-    add(leaves,{
+    local pvs={}
+    local l=add(leaves,{
       -- get 0-based index of leaf
       -- leaf 0 is "solid" leaf
       id=i-1,
       contents=mpeek()-128,
-      faces=f,
       pvs=pvs
     })
 
@@ -759,9 +759,11 @@ function unpack_map()
       pvs[unpack_variant()]=unpack_fixed()
     end)
     
-    unpack_array(function()
-      add(f,unpack_ref(faces))
-    end)
+    local n=unpack_variant()
+    l.nf=n
+    for i=1,n do      
+      add(l,unpack_ref(faces))
+    end
   end,"leaves")
 
   unpack_array(function()
