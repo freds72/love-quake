@@ -276,10 +276,9 @@ function make_cam(name)
           if not f_cache[fi] and plane_dot(faces[fi],pos)<faces[fi+1]!=faces[fi+2] then            
             f_cache[fi]=true
             
-            local p,outcode,clipcode,edges,vi_base={},0xffff,0,faces[fi+5],fi+6
-            for k=1,faces[vi_base] do
+            local p,outcode,clipcode,edges,vi_base={},0xffff,0,faces[fi+5]
+            for k,vi in pairs(faces[fi+6]) do
               -- base index in verts array
-              local vi=faces[vi_base+k]
               local a=v_cache[vi]
               if not a then
                 local code,x,y,z=0,verts[vi],verts[vi+1],verts[vi+2]
@@ -710,26 +709,15 @@ function unpack_map()
   end,"planes")  
 
   -- faces
-  local face_index={}
+  local face_sizeof=7
   unpack_array(function(fi)
     local base=#faces+1
-    face_index[fi]=base
 
-    local pi,flags,color,edges=plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),mpeek()
+    local fv,pi,flags,color,edges={},plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),mpeek()
     
-    --if(plane[2]>0==side) c=0x62
-    --if(plane[2]>0.7==side) c=0x56
-    --if((plane[2]==1)==side) c=0x66
-    --if plane[2]==0 then
-    --  c=0x88
-    --  if(0.7*plane[1]+0.7*plane[3]>-0.25==side) c=0x82
-    --  if(0.7*plane[1]+0.7*plane[3]>0==side) c=0x22
-    --  --if(face[3]>0.75==face.side) c=0x81
-    --end
-    if(sky) c=0xdd
     -- 0: supporting plane
     add(faces,pi)
-    -- 1: cp 
+    -- 1: cp (placeholder)
     add(faces,0)
     -- 2:side
     add(faces,flags&0x1==0)
@@ -740,16 +728,14 @@ function unpack_map()
     -- 5: hard edges
     add(faces,edges)
 
-    local n=unpack_variant()
-    -- 6: number of faces
-    add(faces,n)
-    -- 7+: vertices
-    for i=1,n do      
-      -- index to vertex in global table
-      add(faces,vert_sizeof*unpack_variant()+1)
-    end
+    unpack_array(function()
+      add(fv,vert_sizeof*unpack_variant()+1)
+    end)
+    -- 6: verts
+    add(faces,fv)
+
     -- "fix" cp value
-    local vi=faces[base+7]
+    local vi=fv[1]
     faces[base+1]=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
   end,"faces")
 
@@ -771,7 +757,7 @@ function unpack_map()
     local n=unpack_variant()
     l.nf=n
     for i=1,n do      
-      add(l,face_index[unpack_variant()])
+      add(l,face_sizeof*unpack_variant()+1)
     end
   end,"leaves")
 
