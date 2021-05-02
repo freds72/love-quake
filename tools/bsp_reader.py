@@ -366,7 +366,7 @@ def pack_leaf(id, leaf, vis):
   s += pack_variant(leaf.face_num)
   for i in range(leaf.face_num):
     face_id = marksurfaces[leaf.face_id + i].face_id
-    s += pack_variant(face_id+1)
+    s += pack_variant(face_id)
   return s
 
 def pack_node(node):
