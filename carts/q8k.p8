@@ -263,23 +263,23 @@ function make_cam(name)
         end
       end
     end,
-    draw_faces=function(self,verts,leaves)
+    draw_faces=function(self,verts,faces,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local v_cache,f_cache,pos={},{},self.pos
       
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
-          local face=leaf[i]  
+          local fi=leaf[i]  
           -- some sectors are sharing faces
           -- make sure a face from a leaf is drawn only once
-          if not f_cache[face] and plane_dot(face.plane,pos)<face.cp!=face.side then            
-            f_cache[face]=true
+          if not f_cache[fi] and plane_dot(faces[fi],pos)<faces[fi+1]!=faces[fi+2] then            
+            f_cache[fi]=true
             
-            local p,outcode,clipcode={},0xffff,0
-            for k=1,face.nv do
+            local p,outcode,clipcode,edges,vi_base={},0xffff,0,faces[fi+5],fi+6
+            for k=1,faces[vi_base] do
               -- base index in verts array
-              local vi=face[k]
+              local vi=faces[vi_base+k]
               local a=v_cache[vi]
               if not a then
                 local code,x,y,z=0,verts[vi],verts[vi+1],verts[vi+2]
@@ -300,14 +300,14 @@ function make_cam(name)
               end
               outcode&=a.outcode
               clipcode+=a.outcode&2
-              a.edge=face.edges&(1<<(k-1))!=0
+              a.edge=edges&(1<<(k-1))!=0
               p[k]=a
             end
             if outcode==0 then 
               if(clipcode>0) p=z_poly_clip(8,p)
 
               if #p>2 then
-                polyfill(p,face.color)
+                polyfill(p,faces[fi+3])
               end
             end
           end
@@ -611,7 +611,7 @@ function _draw()
 
   --fillp(0xa5a5)
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
-  _cam:draw_faces(_model.verts,visleaves)
+  _cam:draw_faces(_model.verts,_model.faces,visleaves)
 
   -- _cam:draw_points({_plyr.pos})
 
@@ -710,10 +710,13 @@ function unpack_map()
   end,"planes")  
 
   -- faces
+  local face_index={}
   unpack_array(function(fi)
+    local base=#faces+1
+    face_index[fi]=base
+
     local pi,flags,color,edges=plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),mpeek()
     
-    local c,side,sky=0x55,flags&0x1==0,flags&0x4!=0
     --if(plane[2]>0==side) c=0x62
     --if(plane[2]>0.7==side) c=0x56
     --if((plane[2]==1)==side) c=0x66
@@ -724,24 +727,30 @@ function unpack_map()
     --  --if(face[3]>0.75==face.side) c=0x81
     --end
     if(sky) c=0xdd
-    local f=add(faces,{
-      sky=sky,
-      -- face side vs supporting plane
-      side=side,
-      color=flr(rnd(16))*0x11,
-      -- visible edges bitfield
-      edges=edges,
-      plane=pi      
-    })
+    -- 0: supporting plane
+    add(faces,pi)
+    -- 1: cp 
+    add(faces,0)
+    -- 2:side
+    add(faces,flags&0x1==0)
+    -- 3: color
+    add(faces,flr(rnd(16))*0x11)
+    -- 4: sky flag
+    add(faces,flags&0x2!=0)
+    -- 5: hard edges
+    add(faces,edges)
 
     local n=unpack_variant()
-    f.nv=n
+    -- 6: number of faces
+    add(faces,n)
+    -- 7+: vertices
     for i=1,n do      
       -- index to vertex in global table
-      add(f,vert_sizeof*unpack_variant()+1)
+      add(faces,vert_sizeof*unpack_variant()+1)
     end
-    local vi=f[1]
-    f.cp=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
+    -- "fix" cp value
+    local vi=faces[base+7]
+    faces[base+1]=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
   end,"faces")
 
   unpack_array(function(i)
@@ -762,7 +771,7 @@ function unpack_map()
     local n=unpack_variant()
     l.nf=n
     for i=1,n do      
-      add(l,unpack_ref(faces))
+      add(l,face_index[unpack_variant()])
     end
   end,"leaves")
 
@@ -826,7 +835,7 @@ function unpack_map()
       attach_node(true)
       attach_node(false)
     end
-    add(models,{verts=verts,planes=planes,bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
+    add(models,{verts=verts,planes=planes,faces=faces,bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
   end,"models")
 
   -- get top level node
