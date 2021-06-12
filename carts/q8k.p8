@@ -195,7 +195,7 @@ function make_cam(name)
 	return {
 		pos={0,0,0},    
 		track=function(self,pos,m)
-      --pos=v_add(v_add(pos,m_fwd(m),-24),m_up(m),24)	
+      --pos=v_add(v_add(pos,m_fwd(m),-24),m_up(m),24)	      
       local m={unpack(m)}		
       -- inverse view matrix
       m[2],m[5]=m[5],m[2]
@@ -299,7 +299,7 @@ function make_cam(name)
               end
               outcode&=a.outcode
               clipcode+=a.outcode&2
-              a.edge=edges&(1<<(k-1))!=0
+              a.edge=edges&(0x0.0001<<(k-1))!=0
               p[k]=a
             end
             if outcode==0 then 
@@ -364,7 +364,8 @@ function make_player(pos,a)
     pos=pos,
     m=make_m_from_euler(unpack(angle)),
     update=function(self)
-      -- damping
+      -- damping      
+      angle[3]*=0.8
       v_scale(dangle,0.6)
       v_scale(velocity,0.7)
 
@@ -376,11 +377,11 @@ function make_player(pos,a)
       if(btn(3,1)) dz=-4
       if(btnp(4)) jmp=20
 
-      dangle=v_add(dangle,{stat(39),stat(38),0})
+      dangle=v_add(dangle,{stat(39),stat(38),dx/8})
       angle=v_add(angle,dangle,1/1024)
     
       local c,s=cos(a),-sin(a)
-      velocity=v_add(velocity,{s*dz-c*dx,jmp-2,c*dz+s*dx})      
+      velocity=v_add(velocity,{s*dz-c*dx,jmp-2,c*dz+s*dx})          
       -- check next position
       local vn,vl=v_normz(velocity)
       wall_run=false
@@ -572,10 +573,6 @@ function _init()
   -- enable lock+button alias
   poke(0x5f2d,7)
 
-  -- gradient palette (test)
-  pal({128,130,133,5,134,6,7},1)
-  palt(0,false)
-  
   -- unpack map
   _model,pos,angle=decompress("q8k",0,0,unpack_map)
   -- restore spritesheet
@@ -606,9 +603,8 @@ function _update()
 end
 
 function _draw()
-  cls(1)
-
-  --fillp(0xa5a5)
+  cls()
+  
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves)
 
@@ -620,7 +616,7 @@ function _draw()
   print(s,2,3,1)
   print(s,2,2,12)
 
-  pset(64,64,15)
+  pset(64,64,15)  
 end
 
 -->8
@@ -713,7 +709,7 @@ function unpack_map()
   unpack_array(function(fi)
     local base=#faces+1
 
-    local fv,pi,flags,color,edges={},plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),mpeek()
+    local fv,pi,flags,color,edges={},plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),unpack_fixed()
     
     -- 0: supporting plane
     add(faces,pi)
@@ -722,7 +718,7 @@ function unpack_map()
     -- 2:side
     add(faces,flags&0x1==0)
     -- 3: color
-    add(faces,flr(rnd(16))*0x11)
+    add(faces,color)
     -- 4: sky flag
     add(faces,flags&0x2!=0)
     -- 5: hard edges
@@ -744,7 +740,7 @@ function unpack_map()
     local l=add(leaves,{
       -- get 0-based index of leaf
       -- leaf 0 is "solid" leaf
-      id=i-1,
+      -- id=i-1,
       contents=mpeek()-128,
       pvs=pvs
     })

@@ -97,7 +97,7 @@ function polyfill(p,c)
 
 		-- edges
 		if false then
-			color(0)
+			color(0x77)
 			local nv=#p
 			for i,p1 in pairs(p) do			
 				if p1.edge then
@@ -119,7 +119,8 @@ function polyfill(p,c)
 	end
 end
 
-function polyfill2(p,c)	
+function polyfill(p,c)
+	if(c==0xcc)	return
 	color(c)
 	local nv,spans=#p,{}
 	for i,p1 in pairs(p) do
@@ -146,21 +147,22 @@ function polyfill2(p,c)
 			x0+=dx
 		end
 	end
+	fillp()
 
 	-- edges
-	if false then
+	if true then
 		color(0)
 		for i,p1 in pairs(p) do			
 			if p1.edge then
 				local p0=p[i%nv+1]
-				local x0,y0,x1,y1=p0.x-0.5,p0.y,p1.x-0.5,p1.y
+				--local x0,y0,x1,y1=p0.x-0.5,p0.y,p1.x-0.5,p1.y
 				-- y major
-				if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
-				local cy0,cy1,dx=y0\1+1,y1\1+1,(x1-x0)/(y1-y0)
-				if(y1-cy0>1) x0+=(cy0-y0)*dx --x1+=(cy1-y1)*dx
+				--if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
+				--local cy0,cy1,dx=y0\1+1,y1\1+1,(x1-x0)/(y1-y0)
+				--if(y1-cy0>1) x0+=(cy0-y0)*dx --x1+=(cy1-y1)*dx
 					--rectfill(x0-0.5,y0,x0+(cy0-y0)*dx,y0,8) 
 
-				line(x0,cy0,x1,cy1)
+				line(p0.x-0.5,p0.y,p1.x-0.5,p1.y)
 			end
 		end
 	end

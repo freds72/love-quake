@@ -306,22 +306,27 @@ def pack_face(id, face, hard_edges):
     flags |=1
 
   # find texture
+  texname = None
   if face.tex_id!=-1:
-    tex = textures[face.tex_id]
-    if tex.miptex>0 and tex.miptex<=len(miptex):
-      mip = miptex[tex.miptex-1]
-      if "sky" in str(mip.name):
+    tex = textures[face.tex_id]    
+    if tex.miptex<len(miptex):
+      mip = miptex[tex.miptex]
+      texname = mip.name.decode("utf-8")
+      if "sky" in texname:
         flags |= 2
-      # todo: extract color from texture name
-  
+    else:
+      logging.warn("Invalid texture id: {}/{}".format(tex.miptex, len(miptex)))
   s += "{:02x}".format(flags)
-  
+    
   # base color/lightmap?
-  color = face.styles[0]
-  if color==0xff:
-    color = face.styles[1]
-  elif color!=0:
-    logging.warn("Light effect not supported: {}".format(color))
+  color = 0
+  # color = face.styles[0]
+  # if color==0xff:
+  #  color = face.styles[1]
+  # elif color!=0:
+  #   logging.warn("Light effect not supported: {}".format(color))
+  if texname:    
+    color = int(texname,16)
   s += "{:02x}".format(color)
 
   # hard edges
@@ -330,6 +335,8 @@ def pack_face(id, face, hard_edges):
   # edge indirection
   # + skip last edge (duplicates start/end)
   face_verts = []
+  if face.edge_num>32:
+    raise Exception("Too many edges: {}/32".format(face.edge_num))
   for i in range(face.edge_num):
     edge_id = surfedges[face.edge_id + i].edge_id    
     if edge_id>=0:
@@ -341,8 +348,7 @@ def pack_face(id, face, hard_edges):
     if abs(edge_id) in hard_edges:
       edge_flags |= 1<<i
 
-  # todo: fix large polygons (32 edges)
-  s += "{:02x}".format(edge_flags&0xff)
+  s += pack_int32(edge_flags)
 
   # vertex indices
   s += pack_variant(len(face_verts))
@@ -507,6 +513,11 @@ def read_miptex(f, entry):
     f.seek(entry.offset + offset)
     mips.append(miptex_t.read_from(f))
   return mips
+
+def get_face_texture(face):
+  if face.tex_id!=-1:
+    return textures[face.tex_id].miptex  
+  return -1
 
 def pack_bsp(filename):
   with open(filename,"rb") as bsp_handle:
