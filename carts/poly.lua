@@ -120,7 +120,6 @@ function polyfill(p,c)
 end
 
 function polyfill(p,c)
-	if(c==0xcc)	return
 	color(c)
 	local nv,spans=#p,{}
 	for i,p1 in pairs(p) do
@@ -147,10 +146,9 @@ function polyfill(p,c)
 			x0+=dx
 		end
 	end
-	fillp()
 
 	-- edges
-	if true then
+	if false then
 		color(0)
 		for i,p1 in pairs(p) do			
 			if p1.edge then
@@ -166,4 +164,111 @@ function polyfill(p,c)
 			end
 		end
 	end
+end
+
+function polytex_ymajor(v,slope)
+	-- find extent
+	local xmin,xmax=32000,-32000
+	for _,p in pairs(v) do
+		if(p.x<xmin) xmin=p.x\1+1
+		if(p.x>xmax) xmax=p.x\1
+	end	
+ local n,nodes,offset=#v,{},flr((xmax-xmin)*slope)
+ for i,p1 in pairs(v) do
+  local p0=v[i%n+1] 
+	 local x0,y0,w0,x1,y1,w1=p0.x,p0.y,p0.w,p1.x,p1.y,p1.w
+		
+		y0-=(x0-xmin)*slope
+		y1-=(x1-xmin)*slope
+
+		if(y0>y1) x0,y0,w0,x1,y1,w1=x1,y1,w1,x0,y0,w0
+		local dy=y1-y0
+		local cy0,dx,dw=y0\1+1,(x1-x0)/dy,(w1-w0)/dy
+  -- sub-pix shift
+  local sy=cy0-y0
+  if(offset>0) then
+				local ymin=y0+offset
+				if(ymin<0) x0-=ymin*dx w0-=ymin*dw cy0=-offset sy=0
+				if(y1>127) y1=127
+		else
+			if(y0<0) x0-=y0*dx w0-=y0*dw cy0=0 sy=0
+			if(y1+offset>127) y1=127-offset
+		end
+  x0+=sy*dx  
+		w0+=sy*dw
+
+		local pal0=min(w0\0.0625,7)
+		color(sget(pal0,0))
+  for y=cy0,y1 do
+	  local span=nodes[y]
+	  if span then
+				local x0,x1,pal1=x0,span,min(w0\0.0625,7)
+				if(pal1!=pal0) pal0=pal1 color(sget(pal0,0))
+				if(x0>x1) x0,x1=x1,x0
+				clip(x0,0,ceil(x1)-x0\1,128)
+				line(xmin,y,xmax,y+offset)				
+	   --rectfill(x0,y,span,y,8)
+	  else
+	   nodes[y]=x0
+	  end
+	  x0+=dx
+			w0+=dw
+  end
+ end
+	clip()
+end
+
+function polytex_xmajor(v,slope)
+	-- find extent
+	local ymin,ymax=32000,-32000
+	for _,p in pairs(v) do
+		if(p.y<ymin) ymin=p.y\1+1
+		if(p.y>ymax) ymax=p.y\1
+	end
+	
+ local n,nodes,offset=#v,{},flr((ymax-ymin)*slope)
+
+	for i,p1 in pairs(v) do
+  local p0=v[i%n+1] 
+	 local x0,y0,w0,x1,y1,w1=p0.x,p0.y,p0.w,p1.x,p1.y,p1.w
+		
+		x0-=(y0-ymin)*slope
+		x1-=(y1-ymin)*slope
+
+		if(x0>x1) x0,y0,w0,x1,y1,w1=x1,y1,w1,x0,y0,w0
+		local dx=x1-x0
+		local cx0,dy,dw=x0\1+1,(y1-y0)/dx,(w1-w0)/dx
+  -- sub-pix shift
+  local sx=cx0-x0
+  if offset>0 then
+			local xmin=x0+offset
+		 if(xmin<0) y0-=xmin*dy w0-=xmin*dw cx0=-offset sx=0
+			if(x1>127) x1=127
+		else
+			if(x0<0) y0-=x0*dy w0-=x0*dw cx0=0 sx=0
+			if(x1+offset>127) x1=127-offset
+		end
+  y0+=sx*dy  
+		w0+=sx*dw
+	 
+		local pal0=min(w0\0.0625,7)
+		color(sget(pal0,0))
+  for x=cx0,x1 do
+	  local span=nodes[x]
+	  if span then
+				local y0,y1,pal1=y0,span,min(w0\0.0625,7)
+				if(pal1!=pal0) pal0=pal1 color(sget(pal0,0))
+				if(y0>y1) y0,y1=y1,y0
+				clip(0,y0,128,ceil(y1)-y0\1)				
+				
+				line(x,ymin,x+offset,ymax)				
+	   --rectfill(x,y0,x,span,8)
+	  else
+	   nodes[x]=y0
+	  end
+	  y0+=dy
+			w0+=dw
+  end
+ end
+	clip()
 end
