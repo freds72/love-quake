@@ -167,19 +167,12 @@ function polyfill(p,c)
 end
 
 function polytex_ymajor(v,slope)
-	-- find extent
-	local xmin,xmax=32000,-32000
-	for _,p in pairs(v) do
-		if(p.x<xmin) xmin=p.x\1+1
-		if(p.x>xmax) xmax=p.x\1
-	end	
- local n,nodes,offset=#v,{},flr((xmax-xmin)*slope)
+
+ local n,nodes,offset=#v,{},flr(slope<<7)
  for i,p1 in pairs(v) do
   local p0=v[i%n+1] 
-	 local x0,y0,w0,x1,y1,w1=p0.x,p0.y,p0.w,p1.x,p1.y,p1.w
-		
-		y0-=(x0-xmin)*slope
-		y1-=(x1-xmin)*slope
+		local x0,w0,x1,w1=p0.x,p0.w,p1.x,p1.w
+	 local y0,y1=p0.y-x0*slope,p1.y-x1*slope
 
 		if(y0>y1) x0,y0,w0,x1,y1,w1=x1,y1,w1,x0,y0,w0
 		local dy=y1-y0
@@ -206,7 +199,10 @@ function polytex_ymajor(v,slope)
 				if(pal1!=pal0) pal0=pal1 color(sget(pal0,0))
 				if(x0>x1) x0,x1=x1,x0
 				clip(x0,0,ceil(x1)-x0\1,128)
-				line(xmin,y,xmax,y+offset)				
+				--poke(0x5f20,max(x0))
+				--poke(0x5f22,mid(x1,0,127))
+
+				line(0,y,128,y+offset)				
 	   --rectfill(x0,y,span,y,8)
 	  else
 	   nodes[y]=x0
@@ -219,22 +215,15 @@ function polytex_ymajor(v,slope)
 end
 
 function polytex_xmajor(v,slope)
-	-- find extent
-	local ymin,ymax=32000,-32000
-	for _,p in pairs(v) do
-		if(p.y<ymin) ymin=p.y\1+1
-		if(p.y>ymax) ymax=p.y\1
-	end
-	
- local n,nodes,offset=#v,{},flr((ymax-ymin)*slope)
+
+
+ local n,nodes,offset=#v,{},flr(slope<<7)
 
 	for i,p1 in pairs(v) do
   local p0=v[i%n+1] 
-	 local x0,y0,w0,x1,y1,w1=p0.x,p0.y,p0.w,p1.x,p1.y,p1.w
+	 local y0,w0,y1,w1=p0.y,p0.w,p1.y,p1.w		
+	 local x0,x1=p0.x-y0*slope,p1.x-y1*slope
 		
-		x0-=(y0-ymin)*slope
-		x1-=(y1-ymin)*slope
-
 		if(x0>x1) x0,y0,w0,x1,y1,w1=x1,y1,w1,x0,y0,w0
 		local dx=x1-x0
 		local cx0,dy,dw=x0\1+1,(y1-y0)/dx,(w1-w0)/dx
@@ -260,8 +249,10 @@ function polytex_xmajor(v,slope)
 				if(pal1!=pal0) pal0=pal1 color(sget(pal0,0))
 				if(y0>y1) y0,y1=y1,y0
 				clip(0,y0,128,ceil(y1)-y0\1)				
+				--poke(0x5f21,max(y0))
+				--poke(0x5f23,mid(y1,0,127))
 				
-				line(x,ymin,x+offset,ymax)				
+				line(x,0,x+offset,128)				
 	   --rectfill(x,y0,x,span,8)
 	  else
 	   nodes[x]=y0
