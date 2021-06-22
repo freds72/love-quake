@@ -168,7 +168,7 @@ end
 
 function polytex_ymajor(v,slope)
 
- local n,nodes,offset=#v,{},flr(slope<<7)
+ local n,nodes,offset=#v,{},(slope<<7)&-1
  for i,p1 in pairs(v) do
   local p0=v[i%n+1] 
 		local x0,w0,x1,w1=p0.x,p0.w,p1.x,p1.w
@@ -215,9 +215,7 @@ function polytex_ymajor(v,slope)
 end
 
 function polytex_xmajor(v,slope)
-
-
- local n,nodes,offset=#v,{},flr(slope<<7)
+ local n,nodes,offset=#v,{},(slope<<7)&-1
 
 	for i,p1 in pairs(v) do
   local p0=v[i%n+1] 

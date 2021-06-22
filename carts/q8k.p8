@@ -310,6 +310,7 @@ function make_cam(name)
 
               if #p>2 then
                 if btn(5) then
+                  clip()             
                   polyfill(p,faces[fi+3])
                 else
                   local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
@@ -321,7 +322,7 @@ function make_cam(name)
                     polytex_ymajor(p,v/u)
                   else
                     polytex_xmajor(p,u/v)
-                  end              
+                  end 
                 end
               end
             end

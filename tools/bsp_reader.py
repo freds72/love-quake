@@ -325,7 +325,7 @@ def pack_face(id, face, hard_edges):
   #  color = face.styles[1]
   # elif color!=0:
   #   logging.warn("Light effect not supported: {}".format(color))
-  if texname:    
+  if texname and "0x" in texname:    
     color = int(texname,16)
   s += "{:02x}".format(color)
 
