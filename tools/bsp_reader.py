@@ -9,6 +9,7 @@ from collections import namedtuple
 from collections import defaultdict
 from python2pico import *
 from entity_reader import ENTITYReader
+from abstract_stream import Stream
 from PIL import Image, ImageFilter, ImageDraw
 
 # credits: https://gist.github.com/JonathonReinhart/b6f355f13021cd8ec5d0101e0e6675b2
@@ -296,7 +297,7 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-def pack_face(id, face, hard_edges):  
+def pack_face(bsp_handle, id, face):  
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id)
@@ -304,34 +305,27 @@ def pack_face(id, face, hard_edges):
   flags = 0
   if face.side:
     flags |=1
+  if face.lightofs!=-1:
+    flags |= 2
 
   # find texture
   texname = None
   if face.tex_id!=-1:
-    tex = textures[face.tex_id]    
+    tex = textures[face.tex_id]
+    # todo: fix - why texture are referencing missing mips?  
     if tex.miptex<len(miptex):
       mip = miptex[tex.miptex]
       texname = mip.name.decode("utf-8")
-      if "sky" in texname:
-        flags |= 2
+      
+      if "sky" in texname:        
+        flags |= 4
+      else:
+        # read image data
+        img = read_mip0(bsp_handle, mip)
     else:
       logging.warn("Invalid texture id: {}/{}".format(tex.miptex, len(miptex)))
   s += "{:02x}".format(flags)
     
-  # base color/lightmap?
-  color = 0
-  # color = face.styles[0]
-  # if color==0xff:
-  #  color = face.styles[1]
-  # elif color!=0:
-  #   logging.warn("Light effect not supported: {}".format(color))
-  if texname and "0x" in texname:    
-    color = int(texname,16)
-  s += "{:02x}".format(color)
-
-  # hard edges
-  edge_flags = 0
-
   # edge indirection
   # + skip last edge (duplicates start/end)
   face_verts = []
@@ -345,10 +339,6 @@ def pack_face(id, face, hard_edges):
     else:
       edge = edges[-edge_id]
       face_verts.append(edge.v[1])   
-    if abs(edge_id) in hard_edges:
-      edge_flags |= 1<<i
-
-  s += pack_int32(edge_flags)
 
   # vertex indices
   s += pack_variant(len(face_verts))
@@ -498,6 +488,11 @@ def read_bytes(f, entry):
     f.seek(entry.offset)
     return f.read(entry.size)
 
+# read mip image at level 0
+def read_mip0(f, mip):
+  f.seek(mip.offsets[0])
+  return f.read(mip.width * mip.height)
+
 def read_miptex(f, entry):
   f.seek(entry.offset)
   nummiptex = c_int()
@@ -519,8 +514,8 @@ def get_face_texture(face):
     return textures[face.tex_id].miptex  
   return -1
 
-def pack_bsp(filename):
-  with open(filename,"rb") as bsp_handle:
+def pack_bsp(stream, filename):
+  with stream.read(filename) as bsp_handle:
     header = dheader_t.read_from(bsp_handle)
 
     # raw data
@@ -570,32 +565,18 @@ def pack_bsp(filename):
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
 
-    # create edges to faces dictionary
-    shared_edges = defaultdict(list)
-    for i,face in enumerate(faces):
-      for j in range(face.edge_num):
-        id = abs(surfedges[face.edge_id + j].edge_id)
-        if face not in shared_edges[id]:
-          shared_edges[id].append(face)
-    # find hard edges
-    hard_edges = set()
-    for id in shared_edges:
-      shared_faces = shared_edges[id]
-      if len(shared_faces)>0:
-        f = shared_faces[0]
-        n = planes[f.plane_id].normal
-        for other_face in shared_faces:
-          if f!=other_face:
-            other_n = planes[other_face.plane_id].normal
-            if abs(v_dot(n, other_n))<0.7:
-              hard_edges.add(id)
-              break
+    # all textures
+    logging.info("Packing textures: {}".format(len(textures)))
+    s += pack_variant(len(textures))
+    for tex in textures:
+      s += pack_texture(tex)
 
     # all faces
-    logging.info("Packing faces: {}".format(len(faces)))
-    s += pack_variant(len(faces))
-    for i,face in enumerate(faces):
-      s += pack_face(i, face, hard_edges)
+    with stream.read(filename) as face_handle:
+      logging.info("Packing faces: {}".format(len(faces)))
+      s += pack_variant(len(faces))
+      for i,face in enumerate(faces):
+        s += pack_face(face_handle, i, face)
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))

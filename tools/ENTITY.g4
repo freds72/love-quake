@@ -1,8 +1,8 @@
-// set CLASSPATH=antlr-4.8-complete.jar
+// set CLASSPATH=antlr-4.9-complete.jar
 // java org.antlr.v4.Tool -Dlanguage=Python3 -visitor -listener ENTITY.g4
 
 // $env:Path += ";D:\Java\jdk-15.0.1\bin"
-// $env:CLASSPATH="antlr-4.8-complete.jar"
+// $env:CLASSPATH="antlr-4.9.2-complete.jar"
 
 grammar ENTITY;
 
