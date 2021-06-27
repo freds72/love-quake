@@ -73,7 +73,6 @@ def make_pal(srcpath, num_fullbrights, outpath):
  with open(outpath, "wb") as f:
   f.write(palette)
 
-
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--palette", required=True, type=str, help="Palette image")

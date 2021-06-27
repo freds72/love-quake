@@ -12,6 +12,7 @@ from tqdm import tqdm
 from bsp_reader import pack_bsp
 from python2pico import *
 from lzs import Codec
+from dotdict import dotdict
 
 # compress the given byte string
 # raw = True returns an array of bytes (a byte string otherwise)
@@ -37,23 +38,32 @@ def compress_byte_str(s,raw=False,more=False):
     return compressed
   return "".join(map("{:02x}".format, compressed))
 
-def read_palette(stream):
+def read_colormap(stream):
   # read palette (e.g. all known colors)
+  # convention: 16 solid bars
   palette = AutoPalette()
   with stream.read("gfx/palette.lmp") as lump:
     for i in range(16*16):
       rgb = lump.read(3)
       palette.register((rgb[0],rgb[1],rgb[2]))
-  # convention: 16 solid bars
-  return palette
+
+  hw_palette = palette.pal()
+  colormap = {}
+  with stream.read("gfx/colormap.lmp") as lump:
+    for color_index in range(16):
+      colormap[color_index] = dotdict({
+        'hw': hw_palette[color_index],
+        'rgb': palette.get_rgb(color_index),
+        'ramp': [palette.get_pal_id(tuple(list(lump.read(3)))) for i in range(16)]
+      })
+  return colormap      
 
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False):
   # extract palette
-  palette = read_palette(stream)
-  print(palette.pal())
+  colormap = read_colormap(stream)
 
   # extract data
-  map_data = pack_bsp(stream, "maps/" + mapname + ".bsp")
+  map_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap)
 
   if not test:
     game_data = compress and compress_byte_str(map_data, more=compress_more) or map_data

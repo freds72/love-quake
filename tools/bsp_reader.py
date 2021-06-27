@@ -297,7 +297,7 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-def pack_face(bsp_handle, id, face):  
+def pack_face(bsp_handle, id, face, colormap):  
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id)
@@ -315,13 +315,23 @@ def pack_face(bsp_handle, id, face):
     # todo: fix - why texture are referencing missing mips?  
     if tex.miptex<len(miptex):
       mip = miptex[tex.miptex]
-      texname = mip.name.decode("utf-8")
+      texname = mip.name
       
       if "sky" in texname:        
         flags |= 4
       else:
         # read image data
-        img = read_mip0(bsp_handle, mip)
+        data = read_mip0(bsp_handle, mip)
+        # print(texname)
+        # # colors = set(list(img))
+        # img = Image.new('RGBA', (mip.width,mip.height), (0,0,0,0))
+        # idx = 0
+        # for x in range(mip.width):
+        #   for y in range(mip.height):
+        #     color = data[idx]
+        #     idx += 1
+        #     img.putpixel((x,y),(color,color,color))
+        # img.save("{}.png".format(texname))
     else:
       logging.warn("Invalid texture id: {}/{}".format(tex.miptex, len(miptex)))
   s += "{:02x}".format(flags)
@@ -493,20 +503,39 @@ def read_mip0(f, mip):
   f.seek(mip.offsets[0])
   return f.read(mip.width * mip.height)
 
-def read_miptex(f, entry):
-  f.seek(entry.offset)
+def read_miptex(f, entry, colormap):
+  f.seek(entry.offset)  
   nummiptex = c_int()
   f.readinto(nummiptex)
-  mips = []
+  dataofs = []
   for i in range(nummiptex.value):
-    f.seek(entry.offset + 4 + 4*i)
     offset = c_int()
     f.readinto(offset) 
     offset = offset.value
     if offset==-1:
       continue
+    dataofs.append(offset)
+      
+  mips = []
+  for offset in dataofs:
     f.seek(entry.offset + offset)
-    mips.append(miptex_t.read_from(f))
+    mip = miptex_t.read_from(f)
+    texname = mip.name.decode("utf-8")
+    print(texname)
+    img = Image.new('RGBA', (mip.width,mip.height), (0,0,0,0))
+    f.seek(entry.offset + offset + mip.offsets[0])
+    for y in range(mip.height):
+      for x in range(mip.width):
+        color = colormap[int(f.read(1)[0]/16)]
+        img.putpixel((x,y),color.rgb)
+    img.save("{}.png".format(texname))
+
+    mips.append(dotdict({
+      'name': texname,
+      'width': mip.width,
+      'height': mip.height
+    }))
+
   return mips
 
 def get_face_texture(face):
@@ -514,7 +543,7 @@ def get_face_texture(face):
     return textures[face.tex_id].miptex  
   return -1
 
-def pack_bsp(stream, filename):
+def pack_bsp(stream, filename, colormap):
   with stream.read(filename) as bsp_handle:
     header = dheader_t.read_from(bsp_handle)
 
@@ -541,7 +570,7 @@ def pack_bsp(stream, filename):
     clipnodes = dclipnode_t.read_all(bsp_handle, header.clipnodes)
     faces = dface_t.read_all(bsp_handle, header.faces)
     textures = texinfo_t.read_all(bsp_handle, header.textures)
-    miptex = read_miptex(bsp_handle, header.miptex)
+    miptex = read_miptex(bsp_handle, header.miptex, colormap)
     planes = dplane_t.read_all(bsp_handle, header.planes)
     leaves = dleaf_t.read_all(bsp_handle, header.leaves)
     edges = dedge_t.read_all(bsp_handle, header.edges)
@@ -576,7 +605,7 @@ def pack_bsp(stream, filename):
       logging.info("Packing faces: {}".format(len(faces)))
       s += pack_variant(len(faces))
       for i,face in enumerate(faces):
-        s += pack_face(face_handle, i, face)
+        s += pack_face(face_handle, i, face, colormap)
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))

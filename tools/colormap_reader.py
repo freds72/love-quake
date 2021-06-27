@@ -153,6 +153,14 @@ class AutoPalette:
       return count
     raise Exception("Color: {} not in palette".format(rgba))
 
+  # return rgb value at given index
+  def get_rgb(self, i):
+    return self.palette[i]
+
+  # return logical palette id
+  def get_pal_id(self, rgb):
+    return self.palette.index(rgb)
+
   # returns a list of hardware colors matching the palette
   # label indicates if color coding should be using 'fake' hexa or standard
   def pal(self, label=False):
