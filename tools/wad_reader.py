@@ -46,12 +46,14 @@ def read_colormap(stream):
     for i in range(16*16):
       rgb = lump.read(3)
       palette.register((rgb[0],rgb[1],rgb[2]))
-
+  
   hw_palette = palette.pal()
+
   colormap = {}
   with stream.read("gfx/colormap.lmp") as lump:
     for color_index in range(16):
       colormap[color_index] = dotdict({
+        'id': color_index,
         'hw': hw_palette[color_index],
         'rgb': palette.get_rgb(color_index),
         'ramp': [palette.get_pal_id(tuple(list(lump.read(3)))) for i in range(16)]

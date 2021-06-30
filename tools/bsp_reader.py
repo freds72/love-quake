@@ -297,45 +297,53 @@ def pack_tline(texture):
 def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
-def pack_face(bsp_handle, id, face, colormap):  
+class MapAtlas():
+  def __init__(self):
+    self.maps_index = {}
+    self.maps = []
+  
+  def register(self, width, height, texdata):
+    if width>15 or height>15:
+      raise Exception("Invalid texture size: {}x{}, exceeds 16x16".format(width, height))
+    if len(texdata)!=width*height:
+      raise Exception("Data & size mismatch: len {} vs. {}x{}".format(len(texdata), width, height))
+    
+    search_data = str([width|height<<8] + texdata)
+    id = 0
+    if search_data in self.maps_index:
+      id = self.maps_index[search_data]
+    else:
+      # convert into a padded map
+      padded = []
+      for y in range(height):
+        tmp = bytearray()
+        for x in range(width):        
+          tmp.append(texdata[x+y*width])
+          if len(tmp)>3:
+            padded.append(tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2])
+            tmp = bytearray()
+        # any remaining values?
+        if len(tmp)>0:
+          tmp += bytearray(max(0,4-len(tmp)))
+          padded.append(tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2])
+      id = len(self.maps)
+      self.maps_index[search_data] = id
+      self.maps += [width|height<<8]
+      self.maps += padded
+    return id
+
+def pack_face(bsp_handle, id, face, colormap, sprites, maps):  
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id)
   # flags
   flags = 0
   if face.side:
-    flags |=1
-  if face.lightofs!=-1:
-    flags |= 2
-
-  # find texture
-  texname = None
+    flags |= 0x1
+  # texture?
   if face.tex_id!=-1:
-    tex = textures[face.tex_id]
-    # todo: fix - why texture are referencing missing mips?  
-    if tex.miptex<len(miptex):
-      mip = miptex[tex.miptex]
-      texname = mip.name
-      
-      if "sky" in texname:        
-        flags |= 4
-      else:
-        # read image data
-        data = read_mip0(bsp_handle, mip)
-        # print(texname)
-        # # colors = set(list(img))
-        # img = Image.new('RGBA', (mip.width,mip.height), (0,0,0,0))
-        # idx = 0
-        # for x in range(mip.width):
-        #   for y in range(mip.height):
-        #     color = data[idx]
-        #     idx += 1
-        #     img.putpixel((x,y),(color,color,color))
-        # img.save("{}.png".format(texname))
-    else:
-      logging.warn("Invalid texture id: {}/{}".format(tex.miptex, len(miptex)))
-  s += "{:02x}".format(flags)
-    
+    flags |= 0x2
+
   # edge indirection
   # + skip last edge (duplicates start/end)
   face_verts = []
@@ -350,11 +358,120 @@ def pack_face(bsp_handle, id, face, colormap):
       edge = edges[-edge_id]
       face_verts.append(edge.v[1])   
 
+  # face light
+  baselight = int(face.styles[1]/16)
+  mapid = -1
+
+  # get texture
+  if face.tex_id!=-1:
+    # find texture
+    tex = textures[face.tex_id]
+    mip = tex.miptex<len(miptex) and miptex[tex.miptex] or None
+    if mip is None:
+      logging.debug("Unknown MIP id: {}".format(tex.miptex))
+      pass
+    elif "sky" in mip.name:
+      #remove uv flag
+      flags &= ~0x2
+      flags |= 0x4
+    else:
+      logging.debug("Baking texture: {} (face:{} - lightmap: {})".format(mip.name, id, face.lightofs!=-1))
+
+      u_min=float('inf')
+      u_max=float('-inf')
+      v_min=float('inf')
+      v_max=float('-inf')
+      for vi in face_verts:
+        u=v_dot(vertices[vi],tex.u_axis)+tex.u_offset
+        v=v_dot(vertices[vi],tex.v_axis)+tex.v_offset
+        u_min=min(u_min,u)
+        v_min=min(v_min,v)
+        u_max=max(u_max,u)
+        v_max=max(v_max,v)
+
+      u_min=math.floor(u_min/16)
+      v_min=math.floor(v_min/16)
+      u_max=math.ceil(u_max/16)
+      v_max=math.ceil(v_max/16)
+      
+      lightmap_width,lightmap_height=((u_max-u_min)+1, (v_max-v_min)+1)   
+
+      # cross image data w/ lightmap
+      img = Image.new('RGBA', (mip.width,mip.height), (0,0,0,0))
+      # tile indices
+      face_map = []
+      total_light = 0
+      shaded_tex = []
+      for y in range(mip.height):
+        for x in range(mip.width):
+          # get lightmap coords
+          lx = int(x/16)
+          ly = int(y/16)
+          light = 15
+          if face.lightofs!=-1:              
+            # rebase light range to 0-15 (+ substract base light for face)
+            light = int((lightmaps[(face.lightofs+lx+ly*lightmap_width)])/16) - baselight
+          else:
+            # todo: get from conf?
+            # standard brightness (e.g. unmodified colors)
+            light = 11
+          # get actual color
+          color = colormap[mip.img[x+y*mip.width]]
+          # shift color
+          shade = colormap[color.ramp[light]]
+          total_light += shade.hw
+          img.putpixel((x,y),shade.rgb)
+          shaded_tex.append(shade.id)
+      # "kill" baselight (if mixed with lightmap)
+      if face.lightofs!=-1:
+        baselight = 0
+      # full dark?
+      if total_light>0:
+        # find out unique tiles (lighted)
+        w,h = math.floor(mip.height/8),math.floor(mip.width/8)
+        for j in range(0,h):
+          for i in range(0,w):
+            data = bytes([])
+            for y in range(8):
+              # read nimbles
+              for x in range(0,8,2):
+                # print("{}/{}".format(i+x,j+y))
+                # image is using the pico palette (+transparency)
+                low = shaded_tex[(i*8 + x) + (j*8 + y) * mip.width]
+                high = shaded_tex[(i*8 + x + 1) + (j*8 + y) * mip.width]
+                data += bytes([high|low<<4])
+            tileid = 0
+            if data in sprites:
+              tileid = sprites.index(data)
+            else:
+              tileid = len(sprites)
+              sprites.append(data)
+            # register tile id
+            face_map.append(tileid)
+        # register texture map
+        mapid = maps.register(w, h, face_map)
+        print("map id:", mapid)
+
+        img.save("face_{}_{}.png".format(mip.name,id))
+      else:
+        #remove uv flag
+        flags &= ~2
+  
+  s += "{:02x}".format(flags)
+
   # vertex indices
   s += pack_variant(len(face_verts))
   for vi in face_verts:
     s += pack_variant(vi)
     
+  # uv coords
+  if flags&0x2!=0:
+    s += "{:02x}".format(15 - baselight)
+    # get texture
+    s += pack_variant(face.tex_id + 1)
+    # texmap reference
+    s += pack_variant(mapid)
+
   return s
 
 def pack_leaf(id, leaf, vis):
@@ -369,11 +486,17 @@ def pack_leaf(id, leaf, vis):
     s += pack_int32(v)
 
   # faces?
-  s += pack_variant(leaf.face_num)
-  for i in range(leaf.face_num):
-    face_id = marksurfaces[leaf.face_id + i].face_id
-    s += pack_variant(face_id)
+  leaf_faces = get_leaf_faces(leaf)
+  s += pack_variant(len(leaf_faces))
+  for id in leaf_faces:
+    s += pack_variant(id)
   return s
+
+def get_leaf_faces(leaf):
+  res = []
+  for i in range(leaf.face_num):
+    res.append(marksurfaces[leaf.face_id + i].face_id)
+  return res
 
 def pack_node(node):
   s = ""
@@ -498,50 +621,40 @@ def read_bytes(f, entry):
     f.seek(entry.offset)
     return f.read(entry.size)
 
-# read mip image at level 0
-def read_mip0(f, mip):
-  f.seek(mip.offsets[0])
-  return f.read(mip.width * mip.height)
-
-def read_miptex(f, entry, colormap):
+# read first mipmap of given texture image
+def read_miptex(f, entry):
   f.seek(entry.offset)  
   nummiptex = c_int()
   f.readinto(nummiptex)
   dataofs = []
-  for i in range(nummiptex.value):
+  for i in range(nummiptex.value):    
     offset = c_int()
     f.readinto(offset) 
-    offset = offset.value
-    if offset==-1:
-      continue
-    dataofs.append(offset)
+    dataofs.append(offset.value)
       
   mips = []
   for offset in dataofs:
-    f.seek(entry.offset + offset)
-    mip = miptex_t.read_from(f)
-    texname = mip.name.decode("utf-8")
-    print(texname)
-    img = Image.new('RGBA', (mip.width,mip.height), (0,0,0,0))
-    f.seek(entry.offset + offset + mip.offsets[0])
-    for y in range(mip.height):
-      for x in range(mip.width):
-        color = colormap[int(f.read(1)[0]/16)]
-        img.putpixel((x,y),color.rgb)
-    img.save("{}.png".format(texname))
+    if offset!=-1:
+      f.seek(entry.offset + offset)
+      mip = miptex_t.read_from(f)
+      # convert to colormap index
+      data = [int(b/16) for b in f.read(mip.width * mip.height)]
 
-    mips.append(dotdict({
-      'name': texname,
-      'width': mip.width,
-      'height': mip.height
-    }))
+      name = mip.name.decode("utf-8")
+      logging.info("Got texture [{}]: {} ({}x{}px)".format(len(mips), name, mip.width, mip.height))
+      mips.append(dotdict({
+        'name': name,
+        'width': mip.width,
+        'height': mip.height,
+        'img': data
+      }))
+    #else:
+    #  mips.append(None)
 
   return mips
 
-def get_face_texture(face):
-  if face.tex_id!=-1:
-    return textures[face.tex_id].miptex  
-  return -1
+def pack_sprite(arr):
+    return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
 def pack_bsp(stream, filename, colormap):
   with stream.read(filename) as bsp_handle:
@@ -570,7 +683,7 @@ def pack_bsp(stream, filename, colormap):
     clipnodes = dclipnode_t.read_all(bsp_handle, header.clipnodes)
     faces = dface_t.read_all(bsp_handle, header.faces)
     textures = texinfo_t.read_all(bsp_handle, header.textures)
-    miptex = read_miptex(bsp_handle, header.miptex, colormap)
+    miptex = read_miptex(bsp_handle, header.miptex)
     planes = dplane_t.read_all(bsp_handle, header.planes)
     leaves = dleaf_t.read_all(bsp_handle, header.leaves)
     edges = dedge_t.read_all(bsp_handle, header.edges)
@@ -601,11 +714,40 @@ def pack_bsp(stream, filename, colormap):
       s += pack_texture(tex)
 
     # all faces
+    # all texture sprites
+    sprites = []
+    # maps
+    maps = MapAtlas()
+
     with stream.read(filename) as face_handle:
       logging.info("Packing faces: {}".format(len(faces)))
       s += pack_variant(len(faces))
       for i,face in enumerate(faces):
-        s += pack_face(face_handle, i, face, colormap)
+        s += pack_face(face_handle, i, face, colormap, sprites, maps)
+
+    # todo: pack texture maps (assumption: no need to use an atlas per leaf)
+    # pack_maps()
+
+    if len(sprites)>255:
+      raise Exception("Too many sprites registered ({}). Max: 255".format(len(sprites)))
+
+    # tiles
+    # transpose gfx
+    logging.info("Packing sprites: {}".format(len(sprites)))
+    gfx_data=[pack_sprite(data) for data in sprites]
+    rows = [""]*8
+    gfx = ""
+    for i,img in enumerate(gfx_data):
+      # full row?
+      if i%16==0:
+        # collect
+        gfx += "".join(rows)
+        rows = [""]*8           
+      for j in range(8):
+        rows[j] += img[j]
+    # remaining tiles (+ padding)
+    gfx += "".join([row + "0" * (128-len(row)) for row in rows])
+    print(re.sub("(.{128})", "\\1\n", gfx, 0, re.DOTALL))    
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))

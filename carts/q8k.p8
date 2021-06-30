@@ -271,6 +271,7 @@ function make_cam(name)
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
+          -- face index
           local fi=leaf[i]  
           -- face normal          
           local fn=faces[fi]
@@ -279,8 +280,8 @@ function make_cam(name)
           if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=faces[fi+2] then            
             f_cache[fi]=true
             
-            local p,outcode,clipcode,edges,vi_base={},0xffff,0,faces[fi+5]
-            for k,vi in pairs(faces[fi+6]) do
+            local p,outcode,clipcode={},0xffff,0
+            for k,vi in pairs(faces[fi+4]) do
               -- base index in verts array
               local a=v_cache[vi]
               if not a then
@@ -302,7 +303,6 @@ function make_cam(name)
               end
               outcode&=a.outcode
               clipcode+=a.outcode&2
-              a.edge=edges&(0x0.0001<<(k-1))!=0
               p[k]=a
             end
             if outcode==0 then 
@@ -721,12 +721,21 @@ function unpack_map()
     add(planes,t)
   end,"planes")  
 
+  unpack_array(function()
+    add(textures,{
+      u=unpack_v3(),
+      u_offset=unpack_fixed(),
+      v=unpack_v3(),
+      v_offset=unpack_fixed()
+    })
+  end)
+
   -- faces
-  local face_sizeof=7
+  local face_sizeof=5
   unpack_array(function(fi)
     local base=#faces+1
 
-    local fv,pi,flags,color,edges={},plane_sizeof*unpack_variant()+1,mpeek(),mpeek(),unpack_fixed()
+    local face_verts,pi,flags={},plane_sizeof*unpack_variant()+1,mpeek()
     
     -- 0: supporting plane
     add(faces,pi)
@@ -734,21 +743,22 @@ function unpack_map()
     add(faces,0)
     -- 2:side
     add(faces,flags&0x1==0)
-    -- 3: color
-    add(faces,color)
-    -- 4: sky flag
-    add(faces,flags&0x2!=0)
-    -- 5: hard edges
-    add(faces,edges)
+    -- 3: sky flag
+    add(faces,flags&0x4!=0)
 
     unpack_array(function()
-      add(fv,vert_sizeof*unpack_variant()+1)
+      add(face_verts,vert_sizeof*unpack_variant()+1)
     end)
-    -- 6: verts
-    add(faces,fv)
+    -- 4: verts indices
+    add(faces,face_verts)
+
+    -- 5: uv (if any)
+    if flags&0x2!=0 then      
+      local baselight,texture,mapid=mpeek(),unpack_variant(),unpack_variant()
+    end
 
     -- "fix" cp value
-    local vi=fv[1]
+    local vi=face_verts[1]
     faces[base+1]=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
   end,"faces")
 
