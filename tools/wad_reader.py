@@ -65,7 +65,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   colormap = read_colormap(stream)
 
   # extract data
-  map_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap)
+  map_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap)
 
   if not test:
     game_data = compress and compress_byte_str(map_data, more=compress_more) or map_data

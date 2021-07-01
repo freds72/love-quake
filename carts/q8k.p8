@@ -679,7 +679,7 @@ function unpack_v3()
 end
 
 function unpack_map()
-  local verts,planes,faces,textures,leaves,nodes,models={},{},{},{},{},{},{}
+  local verts,planes,faces,textures,leaves,nodes,models,maps={},{},{},{},{},{},{},{}
 
   printh("------------------------")
   -- vertices
@@ -762,6 +762,15 @@ function unpack_map()
     faces[base+1]=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
   end,"faces")
 
+  -- texture maps
+  unpack_array(function(i)
+    local size=mpeek()
+    add(maps,size)
+    unpack_array(function()
+      add(maps,unpack_fixed())
+    end)
+  end,"maps")
+  
   unpack_array(function(i)
     local pvs={}
     local l=add(leaves,{
@@ -771,7 +780,7 @@ function unpack_map()
       contents=mpeek()-128,
       pvs=pvs
     })
-
+    
     -- potentially visible set    
     unpack_array(function()
       pvs[unpack_variant()]=unpack_fixed()

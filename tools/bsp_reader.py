@@ -301,6 +301,23 @@ class MapAtlas():
   def __init__(self):
     self.maps_index = {}
     self.maps = []
+    self.length = 0
+  # conver to a pico8 string
+  def pack(self):
+    logging.info("Packing texture maps: {}".format(len(self.maps_index)))
+    s = pack_variant(self.length)    
+    i = 0
+    while i<len(self.maps):
+      size = self.maps[i]
+      i += 1
+      s += "{:02x}".format(size.width|size.height<<4)
+      padded_len = self.maps[i]
+      i += 1
+      s += pack_variant(padded_len)
+      for k in range(padded_len):        
+        s += pack_int32(self.maps[i])        
+        i += 1
+    return s
   
   def register(self, width, height, texdata):
     if width>15 or height>15:
@@ -308,7 +325,7 @@ class MapAtlas():
     if len(texdata)!=width*height:
       raise Exception("Data & size mismatch: len {} vs. {}x{}".format(len(texdata), width, height))
     
-    search_data = str([width|height<<8] + texdata)
+    search_data = str([width|height<<4] + texdata)
     id = 0
     if search_data in self.maps_index:
       id = self.maps_index[search_data]
@@ -328,8 +345,13 @@ class MapAtlas():
           padded.append(tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2])
       id = len(self.maps)
       self.maps_index[search_data] = id
-      self.maps += [width|height<<8]
+      self.maps.append(dotdict({
+        'width': width,
+        'height': height
+      }))
+      self.maps.append(len(padded))
       self.maps += padded
+      self.length += 1
     return id
 
 def pack_face(bsp_handle, id, face, colormap, sprites, maps):  
@@ -340,9 +362,6 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
   flags = 0
   if face.side:
     flags |= 0x1
-  # texture?
-  if face.tex_id!=-1:
-    flags |= 0x2
 
   # edge indirection
   # + skip last edge (duplicates start/end)
@@ -362,7 +381,6 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
   baselight = int(face.styles[1]/16)
   mapid = -1
 
-  # get texture
   if face.tex_id!=-1:
     # find texture
     tex = textures[face.tex_id]
@@ -371,8 +389,6 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
       logging.debug("Unknown MIP id: {}".format(tex.miptex))
       pass
     elif "sky" in mip.name:
-      #remove uv flag
-      flags &= ~0x2
       flags |= 0x4
     else:
       logging.debug("Baking texture: {} (face:{} - lightmap: {})".format(mip.name, id, face.lightofs!=-1))
@@ -422,11 +438,16 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
           total_light += shade.hw
           img.putpixel((x,y),shade.rgb)
           shaded_tex.append(shade.id)
-      # "kill" baselight (if mixed with lightmap)
-      if face.lightofs!=-1:
-        baselight = 0
       # full dark?
       if total_light>0:
+        # "kill" baselight (if mixed with lightmap)
+        if face.lightofs!=-1:
+          baselight = 11
+        else:
+          baselight = 15 - baselight
+        # enable texture (eg not totally dark)
+        flags |= 0x2
+
         # find out unique tiles (lighted)
         w,h = math.floor(mip.height/8),math.floor(mip.width/8)
         for j in range(0,h):
@@ -450,12 +471,10 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
             face_map.append(tileid)
         # register texture map
         mapid = maps.register(w, h, face_map)
-        print("map id:", mapid)
 
         img.save("face_{}_{}.png".format(mip.name,id))
       else:
-        #remove uv flag
-        flags &= ~2
+        flags &= ~0x2
   
   s += "{:02x}".format(flags)
 
@@ -464,9 +483,10 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
   for vi in face_verts:
     s += pack_variant(vi)
     
-  # uv coords
+  # textured?
   if flags&0x2!=0:
-    s += "{:02x}".format(15 - baselight)
+    assert(baselight!=15)
+    s += "{:02x}".format(baselight)
     # get texture
     s += pack_variant(face.tex_id + 1)
     # texmap reference
@@ -724,30 +744,12 @@ def pack_bsp(stream, filename, colormap):
       s += pack_variant(len(faces))
       for i,face in enumerate(faces):
         s += pack_face(face_handle, i, face, colormap, sprites, maps)
-
-    # todo: pack texture maps (assumption: no need to use an atlas per leaf)
-    # pack_maps()
-
+    
     if len(sprites)>255:
       raise Exception("Too many sprites registered ({}). Max: 255".format(len(sprites)))
 
-    # tiles
-    # transpose gfx
-    logging.info("Packing sprites: {}".format(len(sprites)))
-    gfx_data=[pack_sprite(data) for data in sprites]
-    rows = [""]*8
-    gfx = ""
-    for i,img in enumerate(gfx_data):
-      # full row?
-      if i%16==0:
-        # collect
-        gfx += "".join(rows)
-        rows = [""]*8           
-      for j in range(8):
-        rows[j] += img[j]
-    # remaining tiles (+ padding)
-    gfx += "".join([row + "0" * (128-len(row)) for row in rows])
-    print(re.sub("(.{128})", "\\1\n", gfx, 0, re.DOTALL))    
+    # maps
+    s += maps.pack()
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
@@ -777,4 +779,4 @@ def pack_bsp(stream, filename, colormap):
     entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
 
-    return s
+    return (s, sprites)
