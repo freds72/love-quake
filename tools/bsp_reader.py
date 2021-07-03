@@ -311,12 +311,12 @@ class MapAtlas():
       size = self.maps[i]
       i += 1
       s += "{:02x}".format(size.width|size.height<<4)
-      padded_len = self.maps[i]
+      padded_map = self.maps[i]
       i += 1
-      s += pack_variant(padded_len)
-      for k in range(padded_len):        
-        s += pack_int32(self.maps[i])        
-        i += 1
+      s += pack_variant(len(padded_map))
+      for k,v in padded_map.items():
+        s += pack_variant(k)
+        s += pack_int32(v)        
     return s
   
   def register(self, width, height, texdata):
@@ -331,26 +331,28 @@ class MapAtlas():
       id = self.maps_index[search_data]
     else:
       # convert into a padded map
-      padded = []
+      padded = {}
       for y in range(height):
         tmp = bytearray()
+        my = 128*y
+        mx = 0
         for x in range(width):        
           tmp.append(texdata[x+y*width])
+          mx = 4*int(x/4)
           if len(tmp)>3:
-            padded.append(tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2])
+            padded[mx+my] = tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2]
             tmp = bytearray()
         # any remaining values?
         if len(tmp)>0:
           tmp += bytearray(max(0,4-len(tmp)))
-          padded.append(tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2])
+          padded[mx+my] = tmp[1]<<24|tmp[0]<<16|tmp[3]<<8|tmp[2]
       id = len(self.maps)
       self.maps_index[search_data] = id
       self.maps.append(dotdict({
         'width': width,
-        'height': height
+        'height': height        
       }))
-      self.maps.append(len(padded))
-      self.maps += padded
+      self.maps.append(padded)
       self.length += 1
     return id
 
@@ -490,7 +492,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
     # get texture
     s += pack_variant(face.tex_id + 1)
     # texmap reference
-    s += pack_variant(mapid)
+    s += pack_variant(mapid + 1)
 
   return s
 
