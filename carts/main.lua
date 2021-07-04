@@ -32,8 +32,8 @@ function v_dot(a,b)
 end
 function v_uv(texcoords,a)
   return {
-    (v_dot(texcoords[1],a)+texcoords[2])>>3,
-    (v_dot(texcoords[3],a)+texcoords[4])>>3
+    v_dot(texcoords[1],a)+texcoords[2],
+    v_dot(texcoords[3],a)+texcoords[4]
   }
 end
 
@@ -303,18 +303,18 @@ function make_cam(name)
                   local u,v=sin(a),cos(a)
                   -- copy texture
                   local mi=faces[fi+7]
-                  -- texture coords
-                  poke4(0x5f38,_maps[mi])
                   for k,v in pairs(_maps[mi+1]) do
                      poke4(k,v)
                   end
+                  -- texture coords
+                  poke4(0x5f38,_maps[mi])
                   if abs(u)>abs(v) then
                     polytex_ymajor(p,uvs,v/u)
                   else
                     polytex_xmajor(p,uvs,u/v)
                   end 
                 else
-                  polyfill(p,12)
+                  polyfill(p,0)
                 end
               end
             end
@@ -778,7 +778,7 @@ function unpack_map()
   unpack_array(function(i)
     local size=mpeek()
     -- convert to tline coords
-    add(_maps,(size&0xf)>>8|(size\16)>>16)
+    add(_maps,(size&0xf)>>16|(size\16)>>8)
     local tiles={}
     unpack_array(function()
       tiles[0x2000+unpack_variant()]=unpack_fixed()

@@ -48,7 +48,6 @@ def read_colormap(stream):
       palette.register((rgb[0],rgb[1],rgb[2]))
   
   hw_palette = palette.pal()
-
   colormap = {}
   with stream.read("gfx/colormap.lmp") as lump:
     for color_index in range(16):
@@ -60,16 +59,91 @@ def read_colormap(stream):
       })
   return colormap      
 
+def pack_sprite(arr):
+    return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
+
+def to_gamecart(carts_path, name, map_data, gfx_data, compress=False, release=None):
+  cart="""\
+pico-8 cartridge // http://www.pico-8.com
+version 29
+__lua__
+-- {0}
+-- @freds72
+-- *********************************
+-- generated code - do not edit
+-- *********************************
+#include poly.lua
+#include {1}
+#include {2}
+""".format(
+  name,
+  compress and "lzs.lua" or "plain.lua",
+  release and "{}_main_mini.lua".format(name) or "main.lua")
+
+  # transpose gfx
+  gfx_data=[pack_sprite(data) for data in gfx_data]
+
+  s = ""
+
+  # tiles
+  rows = [""]*8
+  for i,img in enumerate(gfx_data):
+      # full row?
+      if i%16==0:
+        # collect
+        s += "".join(rows)
+        rows = [""]*8           
+      for j in range(8):
+        rows[j] += img[j]
+  # remaining tiles (+ padding)
+  s += "".join([row + "0" * (128-len(row)) for row in rows])
+
+  # convert to string
+  cart += "__gfx__\n"
+  cart += re.sub("(.{128})", "\\1\n", s, 0, re.DOTALL)
+  cart += "\n"
+
+  # pad map
+  # map_data = ["".join(map("{:02x}".format,map_data[i:i+width] + [0]*(128-width))) for i in range(0,len(map_data),width)]
+  # map_data = "".join(map_data)
+  # cart += "__map__\n"
+  # cart += re.sub("(.{256})", "\\1\n", map_data, 0, re.DOTALL)
+
+  # music and sfx (from external cart)
+  # group cart?
+  music_path = os.path.join(carts_path, "music.p8")    
+  if os.path.isfile(music_path):
+    logging.info("Found music&sfx cart: {}".format(music_path))
+
+    copy = False
+    with open(music_path, "r") as f:
+      for line in f:
+        line = line.rstrip("\n\r")
+        if line in ["__music__","__sfx__"]:
+          copy = True
+        elif re.match("__([a-z]+)__",line):
+          # any other section
+          copy = False
+        if copy:
+          cart += line
+          cart += "\n"
+
+  cart_path = os.path.join(carts_path, "{}.p8".format(name))
+  with open(cart_path, "w") as f:
+    f.write(cart)
+
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False):
   # extract palette
   colormap = read_colormap(stream)
 
   # extract data
-  map_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap)
+  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap)
 
   if not test:
-    game_data = compress and compress_byte_str(map_data, more=compress_more) or map_data
-  
+    game_data = compress and compress_byte_str(level_data, more=compress_more) or level_data
+
+    to_gamecart(carts_path, "q8k", None , sprite_data, compress, release)
+
     # export to game
     to_multicart(game_data, pico_path, carts_path, "q8k")  
 
