@@ -30,10 +30,10 @@ end
 function v_dot(a,b)
 	return a[1]*b[1]+a[2]*b[2]+a[3]*b[3]
 end
-function v_uv(texcoords,a)
+function v_uv(texcoords,a,umin,vmin)
   return {
-    v_dot(texcoords[1],a)+texcoords[2],
-    v_dot(texcoords[3],a)+texcoords[4]
+    v_dot(texcoords[1],a)+texcoords[2]-umin,
+    v_dot(texcoords[3],a)+texcoords[4]-vmin
   }
 end
 
@@ -262,8 +262,8 @@ function make_cam(name)
           if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
             f_cache[fi]=true
                         
-            local p,outcode,clipcode,texcoords,uvs={},0xffff,0,_uvs[faces[fi+6]]
-            if(texcoords) uvs={}
+            local p,outcode,clipcode,umin,vmin,texcoords,uvs={},0xffff,0,0,0,_uvs[faces[fi+6]]
+            if(texcoords) uvs,umin,vmin={},faces[fi+8],faces[fi+9]
             for k,vi in pairs(faces[fi+4]) do
               -- base index in verts array
               local a=v_cache[vi]
@@ -288,7 +288,7 @@ function make_cam(name)
               clipcode+=a.outcode&2
               p[k]=a              
               if texcoords then
-                uvs[k]=v_uv(texcoords,{verts[vi],verts[vi+1],verts[vi+2]})
+                uvs[k]=v_uv(texcoords,{verts[vi],verts[vi+1],verts[vi+2]},umin,vmin)
               end
             end
             if outcode==0 then 
@@ -734,7 +734,7 @@ function unpack_map()
   end)
 
   -- faces
-  local face_sizeof=8
+  local face_sizeof=10
   unpack_array(function(fi)
     local base=#faces+1
 
@@ -763,7 +763,12 @@ function unpack_map()
       add(faces,unpack_variant())
       -- 7: texture map (reference)
       add(faces,unpack_variant())
+      -- 8/9: uv min
+      add(faces,unpack_fixed())
+      add(faces,unpack_fixed())
     else
+      add(faces,0)
+      add(faces,0)
       add(faces,0)
       add(faces,0)
       add(faces,0)

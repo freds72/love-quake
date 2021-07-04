@@ -311,7 +311,10 @@ class MapAtlas():
     while i<len(self.maps):
       size = self.maps[i]
       i += 1
-      s += "{:02x}".format(size.width|size.height<<4)
+      if size.wrap:
+        s += "{:02x}".format(size.width|size.height<<4)
+      else:
+        s += "{:02x}".format(0)
       padded_map = self.maps[i]
       i += 1
       s += pack_variant(len(padded_map))
@@ -320,16 +323,16 @@ class MapAtlas():
         s += pack_int32(v)        
     return s
   
-  def register(self, width, height, texdata, name=None):
-    if width>15 or height>15:
-      raise Exception("Invalid texture size: {}x{}, exceeds 16x16".format(width, height))
+  def register(self, width, height, texdata, wrap=True, name=None):
+    if width>128 or height>32:
+      raise Exception("Invalid texture size: {}x{}, exceeds 128x32".format(width, height))
     if len(texdata)!=width*height:
       raise Exception("Data & size mismatch: len {} vs. {}x{}".format(len(texdata), width, height))
     
     if name:
       logging.info("Registering: {} ({}x{})".format(name, width, height))
 
-    search_data = str([width|height<<4] + texdata)
+    search_data = str([width+height*128] + texdata)
     id = 0
     if search_data in self.maps_index:
       id = self.maps_index[search_data]
@@ -340,7 +343,7 @@ class MapAtlas():
         tmp = bytearray()
         my = 128*y
         mx = 0
-        for x in range(width):        
+        for x in range(width):     
           tmp.append(texdata[x+y*width])
           mx = 4*int(x/4)
           if len(tmp)>3:
@@ -354,7 +357,8 @@ class MapAtlas():
       self.maps_index[search_data] = id
       self.maps.append(dotdict({
         'width': width,
-        'height': height        
+        'height': height,
+        'wrap': wrap
       }))
       self.maps.append(padded)
       self.length += 1
@@ -417,67 +421,85 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
       lightmap_width,lightmap_height=((u_max-u_min)+1, (v_max-v_min)+1)   
 
       # print(mip.width,"/",lightmap_width, " ", mip.height, "/", lightmap_height)
-      
-      # cross image data w/ lightmap
-      img = Image.new('RGBA', (mip.width,mip.height), (0,0,0,0))
+
       # tile indices
       face_map = []
+  
       total_light = 0
       shaded_tex = []
-      for y in range(mip.height):
-        for x in range(mip.width):
-          # get lightmap coords
-          lx = int(x/16)
-          ly = int(y/16)
-          # standard brightness (e.g. unmodified colors)
-          light = 11
-          # if face.lightofs!=-1:              
-          #   # rebase light range to 0-15 (+ substract base light for face)
-          #   light = int((lightmaps[(face.lightofs+lx+ly*lightmap_width)])/16) - baselight
-          # get actual color
-          color = colormap[mip.img[x+y*mip.width]]
-          # shift color
-          shade = colormap[color.ramp[light]]
-          total_light += shade.hw
-          img.putpixel((x,y),shade.rgb)
-          shaded_tex.append(shade.id)
-      # full dark?
-      if total_light>0:
+      wrap_tex = True
+      tex_width, tex_height = mip.width, mip.height
+      # debug - dump lightmap
+      if face.lightofs!=-1:
+        tex_width, tex_height = lightmap_width<<4,lightmap_height<<4
+        shaded_tex = {}
+        img = Image.new('RGBA', (tex_width, tex_height), (0,0,0,0))
+        draw = ImageDraw.Draw(img) 
+        for y in range(lightmap_height):
+          for x in range(lightmap_width):
+            light = int(lightmaps[(face.lightofs+x+y*lightmap_width)]/16) - baselight
+            # draw.rectangle((x<<4,y<<4,(x<<4)+15,(y<<4)+15),width=0,fill=(light,light,light))
+            for u in range(16):
+              for v in range(16):
+                # sample texture color
+                tx,ty = (u+(u_min+x)*16)%mip.width,(v+(v_min+y)*16)%mip.height
+                color = colormap[mip.img[tx+ty*mip.width]]
+                # shade from lightmap
+                shade = colormap[color.ramp[light]]
+                # test
+                # shade = colormap[colormap[3].ramp[light]]
+                total_light += shade.hw
+                shaded_tex[(u+16*x)+(v+16*y)*tex_width]=shade.id
+                img.putpixel((u+16*x,v+16*y),shade.rgb)
+        # draw polygon boundaries
+        for i in range(len(face_verts)):
+          vert0,vert1 = vertices[face_verts[i]], vertices[face_verts[(i+1)%len(face_verts)]]
+          u0=v_dot(vert0,tex.u_axis)+tex.u_offset-u_min*16
+          v0=v_dot(vert0,tex.v_axis)+tex.v_offset-v_min*16
+          u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
+          v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
+          draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
+        img.save("face_{}_light_{}.png".format(id,face.lightofs))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
-        # if face.lightofs!=-1:
-        #   baselight = 11
-        # else:
-        #   baselight = 15 - baselight
-        # no need to texture totally dark faces
-        if baselight>0:
-          # enable texture
-          flags |= 0x2
+        wrap_tex = False
+      else:
+        # copy texture verbatim
+        for y in range(mip.height):
+          for x in range(mip.width):
+            # get actual color
+            color = colormap[mip.img[x+y*mip.width]]
+            total_light += color.hw
+            shaded_tex.append(color.id)
+        baselight = 15 - baselight
+      # full dark?
+      if total_light>0 and baselight>0:
+        # enable texture
+        flags |= 0x2
 
-          # find out unique tiles (lighted)
-          w,h = math.floor(mip.width/8),math.floor(mip.height/8)
-          for j in range(0,h):
-            for i in range(0,w):
-              data = bytes([])
-              for y in range(8):
-                # read nimbles
-                for x in range(0,8,2):
-                  # print("{}/{}".format(i+x,j+y))
-                  # image is using the pico palette (+transparency)
-                  low = shaded_tex[(i*8 + x) + (j*8 + y) * mip.width]
-                  high = shaded_tex[(i*8 + x + 1) + (j*8 + y) * mip.width]
-                  data += bytes([high|low<<4])
-              tileid = 0
-              if data in sprites:
-                tileid = sprites.index(data)
-              else:
-                tileid = len(sprites)
-                sprites.append(data)
-              # register tile id
-              face_map.append(tileid)
-          # register texture map
-          mapid = maps.register(w, h, face_map, name=mip.name)
-          img.save("face_{}_{}_tex_{}.png".format(mip.name,id,face.tex_id))
+        # find out unique tiles (lighted)
+        w,h = int(tex_width/8),int(tex_height/8)
+        for j in range(0,h):
+          for i in range(0,w):
+            data = bytes([])
+            for y in range(8):
+              # read nimbles
+              for x in range(0,8,2):
+                # print("{}/{}".format(i+x,j+y))
+                # image is using the pico palette (+transparency)
+                low = shaded_tex[(i*8 + x) + (j*8 + y) * tex_width]
+                high = shaded_tex[(i*8 + x + 1) + (j*8 + y) * tex_width]
+                data += bytes([high|low<<4])
+            tileid = 0
+            if data in sprites:
+              tileid = sprites.index(data)
+            else:
+              tileid = len(sprites)
+              sprites.append(data)
+            # register tile id
+            face_map.append(tileid)
+        # register texture map
+        mapid = maps.register(w, h, face_map, wrap=wrap_tex, name=mip.name)
   
   s += "{:02x}".format(flags)
 
@@ -489,10 +511,13 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
   # textured?
   if mapid!=-1:
     s += "{:02x}".format(baselight)
-    # get texture
+    # get texture    
     s += pack_variant(face.tex_id + 1)
     # texmap reference
     s += pack_variant(mapid + 1)
+    # get uv min
+    s += pack_fixed(2*u_min)
+    s += pack_fixed(2*v_min)
 
   return s
 
