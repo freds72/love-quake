@@ -132,12 +132,12 @@ __lua__
   with open(cart_path, "w") as f:
     f.write(cart)
 
-def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False):
+def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False, only_lightmap=False):
   # extract palette
   colormap = read_colormap(stream)
 
   # extract data
-  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap)
+  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap, only_lightmap)
 
   if not test:
     game_data = compress and compress_byte_str(level_data, more=compress_more) or level_data
@@ -158,12 +158,13 @@ def main():
   parser.add_argument("--release", required=False,  type=str, help="Generate html+bin packages with given version. Note: compression mandatory if number of carts above 16.")
   parser.add_argument("--dump-lightmaps", action='store_true', required=False, help="Writes lightmaps to disk")
   parser.add_argument("--test", action='store_true', required=False, help="Test mode - does not write cart data")
+  parser.add_argument("--lightmaps", action='store_true', required=False, help="Lightmap (only) textures mode")
 
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO)
   with FileStream(args.mod_path) as stream:
-    pack_archive(args.pico_home, args.carts_path, stream, args.map, compress=args.compress or args.compress_more, release=args.release, compress_more=args.compress_more, test=args.test)
+    pack_archive(args.pico_home, args.carts_path, stream, args.map, compress=args.compress or args.compress_more, release=args.release, compress_more=args.compress_more, test=args.test, only_lightmap=args.lightmaps)
   logging.info('DONE')
     
 if __name__ == '__main__':

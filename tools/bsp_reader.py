@@ -3,6 +3,8 @@ import re
 import io
 import math
 import logging
+
+import tqdm
 from dotdict import dotdict
 from ctypes import *
 from collections import namedtuple
@@ -329,9 +331,6 @@ class MapAtlas():
     if len(texdata)!=width*height:
       raise Exception("Data & size mismatch: len {} vs. {}x{}".format(len(texdata), width, height))
     
-    if name:
-      logging.info("Registering: {} ({}x{})".format(name, width, height))
-
     search_data = str([width+height*128] + texdata)
     id = 0
     if search_data in self.maps_index:
@@ -364,7 +363,7 @@ class MapAtlas():
       self.length += 1
     return id
 
-def pack_face(bsp_handle, id, face, colormap, sprites, maps):  
+def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):  
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id)
@@ -399,7 +398,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
     elif "sky" in mip.name:
       flags |= 0x4
     else:
-      logging.info("Baking texture: {} (face:{} - lightmap: {})".format(mip.name, id, face.lightofs!=-1))
+      logging.debug("Baking texture: {} (face:{} - lightmap: {})".format(mip.name, id, face.lightofs!=-1))
 
       u_min=float('inf')
       u_max=float('-inf')
@@ -430,36 +429,44 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
       wrap_tex = True
       tex_width, tex_height = mip.width, mip.height
       # debug - dump lightmap
-      if face.lightofs!=-1:
-        tex_width, tex_height = lightmap_width<<4,lightmap_height<<4
+      if face.lightofs!=-1:   
+        texel = 16             
+        tex_width, tex_height = lightmap_width*texel,lightmap_height*texel
         shaded_tex = {}
-        img = Image.new('RGBA', (tex_width, tex_height), (0,0,0,0))
-        draw = ImageDraw.Draw(img) 
+        # img = Image.new('RGBA', (tex_width, tex_height), (0,0,0,0))
+        # draw = ImageDraw.Draw(img) 
         for y in range(lightmap_height):
           for x in range(lightmap_width):
             light = int(lightmaps[(face.lightofs+x+y*lightmap_width)]/16) - baselight
+            # shade = colormap[min(colormap[3].ramp[light],15)]
+            # total_light += shade.hw
+            # for u in range(texel):
+            #   for v in range(texel):
+            #     shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id
             # draw.rectangle((x<<4,y<<4,(x<<4)+15,(y<<4)+15),width=0,fill=(light,light,light))
-            for u in range(16):
-              for v in range(16):
+            for u in range(texel):
+              for v in range(texel):
                 # sample texture color
-                tx,ty = (u+(u_min+x)*16)%mip.width,(v+(v_min+y)*16)%mip.height
-                color = colormap[mip.img[tx+ty*mip.width]]
+                color = 3
+                if only_lightmap==False:
+                  tx,ty = (u+(u_min+x)*texel)%mip.width,(v+(v_min+y)*texel)%mip.height
+                  color = mip.img[tx+ty*mip.width]
                 # shade from lightmap
-                shade = colormap[color.ramp[light]]
+                shade = colormap[colormap[color].ramp[light]]
                 # test
                 # shade = colormap[colormap[3].ramp[light]]
                 total_light += shade.hw
-                shaded_tex[(u+16*x)+(v+16*y)*tex_width]=shade.id
-                img.putpixel((u+16*x,v+16*y),shade.rgb)
+                shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id
+                # img.putpixel((u+16*x,v+16*y),shade.rgb)
         # draw polygon boundaries
-        for i in range(len(face_verts)):
-          vert0,vert1 = vertices[face_verts[i]], vertices[face_verts[(i+1)%len(face_verts)]]
-          u0=v_dot(vert0,tex.u_axis)+tex.u_offset-u_min*16
-          v0=v_dot(vert0,tex.v_axis)+tex.v_offset-v_min*16
-          u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
-          v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
-          draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
-        img.save("face_{}_light_{}.png".format(id,face.lightofs))
+        # for i in range(len(face_verts)):
+        #   vert0,vert1 = vertices[face_verts[i]], vertices[face_verts[(i+1)%len(face_verts)]]
+        #   u0=v_dot(vert0,tex.u_axis)+tex.u_offset-u_min*16
+        #   v0=v_dot(vert0,tex.v_axis)+tex.v_offset-v_min*16
+        #   u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
+        #   v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
+        #   draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
+        # # img.save("face_{}_light_{}.png".format(id,face.lightofs))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
         wrap_tex = False
@@ -476,7 +483,6 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
       if total_light>0 and baselight>0:
         # enable texture
         flags |= 0x2
-
         # find out unique tiles (lighted)
         w,h = int(tex_width/8),int(tex_height/8)
         for j in range(0,h):
@@ -500,7 +506,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps):
             face_map.append(tileid)
         # register texture map
         mapid = maps.register(w, h, face_map, wrap=wrap_tex, name=mip.name)
-  
+        
   s += "{:02x}".format(flags)
 
   # vertex indices
@@ -705,7 +711,7 @@ def read_miptex(f, entry):
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
-def pack_bsp(stream, filename, colormap):
+def pack_bsp(stream, filename, colormap, only_lightmap):
   with stream.read(filename) as bsp_handle:
     header = dheader_t.read_from(bsp_handle)
 
@@ -769,10 +775,9 @@ def pack_bsp(stream, filename, colormap):
     maps = MapAtlas()
 
     with stream.read(filename) as face_handle:
-      logging.info("Packing faces: {}".format(len(faces)))
-      s += pack_variant(len(faces))
-      for i,face in enumerate(faces):
-        s += pack_face(face_handle, i, face, colormap, sprites, maps)
+      s += pack_variant(len(faces))      
+      for i,face in enumerate(tqdm(faces, desc="Packing faces")):
+        s += pack_face(face_handle, i, face, colormap, sprites, maps, only_lightmap)
     
     if len(sprites)>255:
       raise Exception("Too many sprites registered ({}). Max: 255".format(len(sprites)))

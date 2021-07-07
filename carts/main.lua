@@ -786,7 +786,7 @@ function unpack_map()
     add(_maps,(size&0xf)>>16|(size\16)>>8)
     local tiles={}
     unpack_array(function()
-      tiles[0x2000+unpack_variant()]=unpack_fixed()
+        tiles[0x2000+unpack_variant()]=unpack_fixed()
     end)    
     add(_maps,tiles)
   end,"maps")
