@@ -442,7 +442,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
             # total_light += shade.hw
             # for u in range(texel):
             #   for v in range(texel):
-            #     shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id
+            #     shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id            
             # draw.rectangle((x<<4,y<<4,(x<<4)+15,(y<<4)+15),width=0,fill=(light,light,light))
             for u in range(texel):
               for v in range(texel):

@@ -6,8 +6,7 @@ function polyfill(p,c)
 		local p0=p[i%nv+1]
 		local x0,y0,x1,y1=p0.x,p0.y,p1.x,p1.y
 		if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
-		local dx=(x1-x0)/(y1-y0)
-		local cy0=y0\1+1
+		local cy0,dx=(y0&-1)+1,(x1-x0)/(y1-y0)
 		if(y0<0) x0-=y0*dx y0=0 cy0=0
 		-- sub-pix shift
 		x0+=(cy0-y0)*dx
@@ -15,10 +14,7 @@ function polyfill(p,c)
 		for y=cy0,y1 do
 			local span=spans[y]
 			if span then
-				local x0=x0\1
-				span\=1
-				if(x0>span) x0,span=span,x0
-				if(span-x0>=1) rectfill(x0,y,span-1,y)				
+				rectfill(x0,y,span,y)				
 				--rectfill(x0,y,span,y)			
 			else
 				spans[y]=x0
@@ -60,7 +56,7 @@ function polytex_ymajor(v,uvs,slope)
 	  if span then
 				local x0,u0,v0,x1,u1,v1=x0,u0/w0,v0/w0,span[1],span[2],span[3]
 				if(x0>x1) x0,x1,u0,v0,u1,v1=x1,x0,u1,v1,u0,v0
-				local ddx=x1-x0
+				local ddx=((x1+0x1.ffff)&-1)-(x0&-1)
 				clip(x0,0,ddx,128)		
 				local ddu,ddv=(u1-u0)/ddx,(v1-v0)/ddx
 				tline(0,y,128,y+offset,u0-x0*ddu,v0-x0*ddv,ddu,ddv)
@@ -110,7 +106,7 @@ function polytex_xmajor(v,uvs,slope)
 	  if span then
 				local y0,u0,v0,y1,u1,v1=y0,u0/w0,v0/w0,span[1],span[2],span[3]
 				if(y0>y1) y0,y1,u0,v0,u1,v1=y1,y0,u1,v1,u0,v0
-				local ddy=y1-y0
+				local ddy=((y1+0x1.ffff)&-1)-(y0&-1)
 				clip(0,y0,128,ddy)
 				-- line(x,0,x+offset,128)
 				--rectfill(x,y0,x,span,8)
