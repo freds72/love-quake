@@ -82,12 +82,12 @@ function v_len(v)
 end
 
 function v_normz(v)
-	local x,y,z=v[1],v[2],v[3]
   local d=v_len(v)
-	return {x/d,y/d,z/d},d
+	return {v[1]/d,v[2]/d,v[3]/d},d
 end
 
 -- matrix functions
+-- matrix vector multiply
 function m_x_v(m,v)
 	local x,y,z=v[1],v[2],v[3]
 	return {m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]}
@@ -107,12 +107,6 @@ function make_m_from_euler(x,y,z)
 	  0,0,0,1}
 end
 
--- only invert 3x3 part
-function m_inv(m)
-	m[2],m[5]=m[5],m[2]
-	m[3],m[9]=m[9],m[3]
-	m[7],m[10]=m[10],m[7]
-end
 -- returns basis vectors from matrix
 function m_right(m)
 	return {m[1],m[2],m[3]}
@@ -125,14 +119,14 @@ function m_fwd(m)
 end
 -- optimized 4x4 matrix mulitply
 function m_x_m(a,b)
-	local a11,a21,a31,_,a12,a22,a32,_,a13,a23,a33,_,a14,a24,a34=unpack(a)
-	local b11,b21,b31,_,b12,b22,b32,_,b13,b23,b33,_,b14,b24,b34=unpack(b)
+	local a11,a12,a13,a21,a22,a23,a31,a32,a33=a[1],a[5],a[9],a[2],a[6],a[10],a[3],a[7],a[11]
+	local b11,b12,b13,b14,b21,b22,b23,b24,b31,b32,b33,b34=b[1],b[5],b[9],b[13],b[2],b[6],b[10],b[14],b[3],b[7],b[11],b[15]
 
 	return {
 			a11*b11+a12*b21+a13*b31,a21*b11+a22*b21+a23*b31,a31*b11+a32*b21+a33*b31,0,
 			a11*b12+a12*b22+a13*b32,a21*b12+a22*b22+a23*b32,a31*b12+a32*b22+a33*b32,0,
 			a11*b13+a12*b23+a13*b33,a21*b13+a22*b23+a23*b33,a31*b13+a32*b23+a33*b33,0,
-			a11*b14+a12*b24+a13*b34+a14,a21*b14+a22*b24+a23*b34+a24,a31*b14+a32*b24+a33*b34+a34,1
+			a11*b14+a12*b24+a13*b34+a[13],a21*b14+a22*b24+a23*b34+a[14],a31*b14+a32*b24+a33*b34+a[15],1
 		}
 end
 
@@ -148,7 +142,7 @@ function make_m_from_v_angle(up,angle)
 	}
 end
 
-function make_cam(name)
+function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
@@ -157,7 +151,7 @@ function make_cam(name)
   local function collect_bsp(node,pos)
     local side=plane_isfront(node.plane,pos)
     local child=node[not side]
-    if child and child[name]==visframe then
+    if child and child.visframe==visframe then
       if child.contents then
         visleaves[#visleaves+1]=child
       else
@@ -165,7 +159,7 @@ function make_cam(name)
       end
     end
     local child=node[side]
-    if child and child[name]==visframe then
+    if child and child.visframe==visframe then
       if child.contents then
         visleaves[#visleaves+1]=child
       else
@@ -208,8 +202,8 @@ function make_cam(name)
               -- tag visible parents
               while leaf do
                 -- already tagged?
-                if(leaf[name]==visframe) break
-                leaf[name]=visframe
+                if(leaf.visframe==visframe) break
+                leaf.visframe=visframe
                 leaf=leaf.parent
               end
             end
@@ -221,30 +215,6 @@ function make_cam(name)
       collect_bsp(bsp,self.pos)
       return visleaves
     end,  
-    draw_points=function(self,points)
-      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      for k,v in ipairs(points) do
-        local x,y,z=v[1],v[2],v[3]
-        local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-        -- to screen space
-        if az>0 then
-          ax=63.5+((ax/az)<<6)       
-          ay=63.5-((ay/az)<<6)
-          circfill(ax,ay,4*64/az,7)
-          if (v.msg) print(v.msg,ax+4*64/az+1,ay,8)
-          if v.n then
-            local v1=v_add(v,v.n,16)
-            local x,y,z=v1[1],v1[2],v1[3]
-            local ax1,ay1,az1=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-            if az1>0 then
-              ax1=63.5+((ax1/az1)<<6)       
-              ay1=63.5-((ay1/az1)<<6)
-              line(ax,ay,ax1,ay1,15)
-            end
-          end
-        end
-      end
-    end,
     draw_faces=function(self,verts,faces,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local cam_u,cam_v={m1,m5,m9},{m2,m6,m10}
@@ -255,74 +225,90 @@ function make_cam(name)
         for i=1,leaf.nf do
           -- face index
           local fi=leaf[i]  
-          -- face normal          
-          local fn,side=faces[fi],faces[fi+2]
-          -- some sectors are sharing faces
-          -- make sure a face from a leaf is drawn only once
-          if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
-            f_cache[fi]=true
-                        
-            local p,outcode,clipcode,umin,vmin,texcoords,uvs={},0xffff,0,0,0,_uvs[faces[fi+6]]
-            if(texcoords) uvs,umin,vmin={},faces[fi+8],faces[fi+9]
-            for k,vi in pairs(faces[fi+4]) do
-              -- base index in verts array
-              local a=v_cache[vi]
-              if not a then
-                local code,x,y,z=0,verts[vi],verts[vi+1],verts[vi+2]
-                local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
+          -- sky? skip
+          if not faces[fi+3] then
+            -- face normal          
+            local fn,side=faces[fi],faces[fi+2]
+            -- some sectors are sharing faces
+            -- make sure a face from a leaf is drawn only once
+            if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
+              f_cache[fi]=true
+                          
+              local p,outcode,clipcode,umin,vmin,texcoords,uvs={},0xffff,0,0,0,_uvs[faces[fi+6]]
+              if(texcoords) uvs,umin,vmin={},faces[fi+8],faces[fi+9]
+              for k,vi in pairs(faces[fi+4]) do
+                -- base index in verts array
+                local a=v_cache[vi]
+                if not a then
+                  local code,x,y,z=0,verts[vi],verts[vi+1],verts[vi+2]
+                  local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
 
-                -- znear=8
-                if az<8 then code=2 end
-                --if az>2048 then code|=1 end
-                if ax>az then code|=4
-                elseif ax<-az then code|=8 end
-                if ay>az then code|=16
-                elseif ay<-az then code|=32 end
-                -- save world space coords for clipping
-                -- to screen space
-                local w=64/az
-                a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
-                v_cache[vi]=a
-              end
-              outcode&=a.outcode
-              clipcode+=a.outcode&2
-              p[k]=a              
-              if texcoords then
-                uvs[k]=v_uv(texcoords,{verts[vi],verts[vi+1],verts[vi+2]},umin,vmin)
-              end
-            end
-            if outcode==0 then 
-              if(clipcode>0) p,uvs=z_poly_clip(p,uvs)
-
-              if #p>2 then
+                  -- znear=8
+                  if az<8 then code=2 end
+                  --if az>2048 then code|=1 end
+                  if ax>az then code|=4
+                  elseif ax<-az then code|=8 end
+                  if ay>az then code|=16
+                  elseif ay<-az then code|=32 end
+                  -- save world space coords for clipping
+                  -- to screen space
+                  local w=64/az
+                  a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
+                  v_cache[vi]=a
+                end
+                outcode&=a.outcode
+                clipcode+=a.outcode&2
+                p[k]=a              
                 if texcoords then
-                  local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
-                  if(side) s,t=-s,-t
-                  local a=atan2(s,t)
-                  -- normalized 2d vector
-                  local u,v=sin(a),cos(a)
-                  -- copy texture
-                  local mi=faces[fi+7]
-                  for k,v in pairs(_maps[mi+1]) do
-                     poke4(k,v)
-                  end
-                  -- texture coords
-                  poke4(0x5f38,_maps[mi])
-                  if abs(u)>abs(v) then
-                    polytex_ymajor(p,uvs,v/u)
+                  uvs[k]=v_uv(texcoords,{verts[vi],verts[vi+1],verts[vi+2]},umin,vmin)
+                end
+              end
+              if outcode==0 then 
+                if(clipcode>0) p,uvs=z_poly_clip(p,uvs)
+
+                if #p>2 then
+                  if texcoords then
+                    local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
+                    if(side) s,t=-s,-t
+                    local a=atan2(s,t)
+                    -- normalized 2d vector
+                    local u,v=sin(a),cos(a)
+                    -- copy texture to hw map
+                    local mi=faces[fi+7]
+                    local stride=_maps[mi]
+                    for dst,src in pairs(_maps[mi+1]) do
+                      poke4(dst,peek4(src,stride))
+                    end
+                    -- texture coords
+                    -- printh(tostr(_maps[mi],true))
+                    -- poke4(0x5f38,_maps[mi])
+                    --poke4(0x5f38,0x0)
+
+                    -- display light center on texture
+                    -- for light,_ in pairs(leaf.things) do
+                    --   local dist,d=plane_dot(fn,light.pos)
+                    --   if dist<faces[fi+1]!=side then
+                    --     -- translate to uv space
+                    --     local u,v=unpack(v_uv(texcoords,light.pos,umin,vmin))                      
+                    --     if u>=0 and v>=0 then
+                    --       mset(u,v,1)
+                    --       
+                    --     end
+                    --   end
+                    -- end
+
+                    if abs(u)>abs(v) then
+                      polytex_ymajor(p,uvs,v/u)
+                    else
+                      polytex_xmajor(p,uvs,u/v)
+                    end                   
                   else
-                    polytex_xmajor(p,uvs,u/v)
-                  end 
-                else
-                  polyfill(p,0)
+                    polyfill(p,0)
+                  end
                 end
               end
             end
           end
-        end
-        -- draw entities in this convex space
-        for thing,_ in pairs(leaf.things) do
-          thing:draw(self.m)
         end
       end
     end
@@ -369,10 +355,7 @@ function z_poly_clip(v,uvs)
 end
 
 function make_player(pos,a)
-  local angle,dangle={0,a,0},{0,0,0}
-  local velocity={0,0,0,}
-  local wall_run
-
+  local angle,dangle,velocity={0,a,0},{0,0,0},{0,0,0,}
   local fire_ttl=0
 
   -- start above floor
@@ -401,8 +384,8 @@ function make_player(pos,a)
       velocity=v_add(velocity,{s*dz-c*dx,jmp-2,c*dz+s*dx})          
       -- check next position
       local vn,vl=v_normz(velocity)
-      wall_run=false
       if vl>0.1 then
+
         -- check current to target pos
         for i=1,3 do
           local hits={}            
@@ -425,56 +408,8 @@ function make_player(pos,a)
 
       self.pos=v_add(self.pos,velocity)
       self.m=make_m_from_euler(unpack(angle))
-
-      -- fire?
-      --fire_ttl=max(fire_ttl-1)
-      --if fire_ttl==0 and btnp(5) then
-      --  printh("pop")
-      --  make_particle(v_add(self.pos,{0,24,0}),m_fwd(self.m))  
-      --  fire_ttl=15      
-      --end
     end
   }
-end
-
-function update_particle(self)
-  self.ttl-=1
-  -- 
-  unregister_thing_subs(self)
-  if(self.ttl<0) del(_particles,self) return
-
-  -- move
-  local next_pos=v_add(self.pos,self.vel,4)
-  local hits={}
-  if hitscan(_model.bsp,self.pos,next_pos,hits) and hits.n then
-    printh("hit wall")
-    del(_particles,self) 
-    return
-  end
-  self.pos=next_pos
-  register_thing_subs(_model.bsp,self,0)
-end
-
-function draw_particles(self,m)
-  local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
-  local x,y,z=unpack(self.pos)
-  local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-  -- to screen space
-  if az>8 then
-    local w=64/az
-    circfill(63.5+ax*w,63.5-ay*w,w*4,rnd(15))
-  end
-end
-
-function make_particle(pos,vel)
-  local p=add(_particles,{
-    pos=v_clone(pos),
-    vel=vel,
-    ttl=90,
-    nodes={},
-    update=update_particle,
-    draw=draw_particles})
-  register_thing_subs(_model.bsp,p,0)
 end
 
 -->8
@@ -491,6 +426,7 @@ function find_sub_sector(node,pos)
   end
 end
 
+-- find if pos is within an empty space
 function is_empty(node,pos)
   while node.contents==nil or node.contents>0 do
     node=node[plane_isfront(node.plane,pos)]
@@ -498,13 +434,14 @@ function is_empty(node,pos)
   return node.contents!=-1
 end
 
-
+-- detach a thing from a convex sector (leaf)
 function unregister_thing_subs(thing)
   for node,_ in pairs(thing.nodes) do
     if(node.things) node.things[thing]=nil
   end
 end
 
+-- registers a thing in all convex sectors within radius
 function register_thing_subs(node,thing,radius)
   if(not node) return
   -- leaf?
@@ -575,7 +512,6 @@ function hitscan(node,p0,p1,out)
         local nx,ny,nz=plane_get(node.plane)
         local n={scale*nx,scale*ny,scale*nz,node_dist}
         p10.n=n
-        p10.msg=tostr(frac)
         out.n=n
         out.t=frac
       end
@@ -586,6 +522,8 @@ end
 
 
 function _init()
+  -- enable tile 0 + extended memory
+  poke(0x5f36, 0x18)
   -- capture mouse
   -- enable lock+button alias
   poke(0x5f2d,7)
@@ -595,13 +533,11 @@ function _init()
   -- restore spritesheet
   reload()
 
-  -- enable tile 0
-  poke(0x5f36, 0x8)
   palt(0,false)
   pal({129, 133, 5, 134, 143, 15, 130, 132, 4, 137, 9, 136, 8, 13, 12},1,1)
 
   -- 
-  _cam=make_cam("main")
+  _cam=make_cam()
   _plyr=make_player(pos,angle)
 
 end
@@ -609,17 +545,6 @@ end
 function _update()
 
   _plyr:update()
-
-  --_spirit:update()
-
-  --
-  --local thing={unpack(pos)}
-  --thing.nodes={}
-  --register_thing_subs(_model.bsp,thing,16)
-
-  for p in all(_particles) do
-    p:update()
-  end
   
   _cam:track(v_add(_plyr.pos,{0,24,0}),_plyr.m,_plyr.angle)
 end
@@ -735,10 +660,8 @@ function unpack_map()
 
   -- faces
   local face_sizeof=10
-  unpack_array(function(fi)
-    local base=#faces+1
-
-    local face_verts,pi,flags={},plane_sizeof*unpack_variant()+1,mpeek()
+  unpack_array(function()
+    local base,face_verts,pi,flags=#faces+1,{},plane_sizeof*unpack_variant()+1,mpeek()
     
     -- 0: supporting plane
     add(faces,pi)
@@ -780,15 +703,22 @@ function unpack_map()
   end,"faces")
 
   -- texture maps
-  unpack_array(function(i)
-    local size=mpeek()
+  local maps_addr=0x8000
+  unpack_array(function()
     -- convert to tline coords
-    add(_maps,(size&0xf)>>16|(size\16)>>8)
-    local tiles={}
-    unpack_array(function()
-        tiles[0x2000+unpack_variant()]=unpack_fixed()
-    end)    
-    add(_maps,tiles)
+    -- add(_maps,(size&0xf)>>16|(size\16)>>8)
+    local height,size=mpeek(),mpeek()
+    local mw,tiles=add(_maps,4*size\height),add(_maps,{})
+    -- copy to ram    
+    mw/=4
+    for i=0,size-1 do
+      poke4(maps_addr,unpack_fixed())
+      if i%mw==0 then
+        -- record start of map span
+        tiles[0x2000+((i\mw)<<7)]=maps_addr
+      end
+      maps_addr+=4
+    end
   end,"maps")
   
   unpack_array(function(i)

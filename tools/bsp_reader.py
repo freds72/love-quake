@@ -307,22 +307,22 @@ class MapAtlas():
     self.length = 0
   # conver to a pico8 string
   def pack(self):
-    logging.info("Packing texture maps: {}".format(len(self.maps_index)))
+    logging.info("Packing texture maps: {}".format(len(self.maps_index)))    
     s = pack_variant(self.length)    
     i = 0
     while i<len(self.maps):
       size = self.maps[i]
       i += 1
+      padded_map = self.maps[i]
+      i += 1            
       if size.wrap:
+        raise Exception("not supported")
         s += "{:02x}".format(size.width|size.height<<4)
       else:
-        s += "{:02x}".format(0)
-      padded_map = self.maps[i]
-      i += 1
-      s += pack_variant(len(padded_map))
-      for k,v in padded_map.items():
-        s += pack_variant(k)
-        s += pack_int32(v)        
+        s += "{:02x}".format(size.height)
+      s += "{:02x}".format(len(padded_map))
+      for dw in padded_map:
+        s += pack_int32(dw)
     return s
   
   def register(self, width, height, texdata, wrap=True, name=None):
@@ -337,7 +337,7 @@ class MapAtlas():
       id = self.maps_index[search_data]
     else:
       # convert into a padded map
-      padded = {}
+      padded = []
       for y in range(height):
         tmp = bytearray()
         my = 128*y
@@ -346,12 +346,12 @@ class MapAtlas():
           tmp.append(texdata[x+y*width])
           mx = 4*int(x/4)
           if len(tmp)>3:
-            padded[mx+my] = tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0]
+            padded.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
             tmp = bytearray()
         # any remaining values?
         if len(tmp)>0:
           tmp += bytearray(max(0,4-len(tmp)))
-          padded[mx+my] = tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0]
+          padded.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
       id = len(self.maps)
       self.maps_index[search_data] = id
       self.maps.append(dotdict({
@@ -360,7 +360,7 @@ class MapAtlas():
         'wrap': wrap
       }))
       self.maps.append(padded)
-      self.length += 1
+      self.length += 1      
     return id
 
 def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):  
@@ -385,7 +385,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
       face_verts.append(edge.v[1])   
 
   # face light
-  baselight = int(face.styles[1]/16)
+  baselight = face.styles[1]
   mapid = -1
 
   if face.tex_id!=-1:
@@ -437,7 +437,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
         # draw = ImageDraw.Draw(img) 
         for y in range(lightmap_height):
           for x in range(lightmap_width):
-            light = int(lightmaps[(face.lightofs+x+y*lightmap_width)]/16) - baselight
+            light = int((lightmaps[(face.lightofs+x+y*lightmap_width)] - baselight)/16)
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):
@@ -453,11 +453,9 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
                   color = mip.img[tx+ty*mip.width]
                 # shade from lightmap
                 shade = colormap[colormap[color].ramp[light]]
-                # test
-                # shade = colormap[colormap[3].ramp[light]]
                 total_light += shade.hw
                 shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id
-                # img.putpixel((u+16*x,v+16*y),shade.rgb)
+                # img.putpixel((u+texel*x,v+texel*y),shade.rgb)
         # draw polygon boundaries
         # for i in range(len(face_verts)):
         #   vert0,vert1 = vertices[face_verts[i]], vertices[face_verts[(i+1)%len(face_verts)]]
@@ -466,7 +464,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
         #   u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
         #   v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
         #   draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
-        # # img.save("face_{}_light_{}.png".format(id,face.lightofs))
+        # img.save("face_{}_{}.png".format(id,face.lightofs))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
         wrap_tex = False
@@ -478,7 +476,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
             color = colormap[mip.img[x+y*mip.width]]
             total_light += color.hw
             shaded_tex.append(color.id)
-        baselight = 15 - baselight
+        baselight = int((255 - baselight)/16)
       # full dark?
       if total_light>0 and baselight>0:
         # enable texture
