@@ -310,6 +310,10 @@ function make_cam()
             end
           end
         end
+        -- draw entities in this convex space
+        for thing,_ in pairs(leaf.things) do
+          thing:draw(self.m)
+        end        
       end
     end
   }
@@ -371,13 +375,13 @@ function make_player(pos,a)
 
       -- move
       local dx,dz,a,jmp=0,0,angle[2],0
-      if(btn(0,1)) dx=4
-      if(btn(1,1)) dx=-4
-      if(btn(2,1)) dz=4
-      if(btn(3,1)) dz=-4
+      if(btn(0,1)) dx=3
+      if(btn(1,1)) dx=-3
+      if(btn(2,1)) dz=3
+      if(btn(3,1)) dz=-3
       if(btnp(4)) jmp=20
 
-      dangle=v_add(dangle,{stat(39),stat(38),dx/8})
+      dangle=v_add(dangle,{stat(39),stat(38),dx/4})
       angle=v_add(angle,dangle,1/1024)
     
       local c,s=cos(a),-sin(a)
@@ -408,8 +412,65 @@ function make_player(pos,a)
 
       self.pos=v_add(self.pos,velocity)
       self.m=make_m_from_euler(unpack(angle))
+
+      -- fire?
+      fire_ttl=max(fire_ttl-1)
+      if fire_ttl==0 and btn(5) then
+        make_particle(
+          v_add(v_add(self.pos,m_up(self.m),18+rnd(4)),m_right(self.m),4-rnd(8)),
+          m_fwd(self.m),
+          24+rnd(8))  
+        fire_ttl=5      
+      end
     end
   }
+end
+
+function make_particle(pos,fwd,vel)
+  local p=add(_particles,{
+    pos=pos,
+    fwd=fwd,
+    vel=vel,
+    ttl=90,
+    col=12+rnd(2),
+    nodes={},
+    update=update_particle,
+    draw=draw_particles})
+  register_thing_subs(_model.bsp,p,0)
+end
+
+function update_particle(self)
+  self.ttl-=1
+  -- 
+  unregister_thing_subs(self)
+  if(self.ttl<0) del(_particles,self) return
+
+  -- move
+  local next_pos=v_add(self.pos,self.fwd,self.vel)
+  -- gravity
+  next_pos[2]-=2
+  
+  local hits={}
+  if hitscan(_model.bsp,self.pos,next_pos,hits) and hits.n then
+    del(_particles,self) 
+    return  
+  end
+  self.prev_pos=self.pos
+  self.pos=next_pos
+  register_thing_subs(_model.bsp,self,0)
+end
+
+function draw_particles(self,m)
+  local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
+  local x0,y0,z0=unpack(self.prev_pos)
+  local x1,y1,z1=unpack(self.pos)
+  local ax0,ay0,az0=m1*x0+m5*y0+m9*z0+m13,m2*x0+m6*y0+m10*z0+m14,m3*x0+m7*y0+m11*z0+m15
+  local ax1,ay1,az1=m1*x1+m5*y1+m9*z1+m13,m2*x1+m6*y1+m10*z1+m14,m3*x1+m7*y1+m11*z1+m15
+  -- to screen space
+  if az0>8 and az1>8 then
+    local w0,w1=64/az0,64/az1
+    line(63.5+ax0*w0,63.5-ay0*w0,63.5+ax1*w1,63.5-ay1*w1,self.col)
+  end
 end
 
 -->8
@@ -546,6 +607,10 @@ function _update()
 
   _plyr:update()
   
+  for p in all(_particles) do
+    p:update()
+  end
+
   _cam:track(v_add(_plyr.pos,{0,24,0}),_plyr.m,_plyr.angle)
 end
 

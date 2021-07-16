@@ -1,26 +1,48 @@
 -- plain color polygon rasterization
 function polyfill(p,c)
 	color(c)
-	local nv,spans=#p,{}
-	for i,p1 in pairs(p) do
-		local p0=p[i%nv+1]
-		local x0,y0,x1,y1=p0.x,p0.y,p1.x,p1.y
-		if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
-		local cy0,dx=(y0&-1)+1,(x1-x0)/(y1-y0)
-		if(y0<0) x0-=y0*dx y0=0 cy0=0
-		-- sub-pix shift
-		x0+=(cy0-y0)*dx
-		if(y1>127) y1=127
-		for y=cy0,y1 do
-			local span=spans[y]
-			if span then
-				rectfill(x0,y,span,y)				
-				--rectfill(x0,y,span,y)			
-			else
-				spans[y]=x0
-			end
-			x0+=dx
+	local miny,maxy,mini,minix=32000,-32000
+	-- find extent
+	for i,v in pairs(p) do
+		local x,y=v.x,v.y
+		if (y<miny) mini,miny=i,y
+		if (y>maxy) maxy=y
+	end
+
+	--data for left & right edges:
+	local np,lj,rj,ly,ry,lx,ldx,rx,rdx=#p,mini,mini,miny,miny
+	--step through scanlines.
+	if(maxy>127) maxy=127
+	if(miny<0) miny=-1
+	for y=1+miny&-1,maxy do
+		--maybe update to next vert
+		while ly<y do
+			local v0=p[lj]
+			lj+=1
+			if (lj>np) lj=1
+			local v1=p[lj]
+			local y0,y1=v0.y,v1.y
+			ly=y1&-1
+			lx=v0.x
+			ldx=(v1.x-lx)/(y1-y0)
+			--sub-pixel correction
+			lx+=(y-y0)*ldx
+		end   
+		while ry<y do
+			local v0=p[rj]
+			rj-=1
+			if (rj<1) rj=np
+			local v1=p[rj]
+			local y0,y1=v0.y,v1.y
+			ry=y1&-1
+			rx=v0.x
+			rdx=(v1.x-rx)/(y1-y0)
+			--sub-pixel correction
+			rx+=(y-y0)*rdx
 		end
+		rectfill(rx,y,lx,y)
+		lx+=ldx
+		rx+=rdx
 	end
 end
 
@@ -57,9 +79,9 @@ function polytex_ymajor(v,uvs,slope)
 				local x0,u0,v0,x1,u1,v1=x0,u0/w0,v0/w0,span[1],span[2],span[3]
 				if(x0>x1) x0,x1,u0,v0,u1,v1=x1,x0,u1,v1,u0,v0
 				local ddx=((x1+0x1.ffff)&-1)-(x0&-1)
-				clip(x0,0,ddx,128)		
+				clip(x0,0,ddx,127)		
 				local ddu,ddv=(u1-u0)/ddx,(v1-v0)/ddx
-				tline(0,y,128,y+offset,u0-x0*ddu,v0-x0*ddv,ddu,ddv)
+				tline(0,y,127,y+offset,u0-x0*ddu,v0-x0*ddv,ddu,ddv)
 	  else
 	   nodes[y]={x0,u0/w0,v0/w0}
 	  end
@@ -107,11 +129,11 @@ function polytex_xmajor(v,uvs,slope)
 				local y0,u0,v0,y1,u1,v1=y0,u0/w0,v0/w0,span[1],span[2],span[3]
 				if(y0>y1) y0,y1,u0,v0,u1,v1=y1,y0,u1,v1,u0,v0
 				local ddy=((y1+0x1.ffff)&-1)-(y0&-1)
-				clip(0,y0,128,ddy)
+				clip(0,y0,127,ddy)
 				-- line(x,0,x+offset,128)
 				--rectfill(x,y0,x,span,8)
 				local ddu,ddv=(u1-u0)/ddy,(v1-v0)/ddy
-				tline(x,0,x+offset,128,u0-y0*ddu,v0-y0*ddv,ddu,ddv)
+				tline(x,0,x+offset,127,u0-y0*ddu,v0-y0*ddv,ddu,ddv)
 	  else
 	   nodes[x]={y0,u0/w0,v0/w0}
 	  end

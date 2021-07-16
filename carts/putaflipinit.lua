@@ -41,6 +41,11 @@ function line(...)
 oline(...)
 cflip()
 end
+otline=tline
+function tline(...)
+otline(...)
+cflip()
+end
 opset=pset
 psetctr=0
 function pset(...)

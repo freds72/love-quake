@@ -1,0 +1,10 @@
+skull:monster {
+ // properties
+ Radius 20
+ Health 50 
+ States {
+  Spawn:
+   skull A 15
+   skull B 18
+ }
+}
