@@ -755,11 +755,9 @@ function unpack_map()
       add(faces,unpack_fixed())
       add(faces,unpack_fixed())
     else
-      add(faces,0)
-      add(faces,0)
-      add(faces,0)
-      add(faces,0)
-      add(faces,0)
+      for i=1,5 do
+        add(faces,0)
+      end      
     end
 
     -- "fix" cp value
@@ -837,33 +835,19 @@ function unpack_map()
     -- collision hull
     local clipnodes={}
     unpack_array(function()
-      local pi=plane_sizeof*unpack_variant()+1
-      local node,flags={
-        plane=pi
-      },mpeek()
+      local node,flags={plane=plane_sizeof*unpack_variant()+1},mpeek()
+      -- either empty, lava, ... or reference to a another half-space
       local contents=flags&0xf
-      if contents!=0 then
-        node[true]=-contents
-      else
-        node[true]=unpack_variant()
-      end
+      node[true]=contents!=0 and -contents or unpack_variant()
       contents=(flags&0xf0)>>4
-      if contents!=0 then
-        node[false]=-contents
-      else
-        node[false]=unpack_variant()
-      end
+      node[false]=contents!=0 and -contents or unpack_variant()
       add(clipnodes,node)
     end)
     -- attach references
-    for _,node in pairs(clipnodes) do
+    for node in all(clipnodes) do
       local function attach_node(side)
         local id=node[side]
-        if id<0 then
-          node[side]=_content_types[-id]
-        else
-          node[side]=clipnodes[id]
-        end
+        node[side]=id<0 and _content_types[-id] or clipnodes[id]
       end
       attach_node(true)
       attach_node(false)
