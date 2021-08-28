@@ -316,7 +316,7 @@ class MapAtlas():
       padded_map = self.maps[i]
       i += 1            
       if size.wrap:
-        raise Exception("not supported")
+        raise Exception("Unlit texture not supported")
         s += "{:02x}".format(size.width|size.height<<4)
       else:
         s += "{:02x}".format(size.height)
@@ -435,9 +435,11 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
         shaded_tex = {}
         # img = Image.new('RGBA', (tex_width, tex_height), (0,0,0,0))
         # draw = ImageDraw.Draw(img) 
+        # logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
         for y in range(lightmap_height):
           for x in range(lightmap_width):
-            light = int((lightmaps[(face.lightofs+x+y*lightmap_width)] - baselight)/16)
+            lexel = face.lightofs+x+y*lightmap_width
+            light = int(((lexel<len(lightmaps) and lightmaps[lexel] or 255) - baselight)/16)
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):

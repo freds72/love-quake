@@ -147,17 +147,7 @@ function make_cam()
   local visleaves,visframe,prev_leaf={},0
 
   -- traverse bsp
-  -- unrolled true/false children traversing for performance
-  local function collect_bsp(node,pos)
-    local side=plane_isfront(node.plane,pos)
-    local child=node[not side]
-    if child and child.visframe==visframe then
-      if child.contents then
-        visleaves[#visleaves+1]=child
-      else
-        collect_bsp(child,pos)
-      end
-    end
+  local function collect_child(node,side,pos)
     local child=node[side]
     if child and child.visframe==visframe then
       if child.contents then
@@ -166,6 +156,12 @@ function make_cam()
         collect_bsp(child,pos)
       end
     end
+  end
+  -- unrolled true/false children traversing for performance
+  function collect_bsp(node,pos)
+    local side=plane_isfront(node.plane,pos)
+    collect_child(node,not side,pos)
+    collect_child(node,side,pos)
   end
 
 	return {
@@ -234,7 +230,7 @@ function make_cam()
             if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
               f_cache[fi]=true
                           
-              local p,outcode,clipcode,umin,vmin,texcoords,uvs={},0xffff,0,0,0,_uvs[faces[fi+6]]
+              local p,outcode,clipcode,umin,vmin,texcoords,uvs={},0xffff,0,0,0--,_uvs[faces[fi+6]]
               if(texcoords) uvs,umin,vmin={},faces[fi+8],faces[fi+9]
               for k,vi in pairs(faces[fi+4]) do
                 -- base index in verts array
@@ -303,7 +299,7 @@ function make_cam()
                       polytex_xmajor(p,uvs,u/v)
                     end                   
                   else
-                    polyfill(p,0)
+                    polyfill(p,j+i)
                   end
                 end
               end
@@ -473,6 +469,135 @@ function draw_particles(self,m)
   end
 end
 
+local _skulls={}
+function make_skull(pos,up)
+  local p=add(_particles,{
+    pos=pos,
+    period=4+rnd(4),
+    m=make_m_from_v_angle(up,0),
+    nodes={},
+    update=update_skull,
+    draw=draw_skull})
+  register_thing_subs(_model.bsp,p,4)
+  add(_skulls,p)
+end
+
+function update_skull(self)
+  local velocity=v_normz(make_v(self.pos,_plyr.pos),0.8)
+  -- avoid other skulls
+  for _,other in pairs(_skulls) do
+    if other!=self then
+      local on,od=v_normz(make_v(self.pos,other.pos))
+      if od<24 then
+        velocity=v_add(velocity,on,-1)
+      end
+    end
+  end
+  -- mild gravity
+  velocity[2]-=0.9*cos(time()/self.period)
+  --if(rnd()>0.2) velocity[2]+=rnd(4)
+
+  -- check next position
+  local vn,vl=v_normz(velocity)
+  if vl>0.1 then
+    -- check current to target pos
+    for i=1,3 do
+      local hits={}            
+      if hitscan(_model.clipnodes,self.pos,v_add(self.pos,velocity),hits) and hits.n then
+        local fix=v_dot(hits.n,velocity)
+        -- separating?
+        if fix<0 then
+          velocity=v_add(velocity,hits.n,-fix)
+        end
+      else
+        goto clear
+      end
+    end
+    -- cornered?
+    velocity=nil
+::clear::
+  else
+    velocity=nil
+  end
+
+  if velocity then
+    unregister_thing_subs(self)
+    local right=m_right(self.m)
+    self.pos=v_add(self.pos,velocity)
+    self.reye=v_add(self.pos,right,4)
+    self.leye=v_add(self.pos,right,-4)
+    if rnd()>0.5 then
+      --make_blood(self.reye)
+      --make_blood(self.leye)
+    end
+    register_thing_subs(_model.bsp,self,4)
+  end
+end
+
+function draw_eye(x,y,w)
+  fillp(0xa5a5.8)
+  circfill(x,y,(2.4+rnd(0.5))*w,2) 
+  fillp()
+  circfill(x,y,1.4*w,12) 
+  circfill(x,y,w,13)
+end
+
+function draw_skull(self,m)
+  -- find eyes
+  local x,y,z=unpack(m_x_v(m,self.pos))
+  local x0,y0,z0=unpack(m_x_v(m,self.reye))
+  local x1,y1,z1=unpack(m_x_v(m,self.leye))
+  local w0,w1,w=64/z0,64/z1,64/z
+  fillp(0xa5a5.8)
+  circfill(63.5+x*w,63.5-y*w,9.4*w,7)
+  fillp()
+  circfill(63.5+x*w,63.5-y*w,8*w,7)
+  if(z0>8) draw_eye(63.5+x0*w0,63.5-y0*w0,w0)
+  if(z1>8) draw_eye(63.5+x1*w1,63.5-y1*w1,w1)
+end
+
+function make_blood(pos)
+  local p=add(_particles,{
+    pos=v_add(pos,{0.5-rnd(),0.5-rnd(),0.5-rnd()},1.5),
+    ttl=12+rnd(5),
+    col=13,
+    nodes={},
+    update=update_blood,
+    draw=draw_blood})
+  register_thing_subs(_model.bsp,p,0)
+end
+
+function update_blood(self)
+  self.ttl-=1
+  -- 
+  unregister_thing_subs(self)
+  if(self.ttl<0) del(_particles,self) return
+
+  -- gravity
+  local next_pos=v_add(self.pos,{0,-0.2,0})
+  
+  local hits={}
+  if hitscan(_model.bsp,self.pos,next_pos,hits) and hits.n then
+    del(_particles,self) 
+    return  
+  end
+  self.pos=next_pos
+  register_thing_subs(_model.bsp,self,0)
+end
+
+function draw_blood(self,m)
+  local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
+  local x0,y0,z0=unpack(self.pos)
+  local ax0,ay0,az0=m1*x0+m5*y0+m9*z0+m13,m2*x0+m6*y0+m10*z0+m14,m3*x0+m7*y0+m11*z0+m15
+  -- to screen space
+  if az0>8 then
+    local w0=64/az0
+    --fillp(0xa5a5.8)
+    circfill(63.5+ax0*w0,63.5-ay0*w0,w0,self.col) 
+    --fillp()
+  end
+end
+
 -->8
 -- bsp functions
 
@@ -600,7 +725,9 @@ function _init()
   -- 
   _cam=make_cam()
   _plyr=make_player(pos,angle)
-
+  for i=1,5 do
+    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+  end
 end
 
 function _update()
@@ -611,7 +738,7 @@ function _update()
     p:update()
   end
 
-  _cam:track(v_add(_plyr.pos,{0,24,0}),_plyr.m,_plyr.angle)
+  _cam:track(v_add(_plyr.pos,{0,48,0}),_plyr.m,_plyr.angle)
 end
 
 function _draw()
@@ -765,7 +892,7 @@ function unpack_map()
     faces[base+1]=plane_dot(pi,{verts[vi],verts[vi+1],verts[vi+2]})
   end,"faces")
 
-  -- texture maps
+  -- lightmap maps
   local maps_addr=0x8000
   unpack_array(function()
     -- convert to tline coords
@@ -775,15 +902,15 @@ function unpack_map()
     -- copy to ram    
     mw/=4
     for i=0,size-1 do
-      poke4(maps_addr,unpack_fixed())
       if i%mw==0 then
         -- record start of map span
         tiles[0x2000+((i\mw)<<7)]=maps_addr
       end
+      poke4(maps_addr,unpack_fixed())
       maps_addr+=4
     end
   end,"maps")
-  
+  printh(tostr(maps_addr,true))
   unpack_array(function(i)
     local pvs={}
     local l=add(leaves,{
