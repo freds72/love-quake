@@ -5,8 +5,8 @@
 local _particles,_cam,_plyr,_model={}
 local plane_dot,plane_isfront,plane_get
 
--- texture coordinates + texture maps
-local _uvs,_maps={},{}
+-- texture coordinates + texture maps + s/t cache
+local _maps,_texcoords={},{}
 local _content_types={{contents=-1},{contents=-2}}
 
 -- bsp drawing helpers
@@ -29,12 +29,6 @@ function v_clone(v)
 end
 function v_dot(a,b)
 	return a[1]*b[1]+a[2]*b[2]+a[3]*b[3]
-end
-function v_uv(texcoords,a,umin,vmin)
-  return {
-    v_dot(texcoords[1],a)+texcoords[2]-umin,
-    v_dot(texcoords[3],a)+texcoords[4]-vmin
-  }
 end
 
 function v_scale(v,scale)
@@ -230,8 +224,8 @@ function make_cam()
             if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
               f_cache[fi]=true
                           
-              local p,outcode,clipcode,umin,vmin,texcoords,uvs={},0xffff,0,0,0--,_uvs[faces[fi+6]]
-              if(texcoords) uvs,umin,vmin={},faces[fi+8],faces[fi+9]
+              local p,outcode,clipcode,uvi,uvs={},0xffff,0,faces[fi+6]
+              if (uvi!=-1) uvs={}
               for k,vi in pairs(faces[fi+4]) do
                 -- base index in verts array
                 local a=v_cache[vi]
@@ -255,15 +249,15 @@ function make_cam()
                 outcode&=a.outcode
                 clipcode+=a.outcode&2
                 p[k]=a              
-                if texcoords then
-                  uvs[k]=v_uv(texcoords,{verts[vi],verts[vi+1],verts[vi+2]},umin,vmin)
+                if uvs then
+                  uvs[k]=_texcoords[uvi+k]
                 end
               end
               if outcode==0 then 
                 if(clipcode>0) p,uvs=z_poly_clip(p,uvs)
 
                 if #p>2 then
-                  if texcoords then
+                  if uvi!=-1 then
                     local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
                     if(side) s,t=-s,-t
                     local a=atan2(s,t)
@@ -299,7 +293,7 @@ function make_cam()
                       polytex_xmajor(p,uvs,u/v)
                     end                   
                   else
-                    polyfill(p,j+i)
+                    polyfill(p,0)
                   end
                 end
               end
@@ -799,7 +793,7 @@ function unpack_v3()
 end
 
 function unpack_map()
-  local verts,planes,faces,leaves,nodes,models={},{},{},{},{},{}
+  local verts,planes,faces,leaves,nodes,models,uvs={},{},{},{},{},{},{}
 
   printh("------------------------")
   -- vertices
@@ -841,8 +835,9 @@ function unpack_map()
     add(planes,t)
   end,"planes")  
 
+  -- temporary
   unpack_array(function()
-    add(_uvs,{
+    add(uvs,{
       unpack_v3(),
       unpack_fixed(),
       unpack_v3(),
@@ -851,7 +846,7 @@ function unpack_map()
   end)
 
   -- faces
-  local face_sizeof=10
+  local face_sizeof=8
   unpack_array(function()
     local base,face_verts,pi,flags=#faces+1,{},plane_sizeof*unpack_variant()+1,mpeek()
     
@@ -873,17 +868,24 @@ function unpack_map()
     -- texture (if any)
     if flags&0x2!=0 then      
       -- 5: base light (e.g. ramp)
-      add(faces,mpeek())      
-      -- 6: texture coordinates (reference)
-      add(faces,unpack_variant())
+      add(faces,mpeek()) 
+      -- texture coordinates (reference)
+      local texcoords=unpack_ref(uvs)
+      -- 6: start of uv coords
+      add(faces,#_texcoords)
       -- 7: texture map (reference)
       add(faces,unpack_variant())
-      -- 8/9: uv min
-      add(faces,unpack_fixed())
-      add(faces,unpack_fixed())
+      -- 
+      local umin,vmin=unpack_fixed(),unpack_fixed()
+      for _,vi in ipairs(face_verts) do
+        local v={verts[vi],verts[vi+1],verts[vi+2]}
+        add(_texcoords,{
+          v_dot(texcoords[1],v)+texcoords[2]-umin,
+          v_dot(texcoords[3],v)+texcoords[4]-vmin})
+      end
     else
-      for i=1,5 do
-        add(faces,0)
+      for i=1,3 do
+        add(faces,-1)
       end      
     end
 
@@ -910,7 +912,7 @@ function unpack_map()
       maps_addr+=4
     end
   end,"maps")
-  printh(tostr(maps_addr,true))
+  
   unpack_array(function(i)
     local pvs={}
     local l=add(leaves,{
