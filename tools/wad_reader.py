@@ -14,6 +14,15 @@ from python2pico import *
 from lzs import Codec
 from dotdict import dotdict
 
+blender_exe = os.path.expandvars(os.path.join("%programfiles%","Blender Foundation","Blender 2.92","blender.exe"))
+
+def call(args):
+    proc = Popen(args, stdout=PIPE, stderr=PIPE, cwd=local_dir)
+    out, err = proc.communicate()
+    exitcode = proc.returncode
+    #
+    return exitcode, out, err
+
 # compress the given byte string
 # raw = True returns an array of bytes (a byte string otherwise)
 def compress_byte_str(s,raw=False,more=False):
@@ -132,6 +141,31 @@ __lua__
   with open(cart_path, "w") as f:
     f.write(cart)
 
+# extract blender models
+def pack_models(home_path):
+    # data buffer
+    blob = ""
+
+    # 3d models
+    # todo: read from map?
+    file_list = ['skull']
+    blob += pack_variant(len(file_list))
+    for blend_file in file_list:
+        logging.info("Exporting: {}.blend".format(blend_file))
+        fd, path = tempfile.mkstemp()
+        try:
+            os.close(fd)
+            exitcode, out, err = call([blender_exe,os.path.join(home_path,"models",blend_file + ".blend"),"--background","--python","blender_export.py","--","--out",path])
+            if err:
+                raise Exception('Unable to loadt: {}. Exception: {}'.format(blend_file,err))
+            logging.debug("Blender exit code: {} \n out:{}\n err: {}\n".format(exitcode,out,err))
+            with open(path, 'r') as outfile:
+                blob += pack_string(blend_file)
+                blob += outfile.read()
+        finally:
+            os.remove(path)
+    return blob
+
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False, only_lightmap=False):
   # extract palette
   colormap = read_colormap(stream)
@@ -148,6 +182,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
     to_multicart(game_data, pico_path, carts_path, "q8k")  
 
 def main():
+  global blender_exe
   parser = argparse.ArgumentParser()
   parser.add_argument("--pico-home", required=True, type=str, help="Full path to PICO8 folder")
   parser.add_argument("--carts-path", required=True, type=str, help="Path to carts folder where game is exported")
@@ -159,10 +194,19 @@ def main():
   parser.add_argument("--dump-lightmaps", action='store_true', required=False, help="Writes lightmaps to disk")
   parser.add_argument("--test", action='store_true', required=False, help="Test mode - does not write cart data")
   parser.add_argument("--lightmaps", action='store_true', required=False, help="Lightmap (only) textures mode")
+  parser.add_argument("--blender-location", required=False, type=str, help="Full path to Blender 2.9+ executable (default: {})".format(blender_exe))
 
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO)
+
+  if args.blender_location:
+    blender_exe = args.blender_location
+  logging.debug("Blender location: {}".format(blender_exe))
+  # test Blender path
+  if not os.path.isfile(os.path.join(blender_exe)):
+    raise Exception("Unable to locate Blender app at: {}".format(blender_exe))
+
   with FileStream(args.mod_path) as stream:
     pack_archive(args.pico_home, args.carts_path, stream, args.map, compress=args.compress or args.compress_more, release=args.release, compress_more=args.compress_more, test=args.test, only_lightmap=args.lightmaps)
   logging.info('DONE')
