@@ -140,8 +140,17 @@ function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
-  -- traverse bsp
-  local function collect_child(node,side,pos)
+  -- unrolled true/false children traversing for performance
+  function collect_bsp(node,pos)
+    local side=plane_isfront(node.plane,pos)
+    local child=node[not side]
+    if child and child.visframe==visframe then
+      if child.contents then
+        visleaves[#visleaves+1]=child
+      else
+        collect_bsp(child,pos)
+      end
+    end
     local child=node[side]
     if child and child.visframe==visframe then
       if child.contents then
@@ -150,12 +159,6 @@ function make_cam()
         collect_bsp(child,pos)
       end
     end
-  end
-  -- unrolled true/false children traversing for performance
-  function collect_bsp(node,pos)
-    local side=plane_isfront(node.plane,pos)
-    collect_child(node,not side,pos)
-    collect_child(node,side,pos)
   end
 
 	return {
@@ -208,8 +211,8 @@ function make_cam()
     draw_faces=function(self,verts,faces,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local cam_u,cam_v={m1,m5,m9},{m2,m6,m10}
-      local v_cache,f_cache,pos={},{},self.pos
-      
+      local pts,v_cache,f_cache,fu_cache,fv_cache,pos={},{},{},{},{},self.pos
+
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
@@ -224,9 +227,10 @@ function make_cam()
             if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
               f_cache[fi]=true
                           
-              local p,outcode,clipcode,uvi,uvs={},0xffff,0,faces[fi+6]
+              local face_verts,outcode,clipcode,uvi,uvs=faces[fi+4],0xffff,0,faces[fi+6]
               if (uvi!=-1) uvs={}
-              for k,vi in pairs(faces[fi+4]) do
+              local np=#face_verts
+              for k,vi in pairs(face_verts) do
                 -- base index in verts array
                 local a=v_cache[vi]
                 if not a then
@@ -248,21 +252,26 @@ function make_cam()
                 end
                 outcode&=a.outcode
                 clipcode+=a.outcode&2
-                p[k]=a              
+                pts[k]=a              
                 if uvs then
                   uvs[k]=_texcoords[uvi+k]
                 end
               end
               if outcode==0 then 
-                if(clipcode>0) p,uvs=z_poly_clip(p,uvs)
+                if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
 
-                if #p>2 then
+                if np>2 then
                   if uvi!=-1 then
-                    local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
-                    if(side) s,t=-s,-t
-                    local a=atan2(s,t)
-                    -- normalized 2d vector
-                    local u,v=sin(a),cos(a)
+                    local u,v=fu_cache[fn],fv_cache[fn]
+                    if not u then
+                      local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
+                      if(side) s,t=-s,-t
+                      local a=atan2(s,t)
+                      -- normalized 2d vector
+                      u,v=sin(a),cos(a)
+                      fu_cache[fn]=u
+                      fv_cache[fn]=v
+                    end
                     -- copy texture to hw map
                     local mi=faces[fi+7]
                     local stride=_maps[mi]
@@ -288,12 +297,12 @@ function make_cam()
                     -- end
 
                     if abs(u)>abs(v) then
-                      polytex_ymajor(p,uvs,v/u)
+                      polytex_ymajor(pts,np,uvs,v/u)
                     else
-                      polytex_xmajor(p,uvs,u/v)
+                      polytex_xmajor(pts,np,uvs,u/v)
                     end                   
                   else
-                    polyfill(p,0)
+                    polyfill(pts,np,0)
                   end
                 end
               end
@@ -310,10 +319,10 @@ function make_cam()
 end
 
 -- znear=8
-function z_poly_clip(v,uvs)
-	local res,v0,uv0,res_uv={},v[#v],uvs and uvs[#v],{}
+function z_poly_clip(v,nv,uvs)
+	local res,v0,uv0,res_uv={},v[nv],uvs and uvs[nv],{}
 	local d0=v0[3]-8
-	for i=1,#v do
+	for i=1,nv do
 		local v1,uv1=v[i],uvs and uvs[i]
 		local d1=v1[3]-8
 		if d1>0 then
@@ -345,7 +354,7 @@ function z_poly_clip(v,uvs)
     uv0=uv1
 		d0=d1
 	end
-	return res,res_uv
+	return res,#res,res_uv
 end
 
 function make_player(pos,a)
@@ -413,7 +422,7 @@ function make_player(pos,a)
         fire_ttl=5      
       end
     end
-  }
+  } 
 end
 
 function make_particle(pos,fwd,vel)
@@ -550,48 +559,6 @@ function draw_skull(self,m)
   if(z1>8) draw_eye(63.5+x1*w1,63.5-y1*w1,w1)
 end
 
-function make_blood(pos)
-  local p=add(_particles,{
-    pos=v_add(pos,{0.5-rnd(),0.5-rnd(),0.5-rnd()},1.5),
-    ttl=12+rnd(5),
-    col=13,
-    nodes={},
-    update=update_blood,
-    draw=draw_blood})
-  register_thing_subs(_model.bsp,p,0)
-end
-
-function update_blood(self)
-  self.ttl-=1
-  -- 
-  unregister_thing_subs(self)
-  if(self.ttl<0) del(_particles,self) return
-
-  -- gravity
-  local next_pos=v_add(self.pos,{0,-0.2,0})
-  
-  local hits={}
-  if hitscan(_model.bsp,self.pos,next_pos,hits) and hits.n then
-    del(_particles,self) 
-    return  
-  end
-  self.pos=next_pos
-  register_thing_subs(_model.bsp,self,0)
-end
-
-function draw_blood(self,m)
-  local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
-  local x0,y0,z0=unpack(self.pos)
-  local ax0,ay0,az0=m1*x0+m5*y0+m9*z0+m13,m2*x0+m6*y0+m10*z0+m14,m3*x0+m7*y0+m11*z0+m15
-  -- to screen space
-  if az0>8 then
-    local w0=64/az0
-    --fillp(0xa5a5.8)
-    circfill(63.5+ax0*w0,63.5-ay0*w0,w0,self.col) 
-    --fillp()
-  end
-end
-
 -->8
 -- bsp functions
 
@@ -616,7 +583,7 @@ end
 
 -- detach a thing from a convex sector (leaf)
 function unregister_thing_subs(thing)
-  for node,_ in pairs(thing.nodes) do
+  for node in pairs(thing.nodes) do
     if(node.things) node.things[thing]=nil
   end
 end
@@ -720,7 +687,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,5 do
-    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    --ake_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
@@ -826,22 +793,21 @@ function unpack_map()
   end
 
   unpack_array(function()  
-    local t=mpeek()
-    local x,y,z=unpack(unpack_v3())
-    add(planes,x)
-    add(planes,y)
-    add(planes,z)
-    add(planes,unpack_fixed())
-    add(planes,t)
+    -- coords
+    for i=1,4 do
+      add(planes,unpack_fixed())
+    end
+    -- plane type
+    add(planes,mpeek())
   end,"planes")  
 
-  -- temporary
+  -- temporary array
   unpack_array(function()
     add(uvs,{
-      unpack_v3(),
-      unpack_fixed(),
-      unpack_v3(),
-      unpack_fixed()
+      s=unpack_v3(),
+      u=unpack_fixed(),
+      t=unpack_v3(),
+      v=unpack_fixed()
     })
   end)
 
@@ -875,13 +841,13 @@ function unpack_map()
       add(faces,#_texcoords)
       -- 7: texture map (reference)
       add(faces,unpack_variant())
-      -- 
+      -- precompute textures coordinates
       local umin,vmin=unpack_fixed(),unpack_fixed()
       for _,vi in ipairs(face_verts) do
         local v={verts[vi],verts[vi+1],verts[vi+2]}
         add(_texcoords,{
-          v_dot(texcoords[1],v)+texcoords[2]-umin,
-          v_dot(texcoords[3],v)+texcoords[4]-vmin})
+          v_dot(texcoords.s,v)+texcoords.u-umin,
+          v_dot(texcoords.t,v)+texcoords.v-vmin})
       end
     else
       for i=1,3 do

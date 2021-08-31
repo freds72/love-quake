@@ -363,7 +363,53 @@ class MapAtlas():
       self.length += 1      
     return id
 
+
+allocated=[0] * 128
+lightmaps_count = 0
+lightmaps_img = Image.new('RGB', (128, 16), (0,0,0,0))
+
+def alloc_block(w, h):
+  global allocated
+  global lightmaps_count
+  global lightmaps_img
+  x,y=-1,-1
+
+  # FCS: At what height store the new lightmap
+  best = 16
+  for i in range(128-w):
+    best2 = 0
+    j = 0
+    while j<w:
+      if (allocated[i+j] >= best):        
+        break
+      if (allocated[i+j] > best2):
+        best2 = allocated[i+j]
+      j += 1
+    if (j == w):
+      # this is a valid spot
+      x = i
+      best = best2
+      y = best
+
+  if (best + h > 16):
+    print("no room left")
+    lightmaps_img.save("lightmaps_{}.png".format(lightmaps_count))
+
+    allocated=[0] * 128
+    lightmaps_count += 1
+    lightmaps_img = Image.new('RGB', (128, 16), (0,0,0,0))
+    return alloc_block(w,h)
+
+  print("block location: {}x{}".format(x,y))
+  for i in range(w):
+    allocated[x + i] = best + h
+
+  return (True,x,y)
+
+
 def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):  
+  global lightmaps_img
+
   s = ""
   # supporting plane index
   s += pack_variant(face.plane_id)
@@ -433,13 +479,16 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
         texel = 16             
         tex_width, tex_height = lightmap_width*texel,lightmap_height*texel
         shaded_tex = {}
-        # img = Image.new('RGBA', (tex_width, tex_height), (0,0,0,0))
+        # block,blockx,blocky = alloc_block(lightmap_width,lightmap_height)
         # draw = ImageDraw.Draw(img) 
         # logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
         for y in range(lightmap_height):
           for x in range(lightmap_width):
             lexel = face.lightofs+x+y*lightmap_width
-            light = int(((lexel<len(lightmaps) and lightmaps[lexel] or 255) - baselight)/16)
+            # light = int((lightmaps[lexel]))
+            # if block:
+            #   lightmaps_img.putpixel((blockx+x,blocky+y),(light,light,light))
+            light = int((lightmaps[lexel] - baselight)/16)
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):
@@ -466,7 +515,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
         #   u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
         #   v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
         #   draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
-        # img.save("face_{}_{}.png".format(id,face.lightofs))
+        # img.save("face_{}.png".format(id))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
         wrap_tex = False
@@ -758,9 +807,9 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
     plane_types = [0,2,1,3,4,5]
     s += pack_variant(len(planes))
     for p in planes:
-      s += "{:02x}".format(plane_types[p.type])
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
+      s += "{:02x}".format(plane_types[p.type])
 
     # all textures
     logging.info("Packing textures: {}".format(len(textures)))
@@ -779,6 +828,9 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
       for i,face in enumerate(tqdm(faces, desc="Packing faces")):
         s += pack_face(face_handle, i, face, colormap, sprites, maps, only_lightmap)
     
+    # if lightmaps_img:
+    #   lightmaps_img.save("lightmaps_{}.png".format(lightmaps_count))
+
     if len(sprites)>255:
       raise Exception("Too many sprites registered ({}). Max: 255".format(len(sprites)))
 
