@@ -210,8 +210,7 @@ function make_cam()
     end,  
     draw_faces=function(self,verts,faces,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local cam_u,cam_v={m1,m5,m9},{m2,m6,m10}
-      local pts,v_cache,f_cache,fu_cache,fv_cache,pos={},{},{},{},{},self.pos
+      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,pos={},{m1,m5,m9},{m2,m6,m10},{},{},{},{},self.pos
 
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order        
@@ -264,9 +263,9 @@ function make_cam()
                   if uvi!=-1 then
                     local u,v=fu_cache[fn],fv_cache[fn]
                     if not u then
-                      local s,t=plane_dot(fn,cam_u),plane_dot(fn,cam_v)
-                      if(side) s,t=-s,-t
-                      local a=atan2(s,t)
+                      -- not needed (we take abs u)
+                      -- if(side) s,t=-s,-t
+                      local a=atan2(plane_dot(fn,cam_u),plane_dot(fn,cam_v))
                       -- normalized 2d vector
                       u,v=sin(a),cos(a)
                       fu_cache[fn]=u
