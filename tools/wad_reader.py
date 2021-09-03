@@ -14,6 +14,7 @@ from python2pico import *
 from lzs import Codec
 from dotdict import dotdict
 
+local_dir = os.path.dirname(os.path.realpath(__file__))
 blender_exe = os.path.expandvars(os.path.join("%programfiles%","Blender Foundation","Blender 2.92","blender.exe"))
 
 def call(args):
@@ -148,14 +149,14 @@ def pack_models(home_path):
 
     # 3d models
     # todo: read from map?
-    file_list = ['skull']
+    file_list = ['cube']
     blob += pack_variant(len(file_list))
     for blend_file in file_list:
         logging.info("Exporting: {}.blend".format(blend_file))
         fd, path = tempfile.mkstemp()
         try:
             os.close(fd)
-            exitcode, out, err = call([blender_exe,os.path.join(home_path,"models",blend_file + ".blend"),"--background","--python","blender_export.py","--","--out",path])
+            exitcode, out, err = call([blender_exe,os.path.join(home_path,"models",blend_file + ".blend"),"--background","--python","blender_reader.py","--","--out",path])
             if err:
                 raise Exception('Unable to loadt: {}. Exception: {}'.format(blend_file,err))
             logging.debug("Blender exit code: {} \n out:{}\n err: {}\n".format(exitcode,out,err))
@@ -173,8 +174,10 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   # extract data
   level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap, only_lightmap)
 
+  level_data += pack_models(os.path.join(carts_path,".."))
+
   if not test:
-    game_data = compress and compress_byte_str(level_data, more=compress_more) or level_data
+    game_data = compress and compress_byte_str(level_data + blender_data, more=compress_more) or level_data
 
     to_gamecart(carts_path, "q8k", None , sprite_data, compress, release)
 

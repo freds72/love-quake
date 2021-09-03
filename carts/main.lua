@@ -2,7 +2,7 @@
 -- by @freds72
 
 -- game globals
-local _particles,_cam,_plyr,_model={}
+local _particles,_cam,_plyr,_model,_models={}
 local plane_dot,plane_isfront,plane_get
 
 -- texture coordinates + texture maps + s/t cache
@@ -136,6 +136,34 @@ function make_m_from_v_angle(up,angle)
 	}
 end
 
+-- radix sort
+-- from james edge
+function rsort(buffer1,_len)
+  local buffer2, idx, count = {}, {}, {}
+
+  for shift=0,5,5 do
+    for i=0,31 do count[i] = 0 end
+
+    for i,b in pairs(buffer1) do
+      local k=(b.key>>shift)&31
+      idx[i] = k
+      count[k] += 1
+    end
+
+    for i=1,31 do count[i] += count[i-1] end
+
+    for i=_len,1,-1 do
+      local k=idx[i]
+      local c=count[k]
+      buffer2[c] = buffer1[i]
+      count[k] = c-1
+    end
+
+    buffer1, buffer2 = buffer2, buffer1
+  end
+end
+
+-- camera
 function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
@@ -208,6 +236,48 @@ function make_cam()
       collect_bsp(bsp,self.pos)
       return visleaves
     end,  
+    draw_model=function(self,model,m)
+      m=m_x_m(self.m,m)
+      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
+      local pts,v_cache,pos={},{},self.pos
+                  
+      for _,face in pairs(model.f) do   
+        local outcode,clipcode=0xffff,0
+        local np=face.ni
+        for k=1,np do
+          local v=face[k]
+          -- base index in verts array
+          local a=v_cache[v]
+          if not a then
+            local code,x,y,z=0,v[1],v[2],v[3]
+            local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
+
+            -- znear=8
+            if az<8 then code=2 end
+            --if az>2048 then code|=1 end
+            if ax>az then code|=4
+            elseif ax<-az then code|=8 end
+            if ay>az then code|=16
+            elseif ay<-az then code|=32 end
+            -- save world space coords for clipping
+            -- to screen space
+            local w=64/az
+            a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
+            v_cache[v]=a
+          end
+          outcode&=a.outcode
+          clipcode+=a.outcode&2
+          pts[k]=a              
+        end
+        if outcode==0 then 
+          if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
+
+          if np>2 then
+            polyfill(pts,np,face.c)
+          end
+        end
+      end  
+    end,
     draw_faces=function(self,verts,faces,leaves)
       local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
       local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,pos={},{m1,m5,m9},{m2,m6,m10},{},{},{},{},self.pos
@@ -277,23 +347,6 @@ function make_cam()
                     for dst,src in pairs(_maps[mi+1]) do
                       poke4(dst,peek4(src,stride))
                     end
-                    -- texture coords
-                    -- printh(tostr(_maps[mi],true))
-                    -- poke4(0x5f38,_maps[mi])
-                    --poke4(0x5f38,0x0)
-
-                    -- display light center on texture
-                    -- for light,_ in pairs(leaf.things) do
-                    --   local dist,d=plane_dot(fn,light.pos)
-                    --   if dist<faces[fi+1]!=side then
-                    --     -- translate to uv space
-                    --     local u,v=unpack(v_uv(texcoords,light.pos,umin,vmin))                      
-                    --     if u>=0 and v>=0 then
-                    --       mset(u,v,1)
-                    --       
-                    --     end
-                    --   end
-                    -- end
 
                     if abs(u)>abs(v) then
                       polytex_ymajor(pts,np,uvs,v/u)
@@ -707,6 +760,13 @@ function _draw()
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves)
 
+  local m=m_x_m(make_m_from_euler(0,time()/8,0),{
+    10,0,0,0,
+    0,10,0,0,
+    0,0,10,0,
+    0,40,0,1
+  })
+  _cam:draw_model(_models.cube,m)
   -- _cam:draw_points({_plyr.pos})
 
   local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves
@@ -758,6 +818,51 @@ function unpack_v3()
   return {unpack_fixed(),unpack_fixed(),unpack_fixed()}
 end
 
+-- valid chars for model names
+function unpack_string()
+	local s=""
+	unpack_array(function()
+		s..=chr(mpeek())
+	end)
+	return s
+end
+
+-- 3d model reader
+function unpack_models()
+  _models={}
+    -- for all models
+	unpack_array(function()
+      local verts,faces={},{}
+      local model,name={f=faces},unpack_string()
+      printh("decoding:"..name)
+
+      -- vertices
+      unpack_array(function()
+        add(verts,unpack_v3())
+      end)
+      -- faces
+      unpack_array(function()
+        local flags,f=mpeek(),add(faces,{c=7})
+
+        -- quad?
+        f.ni=3+(flags&0x1)
+
+        -- vertex indices
+        for i=1,f.ni do
+          -- direct reference to vertex
+          f[i]=unpack_ref(verts)
+        end
+        -- normal
+        f.n=unpack_v3()
+        -- n.p cache
+        f.cp=v_dot(f.n,f[1])
+      end)
+    -- index by name
+    _models[name]=model
+  end)
+end
+
+-- bsp map reader
 function unpack_map()
   local verts,planes,faces,leaves,nodes,models,uvs={},{},{},{},{},{},{}
 
@@ -923,7 +1028,7 @@ function unpack_map()
     attach_node(false,node.flags&0x2!=0)
   end
   
-  -- unpack models
+  -- unpack "models"
   unpack_array(function()
     local bsp=unpack_ref(nodes)
     -- collision hull
@@ -953,5 +1058,8 @@ function unpack_map()
   -- unpack player position
   local plyr_pos,plyr_angle=unpack_v3(),unpack_fixed()
   
+  -- 3d models
+  unpack_models()
+
   return models[1],plyr_pos,plyr_angle
 end
