@@ -129,27 +129,28 @@ def pack_vector(co):
     return "{}{}{}".format(pack_fixed(co.x), pack_fixed(co.z), pack_fixed(co.y))
 
 # face flags bit layout:
-FACE_FLAG_QUAD = 0x1
+# --
 
 def pack_face(f, obcontext, loop_vert, gname=None, decals = None):
     s = ""
 
     vlen = len(f.loop_indices)
-    if vlen<3 or vlen>4:
-        raise Exception("Only tri or quad supported (#verts: {})".format(vlen))
+    if vlen<3 or vlen>256:
+        raise Exception("Only valid polygons supported (#verts: {}/256)".format(vlen))
 
-    quad_bit = vlen==4 and FACE_FLAG_QUAD or 0
     if len(obcontext.material_slots)>0:
         slot = obcontext.material_slots[f.material_index]
         mat = slot.material
         # todo: extract texture+uv
     
     # flags
-    s += pack_byte(quad_bit)
+    s += pack_byte(0)
 
+    s += pack_byte(vlen)
+    
     # + vertex ids (= edge loop)
     for li in f.loop_indices:
-        s += pack_variant(loop_vert[li]+1) 
+        s += pack_variant(loop_vert[li]) 
 
     return s  
 

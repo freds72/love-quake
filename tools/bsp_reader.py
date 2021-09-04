@@ -856,9 +856,9 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
       s += pack_node(n)
     
     # load models 
-    models=[models[0]]
-    s += pack_variant(len(models))
-    for model in models:
+    logging.info("Packing models: {}".format(len(models)))
+    s += pack_variant(1)
+    for model in [models[0]]:
       s += pack_model(model)
     
     # level gameplay

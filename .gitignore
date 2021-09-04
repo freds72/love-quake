@@ -17,6 +17,8 @@ _label.png
 /maps/*.prt
 /maps/*-compile.map
 /maps/autosave
+*.blend1
+
 
 
 

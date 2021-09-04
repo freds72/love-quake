@@ -101,6 +101,17 @@ function make_m_from_euler(x,y,z)
 	  0,0,0,1}
 end
 
+function make_m_look_at(up,fwd)
+	local right=v_normz(v_cross(up,fwd))
+	fwd=v_cross(right,up)
+	return {
+		right[1],right[2],right[3],0,
+		up[1],up[2],up[3],0,
+		fwd[1],fwd[2],fwd[3],0,
+		0,0,0,1
+	}
+end
+
 -- returns basis vectors from matrix
 function m_right(m)
 	return {m[1],m[2],m[3]}
@@ -111,6 +122,12 @@ end
 function m_fwd(m)
 	return {m[9],m[10],m[11]}
 end
+function m_set_pos(m,v)
+	m[13]=v[1]
+	m[14]=v[2]
+	m[15]=v[3]
+end
+
 -- optimized 4x4 matrix mulitply
 function m_x_m(a,b)
 	local a11,a12,a13,a21,a22,a23,a31,a32,a33=a[1],a[5],a[9],a[2],a[6],a[10],a[3],a[7],a[11]
@@ -122,6 +139,13 @@ function m_x_m(a,b)
 			a11*b13+a12*b23+a13*b33,a21*b13+a22*b23+a23*b33,a31*b13+a32*b23+a33*b33,0,
 			a11*b14+a12*b24+a13*b34+a[13],a21*b14+a22*b24+a23*b34+a[14],a31*b14+a32*b24+a33*b34+a[15],1
 		}
+end
+
+-- inline matrix vector multiply invert
+-- inc. position
+function m_inv_x_v(m,v)
+	local x,y,z=v[1]-m[13],v[2]-m[14],v[3]-m[15]
+	return {m[1]*x+m[2]*y+m[3]*z,m[5]*x+m[6]*y+m[7]*z,m[9]*x+m[10]*y+m[11]*z}
 end
 
 function make_m_from_v_angle(up,angle)
@@ -138,8 +162,8 @@ end
 
 -- radix sort
 -- from james edge
-function rsort(buffer1,_len)
-  local buffer2, idx, count = {}, {}, {}
+function rsort(buffer1)
+  local len, buffer2, idx, count = #buffer1, {}, {}, {}
 
   for shift=0,5,5 do
     for i=0,31 do count[i] = 0 end
@@ -152,7 +176,7 @@ function rsort(buffer1,_len)
 
     for i=1,31 do count[i] += count[i-1] end
 
-    for i=_len,1,-1 do
+    for i=len,1,-1 do
       local k=idx[i]
       local c=count[k]
       buffer2[c] = buffer1[i]
@@ -234,54 +258,39 @@ function make_cam()
       -- collect convex spaces back to front
       visleaves={}
       collect_bsp(bsp,self.pos)
+      -- for all things on each leaves, pick closest leaf
+      for _,leaf in ipairs(visleaves) do
+        for thing in pairs(leaf.things) do
+          thing.visleaf=leaf
+        end
+      end
       return visleaves
     end,  
-    draw_model=function(self,model,m)
-      m=m_x_m(self.m,m)
-      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
-      local pts,v_cache,pos={},{},self.pos
-                  
-      for _,face in pairs(model.f) do   
-        local outcode,clipcode=0xffff,0
-        local np=face.ni
-        for k=1,np do
-          local v=face[k]
-          -- base index in verts array
-          local a=v_cache[v]
-          if not a then
-            local code,x,y,z=0,v[1],v[2],v[3]
-            local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-
-            -- znear=8
-            if az<8 then code=2 end
-            --if az>2048 then code|=1 end
-            if ax>az then code|=4
-            elseif ax<-az then code|=8 end
-            if ay>az then code|=16
-            elseif ay<-az then code|=32 end
-            -- save world space coords for clipping
-            -- to screen space
-            local w=64/az
-            a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
-            v_cache[v]=a
-          end
-          outcode&=a.outcode
-          clipcode+=a.outcode&2
-          pts[k]=a              
-        end
-        if outcode==0 then 
-          if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
-
-          if np>2 then
-            polyfill(pts,np,face.c)
-          end
-        end
-      end  
-    end,
     draw_faces=function(self,verts,faces,leaves)
-      local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(self.m)
-      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,pos={},{m1,m5,m9},{m2,m6,m10},{},{},{},{},self.pos
+      local v_cache_class={
+        __index=function(self,vi)
+          local m,code,x,y,z=self.m,0,verts[vi],verts[vi+1],verts[vi+2]
+          local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
 
+          -- znear=8
+          if az<8 then code=2 end
+          --if az>2048 then code|=1 end
+          if ax>az then code|=4
+          elseif ax<-az then code|=8 end
+          if ay>az then code|=16
+          elseif ay<-az then code|=32 end
+          -- save world space coords for clipping
+          -- to screen space
+          local w=64/az
+          local a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
+          self[vi]=a          
+          return a
+        end
+      }
+
+      local m=self.m
+      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
+      
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
@@ -293,32 +302,14 @@ function make_cam()
             local fn,side=faces[fi],faces[fi+2]
             -- some sectors are sharing faces
             -- make sure a face from a leaf is drawn only once
-            if not f_cache[fi] and plane_dot(fn,pos)<faces[fi+1]!=side then            
+            if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=side then            
               f_cache[fi]=true
-                          
+
               local face_verts,outcode,clipcode,uvi,uvs=faces[fi+4],0xffff,0,faces[fi+6]
               if (uvi!=-1) uvs={}
               local np=#face_verts
-              for k,vi in pairs(face_verts) do
-                -- base index in verts array
+              for k,vi in pairs(face_verts) do                
                 local a=v_cache[vi]
-                if not a then
-                  local code,x,y,z=0,verts[vi],verts[vi+1],verts[vi+2]
-                  local ax,ay,az=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
-
-                  -- znear=8
-                  if az<8 then code=2 end
-                  --if az>2048 then code|=1 end
-                  if ax>az then code|=4
-                  elseif ax<-az then code|=8 end
-                  if ay>az then code|=16
-                  elseif ay<-az then code|=32 end
-                  -- save world space coords for clipping
-                  -- to screen space
-                  local w=64/az
-                  a={ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
-                  v_cache[vi]=a
-                end
                 outcode&=a.outcode
                 clipcode+=a.outcode&2
                 pts[k]=a              
@@ -327,8 +318,8 @@ function make_cam()
                 end
               end
               if outcode==0 then 
-                if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
-
+                if(np>2 and clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
+                -- still a valid polygon?
                 if np>2 then
                   if uvi!=-1 then
                     local u,v=fu_cache[fn],fv_cache[fn]
@@ -362,9 +353,44 @@ function make_cam()
           end
         end
         -- draw entities in this convex space
-        for thing,_ in pairs(leaf.things) do
-          thing:draw(self.m)
-        end        
+        if leaf.things then
+          local faces={}
+          for thing,_ in pairs(leaf.things) do
+            -- collect all faces
+            if thing.visleaf==leaf then
+              -- model to cam + cam pos in model space
+              local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
+                          
+              for _,face in pairs(thing.model.f) do  
+                if v_dot(face.n,cam_pos)>face.cp then
+                  local pts,np,outcode,clipcode,w={},face.ni,0xffff,0,0
+                  for k=1,np do
+                    -- base index in verts array
+                    local a=v_cache[face[k]]
+                    outcode&=a.outcode
+                    clipcode+=a.outcode&2
+                    pts[k]=a
+                    w+=a.w              
+                  end
+                  if outcode==0 then 
+                    if(np>2 and clipcode>0) pts,np,uvs=z_poly_clip(pts,np)
+          
+                    if np>2 then
+                      pts.f=face
+                      pts.key=(w/face.ni)<<8
+                      add(faces,pts)
+                    end
+                  end
+                end  
+              end
+            end
+          end 
+          -- render in order
+          rsort(faces)       
+          for _,pts in ipairs(faces) do
+            polyfill(pts,#pts,7)
+          end
+        end
       end
     end
   }
@@ -467,61 +493,16 @@ function make_player(pos,a)
       -- fire?
       fire_ttl=max(fire_ttl-1)
       if fire_ttl==0 and btn(5) then
+        --[[
         make_particle(
           v_add(v_add(self.pos,m_up(self.m),18+rnd(4)),m_right(self.m),4-rnd(8)),
           m_fwd(self.m),
           24+rnd(8))  
+        ]]
         fire_ttl=5      
       end
     end
   } 
-end
-
-function make_particle(pos,fwd,vel)
-  local p=add(_particles,{
-    pos=pos,
-    fwd=fwd,
-    vel=vel,
-    ttl=90,
-    col=12+rnd(2),
-    nodes={},
-    update=update_particle,
-    draw=draw_particles})
-  register_thing_subs(_model.bsp,p,0)
-end
-
-function update_particle(self)
-  self.ttl-=1
-  -- 
-  unregister_thing_subs(self)
-  if(self.ttl<0) del(_particles,self) return
-
-  -- move
-  local next_pos=v_add(self.pos,self.fwd,self.vel)
-  -- gravity
-  next_pos[2]-=2
-  
-  local hits={}
-  if hitscan(_model.bsp,self.pos,next_pos,hits) and hits.n then
-    del(_particles,self) 
-    return  
-  end
-  self.prev_pos=self.pos
-  self.pos=next_pos
-  register_thing_subs(_model.bsp,self,0)
-end
-
-function draw_particles(self,m)
-  local m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16=unpack(m)
-  local x0,y0,z0=unpack(self.prev_pos)
-  local x1,y1,z1=unpack(self.pos)
-  local ax0,ay0,az0=m1*x0+m5*y0+m9*z0+m13,m2*x0+m6*y0+m10*z0+m14,m3*x0+m7*y0+m11*z0+m15
-  local ax1,ay1,az1=m1*x1+m5*y1+m9*z1+m13,m2*x1+m6*y1+m10*z1+m14,m3*x1+m7*y1+m11*z1+m15
-  -- to screen space
-  if az0>8 and az1>8 then
-    local w0,w1=64/az0,64/az1
-    line(63.5+ax0*w0,63.5-ay0*w0,63.5+ax1*w1,63.5-ay1*w1,self.col)
-  end
 end
 
 local _skulls={}
@@ -531,14 +512,20 @@ function make_skull(pos,up)
     period=4+rnd(4),
     m=make_m_from_v_angle(up,0),
     nodes={},
-    update=update_skull,
-    draw=draw_skull})
+    -- test
+    model=_models.cube,
+    update=update_skull})
   register_thing_subs(_model.bsp,p,4)
   add(_skulls,p)
+  --
+  m_set_pos(p.m,p.pos)
 end
 
 function update_skull(self)
-  local velocity=v_normz(make_v(self.pos,_plyr.pos),0.8)
+  local velocity=v_normz(make_v(self.pos,v_add(_plyr.pos,{0,48,0})))
+  -- update orientation
+  self.m=make_m_look_at({0,1,0},velocity)
+
   -- avoid other skulls
   for _,other in pairs(_skulls) do
     if other!=self then
@@ -579,36 +566,9 @@ function update_skull(self)
     unregister_thing_subs(self)
     local right=m_right(self.m)
     self.pos=v_add(self.pos,velocity)
-    self.reye=v_add(self.pos,right,4)
-    self.leye=v_add(self.pos,right,-4)
-    if rnd()>0.5 then
-      --make_blood(self.reye)
-      --make_blood(self.leye)
-    end
     register_thing_subs(_model.bsp,self,4)
   end
-end
-
-function draw_eye(x,y,w)
-  fillp(0xa5a5.8)
-  circfill(x,y,(2.4+rnd(0.5))*w,2) 
-  fillp()
-  circfill(x,y,1.4*w,12) 
-  circfill(x,y,w,13)
-end
-
-function draw_skull(self,m)
-  -- find eyes
-  local x,y,z=unpack(m_x_v(m,self.pos))
-  local x0,y0,z0=unpack(m_x_v(m,self.reye))
-  local x1,y1,z1=unpack(m_x_v(m,self.leye))
-  local w0,w1,w=64/z0,64/z1,64/z
-  fillp(0xa5a5.8)
-  circfill(63.5+x*w,63.5-y*w,9.4*w,7)
-  fillp()
-  circfill(63.5+x*w,63.5-y*w,8*w,7)
-  if(z0>8) draw_eye(63.5+x0*w0,63.5-y0*w0,w0)
-  if(z1>8) draw_eye(63.5+x1*w1,63.5-y1*w1,w1)
+  m_set_pos(self.m,self.pos)
 end
 
 -->8
@@ -739,7 +699,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,5 do
-    --ake_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
@@ -759,15 +719,6 @@ function _draw()
   
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves)
-
-  local m=m_x_m(make_m_from_euler(0,time()/8,0),{
-    10,0,0,0,
-    0,10,0,0,
-    0,0,10,0,
-    0,40,0,1
-  })
-  _cam:draw_model(_models.cube,m)
-  -- _cam:draw_points({_plyr.pos})
 
   local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves
   print(s,2,3,1)
@@ -801,10 +752,6 @@ function unpack_array(fn,name)
   if(name) printh(name..":"..stat(0)-mem0.."kb")
 end
 
-function unpack_chr()
-  return chr(mpeek())
-end
-
 -- reference
 function unpack_ref(a)
   local n=unpack_variant()
@@ -813,9 +760,13 @@ function unpack_ref(a)
   return r
 end
 
--- 3d vertex
-function unpack_v3()
-  return {unpack_fixed(),unpack_fixed(),unpack_fixed()}
+-- unpack a 3d vertex
+function unpack_vert(verts)
+  verts=verts or {}
+  for i=1,3 do
+    add(verts,unpack_fixed())
+  end
+  return verts
 end
 
 -- valid chars for model names
@@ -827,41 +778,6 @@ function unpack_string()
 	return s
 end
 
--- 3d model reader
-function unpack_models()
-  _models={}
-    -- for all models
-	unpack_array(function()
-      local verts,faces={},{}
-      local model,name={f=faces},unpack_string()
-      printh("decoding:"..name)
-
-      -- vertices
-      unpack_array(function()
-        add(verts,unpack_v3())
-      end)
-      -- faces
-      unpack_array(function()
-        local flags,f=mpeek(),add(faces,{c=7})
-
-        -- quad?
-        f.ni=3+(flags&0x1)
-
-        -- vertex indices
-        for i=1,f.ni do
-          -- direct reference to vertex
-          f[i]=unpack_ref(verts)
-        end
-        -- normal
-        f.n=unpack_v3()
-        -- n.p cache
-        f.cp=v_dot(f.n,f[1])
-      end)
-    -- index by name
-    _models[name]=model
-  end)
-end
-
 -- bsp map reader
 function unpack_map()
   local verts,planes,faces,leaves,nodes,models,uvs={},{},{},{},{},{},{}
@@ -869,11 +785,9 @@ function unpack_map()
   printh("------------------------")
   -- vertices
   local vert_sizeof=3
+
   unpack_array(function()
-    local x,y,z=unpack(unpack_v3())
-    add(verts,x)
-    add(verts,y)
-    add(verts,z)
+    unpack_vert(verts)
   end,"verts")
 
   -- planes
@@ -898,9 +812,8 @@ function unpack_map()
 
   unpack_array(function()  
     -- coords
-    for i=1,4 do
-      add(planes,unpack_fixed())
-    end
+    unpack_vert(planes)
+    add(planes,unpack_fixed())
     -- plane type
     add(planes,mpeek())
   end,"planes")  
@@ -908,9 +821,9 @@ function unpack_map()
   -- temporary array
   unpack_array(function()
     add(uvs,{
-      s=unpack_v3(),
+      s=unpack_vert(),
       u=unpack_fixed(),
-      t=unpack_v3(),
+      t=unpack_vert(),
       v=unpack_fixed()
     })
   end)
@@ -1056,10 +969,38 @@ function unpack_map()
 
   -- get top level node
   -- unpack player position
-  local plyr_pos,plyr_angle=unpack_v3(),unpack_fixed()
+  local plyr_pos,plyr_angle=unpack_vert(),unpack_fixed()
   
   -- 3d models
-  unpack_models()
+  _models={}
+    -- for all models
+	unpack_array(function()
+      local faces={}
+      local model,name={f=faces},unpack_string()
+      printh("decoding:"..name)
+
+      -- vertices
+      local base=#verts+1
+      unpack_array(function()
+        unpack_vert(verts)
+      end)
+      -- faces
+      unpack_array(function()
+        local flags,f=mpeek(),add(faces,{c=7,ni=mpeek()})
+
+        -- vertex indices
+        for i=1,f.ni do
+          -- direct reference to vertex
+          f[i]=base+vert_sizeof*unpack_variant()
+        end
+        -- normal
+        f.n=unpack_vert()
+        -- n.p cache
+        f.cp=v_dot(f.n,{verts[base],verts[base+1],verts[base+1]})
+      end)
+    -- index by name
+    _models[name]=model
+  end)
 
   return models[1],plyr_pos,plyr_angle
 end
