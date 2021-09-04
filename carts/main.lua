@@ -705,7 +705,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,3 do
-    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
@@ -1000,7 +1000,7 @@ function unpack_map()
           -- direct reference to vertex
           f[i]=base+vert_sizeof*unpack_variant()
           -- uvs
-          add(uvs,{mpeek()/8+64,mpeek()/8})
+          add(uvs,{mpeek()/8+64,4-mpeek()/8})
         end
         -- normal
         f.n=unpack_vert()

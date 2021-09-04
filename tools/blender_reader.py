@@ -131,10 +131,10 @@ def pack_vector(co):
 # face flags bit layout:
 # --
 
-def pack_face(f, obcontext, loop_vert, gname=None, decals = None):
+def pack_face(bm, f, obcontext):
     s = ""
 
-    vlen = len(f.loop_indices)
+    vlen = len(f.loops)
     if vlen<3 or vlen>256:
         raise Exception("Only valid polygons supported (#verts: {}/256)".format(vlen))
 
@@ -149,17 +149,11 @@ def pack_face(f, obcontext, loop_vert, gname=None, decals = None):
     s += pack_byte(vlen)
     
     # + uv's
-    uv_layer = None
-    try:
-        uv_act = obcontext.data.uv_layers["UVMap"]
-        uv_layer = uv_act.data if uv_act is not None else EmptyUV()
-    except Exception as e:
-        raise Exception("No UV map")
-
+    uv_layer = bm.loops.layers.uv["UVMap"]
     # + vertex ids + uvs (= edge loop)
-    for li in f.loop_indices:
-        s += pack_variant(loop_vert[li]) 
-        uv = uv_layer[li].uv
+    for loop in f.loops:
+        s += pack_variant(loop.vert.index) 
+        uv = loop[uv_layer].uv
         # align to pico8 tile boundaries
         # todo: read uv map size?
         s += pack_byte(int(round(32*uv[0])))
@@ -177,19 +171,15 @@ def pack_layer(layer):
     bm = bmesh.new()
     bm.from_mesh(obdata)
 
-    # create a map loop index -> vertex index (see: https://www.python.org/dev/peps/pep-0274/)
-    loop_vert = {l.index:l.vertex_index for l in obdata.loops}
-
     # all vertices
-    s += pack_variant(len(obdata.vertices))
-    for v in obdata.vertices:
+    s += pack_variant(len(bm.verts))
+    for v in bm.verts:
         s += pack_vector(v.co)
 
     # faces 
-    polygons = obdata.polygons
-    s += pack_variant(len(polygons))
-    for f in polygons:
-        s += pack_face(f, obcontext, loop_vert)      
+    s += pack_variant(len(bm.faces))
+    for f in bm.faces:
+        s += pack_face(bm, f, obcontext)      
 
         # normal
         s += pack_vector(f.normal)    
