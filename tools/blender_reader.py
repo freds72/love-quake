@@ -148,10 +148,23 @@ def pack_face(f, obcontext, loop_vert, gname=None, decals = None):
 
     s += pack_byte(vlen)
     
-    # + vertex ids (= edge loop)
+    # + uv's
+    uv_layer = None
+    try:
+        uv_act = obcontext.data.uv_layers["UVMap"]
+        uv_layer = uv_act.data if uv_act is not None else EmptyUV()
+    except Exception as e:
+        raise Exception("No UV map")
+
+    # + vertex ids + uvs (= edge loop)
     for li in f.loop_indices:
         s += pack_variant(loop_vert[li]) 
-
+        uv = uv_layer[li].uv
+        # align to pico8 tile boundaries
+        # todo: read uv map size?
+        s += pack_byte(int(round(32*uv[0])))
+        s += pack_byte(int(round(32*uv[1])))
+    
     return s  
 
 def pack_layer(layer):

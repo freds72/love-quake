@@ -9,10 +9,6 @@ local plane_dot,plane_isfront,plane_get
 local _maps,_texcoords={},{}
 local _content_types={{contents=-1},{contents=-2}}
 
--- bsp drawing helpers
-local _vis_mask=split("0x0000.0002,0x0000.0004,0x0000.0008,0x0000.0010,0x0000.0020,0x0000.0040,0x0000.0080,0x0000.0100,0x0000.0200,0x0000.0400,0x0000.0800,0x0000.1000,0x0000.2000,0x0000.4000,0x0000.8000,0x0001.0000,0x0002.0000,0x0004.0000,0x0008.0000,0x0010.0000,0x0020.0000,0x0040.0000,0x0080.0000,0x0100.0000,0x0200.0000,0x0400.0000,0x0800.0000,0x1000.0000,0x2000.0000,0x4000.0000,0x8000.0000",",",1)
-_vis_mask[0]=0x0000.0001
-
 -- maths & cam
 function lerp(a,b,t)
 	return a*(1-t)+b*t
@@ -238,11 +234,10 @@ function make_cam()
         prev_leaf=current_leaf
         visframe+=1
         -- find all visible leaves
-        local vis_mask=_vis_mask
         for i,bits in pairs(current_leaf.pvs) do
-          for j,mask in pairs(vis_mask) do
+          for j=0,31 do
             -- visible?
-            if bits&mask!=0 then
+            if bits&(0x0.0001<<j)!=0 then
               local leaf=all_leaves[(i<<5|j)+2]
               -- tag visible parents
               while leaf do
@@ -356,28 +351,30 @@ function make_cam()
         if leaf.things then
           local faces={}
           for thing,_ in pairs(leaf.things) do
-            -- collect all faces
+            -- collect all faces "closest" to camera
             if thing.visleaf==leaf then
               -- model to cam + cam pos in model space
               local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
                           
               for _,face in pairs(thing.model.f) do  
                 if v_dot(face.n,cam_pos)>face.cp then
-                  local pts,np,outcode,clipcode,w={},face.ni,0xffff,0,0
+                  local pts,uvs,np,outcode,clipcode,w={},{},face.ni,0xffff,0,0
                   for k=1,np do
                     -- base index in verts array
                     local a=v_cache[face[k]]
                     outcode&=a.outcode
                     clipcode+=a.outcode&2
                     pts[k]=a
+                    uvs[k]=face.uvs[k]
                     w+=a.w              
                   end
                   if outcode==0 then 
-                    if(np>2 and clipcode>0) pts,np,uvs=z_poly_clip(pts,np)
+                    if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
           
                     if np>2 then
                       pts.f=face
                       pts.key=(w/face.ni)<<8
+                      pts.uvs=uvs
                       add(faces,pts)
                     end
                   end
@@ -388,7 +385,16 @@ function make_cam()
           -- render in order
           rsort(faces)       
           for _,pts in ipairs(faces) do
-            polyfill(pts,#pts,7)
+            -- not needed (we take abs u)
+            local face=pts.f
+            local a=atan2(v_dot(face.n,cam_u),v_dot(face.n,cam_v))
+            -- normalized 2d vector
+            local u,v=sin(a),cos(a)
+            if abs(u)>abs(v) then
+              polytex_ymajor(pts,#pts,pts.uvs,v/u)
+            else
+              polytex_xmajor(pts,#pts,pts.uvs,u/v)
+            end                   
           end
         end
       end
@@ -698,8 +704,8 @@ function _init()
   -- 
   _cam=make_cam()
   _plyr=make_player(pos,angle)
-  for i=1,5 do
-    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+  for i=1,3 do
+    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
@@ -883,9 +889,9 @@ function unpack_map()
     -- convert to tline coords
     -- add(_maps,(size&0xf)>>16|(size\16)>>8)
     local height,size=mpeek(),mpeek()
-    local mw,tiles=add(_maps,4*size\height),add(_maps,{})
+    -- record stride (group of 4 bytes)
+    local mw,tiles=add(_maps,size\height),add(_maps,{})
     -- copy to ram    
-    mw/=4
     for i=0,size-1 do
       if i%mw==0 then
         -- record start of map span
@@ -986,12 +992,15 @@ function unpack_map()
       end)
       -- faces
       unpack_array(function()
-        local flags,f=mpeek(),add(faces,{c=7,ni=mpeek()})
+        local uvs={}
+        local flags,f=mpeek(),add(faces,{ni=mpeek(),uvs=uvs})
 
         -- vertex indices
         for i=1,f.ni do
           -- direct reference to vertex
           f[i]=base+vert_sizeof*unpack_variant()
+          -- uvs
+          add(uvs,{mpeek()/8+64,mpeek()/8})
         end
         -- normal
         f.n=unpack_vert()
