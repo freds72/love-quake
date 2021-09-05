@@ -366,7 +366,7 @@ function make_cam()
                     clipcode+=a.outcode&2
                     pts[k]=a
                     uvs[k]=face.uvs[k]
-                    w+=a.w              
+                    w+=a.w
                   end
                   if outcode==0 then 
                     if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
@@ -385,16 +385,8 @@ function make_cam()
           -- render in order
           rsort(faces)       
           for _,pts in ipairs(faces) do
-            -- not needed (we take abs u)
-            local face=pts.f
-            local a=atan2(v_dot(face.n,cam_u),v_dot(face.n,cam_v))
-            -- normalized 2d vector
-            local u,v=sin(a),cos(a)
-            if abs(u)>abs(v) then
-              polytex_ymajor(pts,#pts,pts.uvs,v/u)
-            else
-              polytex_xmajor(pts,#pts,pts.uvs,u/v)
-            end                   
+            -- models are rendered in "affine" mode
+            polytex_ymajor(pts,#pts,pts.uvs,0)
           end
         end
       end

@@ -80,7 +80,7 @@ function polytex_ymajor(v,n,uvs,slope)
 				local x0,u0,v0,u1,v1=x0,u0/w0,v0/w0,nodes_u[y],nodes_v[y]
 				if(x0>x1) x0,x1,u0,v0,u1,v1=x1,x0,u1,v1,u0,v0
 				local ddx=((x1+0x1.ffff)&-1)-(x0&-1)
-				clip(x0,0,ddx,127)		
+				clip(x0+1,0,ddx,127)		
 				local ddu,ddv=(u1-u0)/ddx,(v1-v0)/ddx
 				tline(0,y,127,y+offset,u0-x0*ddu,v0-x0*ddv,ddu,ddv)
 	  else
@@ -131,9 +131,7 @@ function polytex_xmajor(v,n,uvs,slope)
 				local y0,u0,v0,u1,v1=y0,u0/w0,v0/w0,nodes_u[x],nodes_v[x]
 				if(y0>y1) y0,y1,u0,v0,u1,v1=y1,y0,u1,v1,u0,v0
 				local ddy=((y1+0x1.ffff)&-1)-(y0&-1)
-				clip(0,y0,127,ddy)
-				-- line(x,0,x+offset,128)
-				--rectfill(x,y0,x,span,8)
+				clip(0,y0+1,127,ddy)
 				local ddu,ddv=(u1-u0)/ddy,(v1-v0)/ddy
 				tline(x,0,x+offset,127,u0-y0*ddu,v0-y0*ddv,ddu,ddv)
 	  else
