@@ -189,7 +189,7 @@ function make_cam()
   local visleaves,visframe,prev_leaf={},0
 
   -- unrolled true/false children traversing for performance
-  function collect_bsp(node,pos)
+  local function collect_bsp(node,pos)
     local side=plane_isfront(node.plane,pos)
     local child=node[not side]
     if child and child.visframe==visframe then
@@ -507,6 +507,7 @@ local _skulls={}
 function make_skull(pos,up)
   local p=add(_particles,{
     pos=pos,
+    focus=0.1+rnd(0.1),
     period=4+rnd(4),
     m=make_m_from_v_angle(up,0),
     nodes={},
@@ -522,7 +523,7 @@ end
 function update_skull(self)
   local velocity=v_normz(make_v(self.pos,v_add(_plyr.pos,{0,48,0})))
   -- update orientation
-  self.m=make_m_look_at({0,1,0},velocity)
+  self.m=make_m_look_at({0,1,0},v_lerp(m_fwd(self.m),velocity,self.focus))
 
   -- avoid other skulls
   for _,other in pairs(_skulls) do
@@ -697,7 +698,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,3 do
-    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
