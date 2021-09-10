@@ -462,18 +462,30 @@ function make_player(pos,a)
       local c,s=cos(a),-sin(a)
       velocity=v_add(velocity,{s*dz-c*dx,jmp-2,c*dz+s*dx})          
       -- check next position
-      local vn,vl=v_normz(velocity)
+      local vn,vl=v_normz(velocity)      
       if vl>0.1 then
-
+        local next_pos=v_add(self.pos,velocity)
+        local vel2d=v_normz({vn[1],0,vn[3]})
+        local stairs=not is_empty(_model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,16,0}))
         -- check current to target pos
         for i=1,3 do
           local hits={}            
-          if hitscan(_model.clipnodes,self.pos,v_add(self.pos,velocity),hits) and hits.n then
+          if hitscan(_model.clipnodes,self.pos,next_pos,hits) and hits.n then
             local fix=v_dot(hits.n,velocity)
             -- separating?
             if fix<0 then
               velocity=v_add(velocity,hits.n,-fix)
+              -- wall hit
+              if abs(hits.n[2])<0.01 then
+                -- can we clear an edge?
+                if stairs then
+                  stairs=nil
+                  -- move up
+                  velocity=v_add(velocity,{0,10,0})
+                end
+              end
             end
+            next_pos=v_add(self.pos,velocity)
           else
             goto clear
           end
@@ -697,7 +709,7 @@ function _init()
   -- 
   _cam=make_cam()
   _plyr=make_player(pos,angle)
-  for i=1,3 do
+  for i=1,1 do
     --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
@@ -710,7 +722,7 @@ function _update()
     p:update()
   end
 
-  _cam:track(v_add(_plyr.pos,{0,48,0}),_plyr.m,_plyr.angle)
+  _cam:track(v_add(_plyr.pos,{0,32,0}),_plyr.m,_plyr.angle)
 end
 
 function _draw()

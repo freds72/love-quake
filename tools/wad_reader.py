@@ -177,7 +177,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   level_data += pack_models(os.path.join(carts_path,".."))
 
   if not test:
-    game_data = compress and compress_byte_str(level_data + blender_data, more=compress_more) or level_data
+    game_data = compress and compress_byte_str(level_data, more=compress_more) or level_data
 
     to_gamecart(carts_path, "q8k", None , sprite_data, compress, release)
 
