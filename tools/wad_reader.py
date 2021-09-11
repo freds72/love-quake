@@ -67,7 +67,7 @@ def read_colormap(stream):
         'rgb': palette.get_rgb(color_index),
         'ramp': [palette.get_pal_id(tuple(list(lump.read(3)))) for i in range(16)]
       })
-  return colormap      
+  return (colormap, hw_palette)
 
 # transpose colormap for archive
 def pack_colormap(colormap):
@@ -152,9 +152,12 @@ __lua__
     f.write(cart)
 
 # extract blender models
-def pack_models(home_path):
+def pack_models(home_path, palette):
     # data buffer
     blob = ""
+
+    # convert palette to parameter
+    colors = "".join(map(pack_byte, palette))
 
     # 3d models
     # todo: read from map?
@@ -165,7 +168,7 @@ def pack_models(home_path):
         fd, path = tempfile.mkstemp()
         try:
             os.close(fd)
-            exitcode, out, err = call([blender_exe,os.path.join(home_path,"models",blend_file + ".blend"),"--background","--python","blender_reader.py","--","--out",path])
+            exitcode, out, err = call([blender_exe,os.path.join(home_path,"models",blend_file + ".blend"),"--background","--python","blender_reader.py","--","--colors",colors,"--out",path])
             if err:
                 raise Exception('Unable to loadt: {}. Exception: {}'.format(blend_file,err))
             logging.debug("Blender exit code: {} \n out:{}\n err: {}\n".format(exitcode,out,err))
@@ -178,7 +181,7 @@ def pack_models(home_path):
 
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False, only_lightmap=False):
   # extract palette
-  colormap = read_colormap(stream)
+  colormap, palette = read_colormap(stream)
 
   raw_data = pack_colormap(colormap)
   
@@ -187,7 +190,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   raw_data += level_data
 
   # extract models
-  raw_data += pack_models(os.path.join(carts_path,".."))
+  raw_data += pack_models(os.path.join(carts_path,".."), palette)
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data

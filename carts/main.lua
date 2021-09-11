@@ -1007,7 +1007,7 @@ function unpack_map()
       -- faces
       unpack_array(function()
         local uvs={}
-        local flags,f=mpeek(),add(faces,{ni=mpeek(),uvs=uvs})
+        local flags,c,f=mpeek(),mpeek(),add(faces,{ni=mpeek(),uvs=uvs})
 
         -- vertex indices
         for i=1,f.ni do
