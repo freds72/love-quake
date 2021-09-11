@@ -69,6 +69,15 @@ def read_colormap(stream):
       })
   return colormap      
 
+# transpose colormap for archive
+def pack_colormap(colormap):
+  blob = ""
+  for ramp_index in range(16):
+    for color_index in range(16):
+      ramp = colormap[color_index].ramp
+      blob += pack_byte(colormap[ramp[ramp_index]].hw)
+  return blob
+
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
@@ -171,13 +180,17 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   # extract palette
   colormap = read_colormap(stream)
 
-  # extract data
+  raw_data = pack_colormap(colormap)
+  
+  # extract data  
   level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap, only_lightmap)
+  raw_data += level_data
 
-  level_data += pack_models(os.path.join(carts_path,".."))
+  # extract models
+  raw_data += pack_models(os.path.join(carts_path,".."))
 
   if not test:
-    game_data = compress and compress_byte_str(level_data, more=compress_more) or level_data
+    game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data
 
     to_gamecart(carts_path, "q8k", None , sprite_data, compress, release)
 

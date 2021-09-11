@@ -235,10 +235,11 @@ function make_cam()
         visframe+=1
         -- find all visible leaves
         for i,bits in pairs(current_leaf.pvs) do
+          i<<=5
           for j=0,31 do
             -- visible?
             if bits&(0x0.0001<<j)!=0 then
-              local leaf=all_leaves[(i<<5|j)+2]
+              local leaf=all_leaves[(i|j)+2]
               -- tag visible parents
               while leaf do
                 -- already tagged?
@@ -704,7 +705,7 @@ function _init()
   reload()
 
   palt(0,false)
-  pal({129, 133, 5, 134, 143, 15, 130, 132, 4, 137, 9, 136, 8, 13, 12},1,1)
+  --pal({129, 133, 5, 134, 143, 15, 130, 132, 4, 137, 9, 136, 8, 13, 12},1,1)
 
   -- 
   _cam=make_cam()
@@ -736,6 +737,9 @@ function _draw()
   print(s,2,2,12)
 
   pset(64,64,15)  
+
+  -- set screen palette
+  memcpy(0x5f10,0x4300+16*8,16)
 end
 
 -->8
@@ -792,8 +796,13 @@ end
 -- bsp map reader
 function unpack_map()
   local verts,planes,faces,leaves,nodes,models,uvs={},{},{},{},{},{},{}
-
+  
   printh("------------------------")
+  -- color gradients (16 * 16 colors)
+  for i=0x4300,0x43ff do
+    poke(i,mpeek())
+  end
+
   -- vertices
   local vert_sizeof=3
 
