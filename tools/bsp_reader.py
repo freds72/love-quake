@@ -406,6 +406,28 @@ def alloc_block(w, h):
 
   return (True,x,y)
 
+def register_sprites(sprites, tex, tex_width, tex_height):
+  tiles = []
+  w,h = int(tex_width/8),int(tex_height/8)
+  for j in range(0,h):
+    for i in range(0,w):
+      data = bytes([])
+      for y in range(8):
+        # read nimbles
+        for x in range(0,8,2):
+          # print("{}/{}".format(i+x,j+y))
+          # image is using the pico palette (+transparency)
+          low = tex[(i*8 + x) + (j*8 + y) * tex_width]
+          high = tex[(i*8 + x + 1) + (j*8 + y) * tex_width]
+          data += bytes([high|low<<4])
+      tileid = 0
+      if data in sprites:
+        tileid = sprites.index(data)
+      else:
+        tileid = len(sprites)
+        sprites.append(data)          
+      tiles.append(tileid)
+  return tiles
 
 def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, lightmap_scale=16):  
   global lightmaps_img
@@ -538,28 +560,9 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         # enable texture
         flags |= 0x2
         # find out unique tiles (lighted) into pico8 sprites (8x8)
-        w,h = int(tex_width/8),int(tex_height/8)
-        for j in range(0,h):
-          for i in range(0,w):
-            data = bytes([])
-            for y in range(8):
-              # read nimbles
-              for x in range(0,8,2):
-                # print("{}/{}".format(i+x,j+y))
-                # image is using the pico palette (+transparency)
-                low = shaded_tex[(i*8 + x) + (j*8 + y) * tex_width]
-                high = shaded_tex[(i*8 + x + 1) + (j*8 + y) * tex_width]
-                data += bytes([high|low<<4])
-            tileid = 0
-            if data in sprites:
-              tileid = sprites.index(data)
-            else:
-              tileid = len(sprites)
-              sprites.append(data)
-            # register tile id
-            face_map.append(tileid)
+        face_map += register_sprites(sprites, shaded_tex, tex_width, tex_height)
         # register texture map
-        mapid = maps.register(w, h, face_map, wrap=wrap_tex, name=mip.name)
+        mapid = maps.register(int(tex_width/8), int(tex_height/8), face_map, wrap=wrap_tex, name=mip.name)
         
   s += "{:02x}".format(flags)
 
