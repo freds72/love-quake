@@ -78,8 +78,6 @@ def pack_double(x):
         raise Exception('Unable to convert: {} into a word: {}'.format(x,h))
     return h
 
-scene = bpy.context.scene
-
 # https://blender.stackexchange.com/questions/153048/blender-2-8-python-input-rgb-doesnt-match-hex-color-nor-actual-color
 # seriously???
 # import matplotlib.colors
@@ -159,7 +157,6 @@ def diffuse_to_p8color(rgb):
         # unknown color
         raise Exception('Unknown color: 0x{} ({})'.format(h, rgb))
 
-
 # Convert from Blender format to y-up format
 def pack_vector(co):
     return "{}{}{}".format(pack_fixed(co.x), pack_fixed(co.z), pack_fixed(co.y))
@@ -171,9 +168,9 @@ FACE_FLAG_UVMAP=0x2
 def pack_face(bm, f, obcontext, palette):
     s = ""
 
+    color = 0
     # face flags
-    dualsided_bit = 0
-    uvmap_bit = 0
+    flags = 0
 
     vlen = len(f.loops)
     if vlen<3 or vlen>256:
@@ -182,33 +179,41 @@ def pack_face(bm, f, obcontext, palette):
     if len(obcontext.material_slots)>0:
         slot = obcontext.material_slots[f.material_index]
         mat = slot.material
-        dualsided_bit = mat.use_backface_culling==False and FACE_FLAG_DUALSIDED or 0
-        # convert "hardware color" into palette index
-        color = diffuse_to_p8color(mat.diffuse_color)
-        if color not in palette:
-            raise Exception("Invalid color: {} (raw: {})".format(color, mat.diffuse_color))
+        flags |= mat.use_backface_culling==False and FACE_FLAG_DUALSIDED or 0
+        # if material use nodes, assumes "textured"
+        if mat.use_nodes:
+            flags |= FACE_FLAG_UVMAP
+        else:
+            # convert "hardware color" into palette index
+            color = diffuse_to_p8color(mat.diffuse_color)
+            if color not in palette:
+                raise Exception("HW color not found in palette: {} (palette: {})".format(color, palette))
     
-        color = palette.index(color)
-        # todo: extract texture+uv
+            color = palette.index(color)
     
     # flags
-    s += pack_byte(dualsided_bit | uvmap_bit)
+    s += pack_byte(flags)
 
-    # color
-    s += pack_byte(color)
-
-    # + uv's
-    uv_layer = bm.loops.layers.uv["UVMap"]
-    # + vertex ids + uvs (= edge loop)
+    # + vertex ids (= edge loop)
     s += pack_byte(vlen)    
     for loop in f.loops:
         s += pack_variant(loop.vert.index) 
-        uv = loop[uv_layer].uv
-        # align to pico8 tile boundaries
-        # todo: read uv map size?
-        s += pack_byte(int(round(32*uv[0])))
-        s += pack_byte(int(round(32*uv[1])))
-    
+
+    if flags & FACE_FLAG_UVMAP:
+        # + uv's
+        uv_layer = bm.loops.layers.uv["UVMap"]
+        # + vertex ids (= edge loop)
+        s += pack_byte(vlen)    
+        for loop in f.loops:
+            uv = loop[uv_layer].uv
+            # align to pico8 tile boundaries
+            # todo: read uv map size?
+            s += pack_byte(int(round(32*uv[0])))
+            s += pack_byte(int(round(32*uv[1])))
+    else:
+        # color
+        s += pack_byte(color)
+
     return s  
 
 def pack_layer(layer, palette):
@@ -237,6 +242,8 @@ def pack_layer(layer, palette):
     return s
 
 def write_model(path, colors):
+    scene = bpy.context.scene
+
     # model data
     blob = pack_layer(scene.collection.children["export"], list(bytearray.fromhex(colors)))
 
@@ -260,3 +267,6 @@ def main():
         sys.exit(repr(e))
     
     write_model(args.out, args.colors)
+
+if __name__ == '__main__':
+    main()

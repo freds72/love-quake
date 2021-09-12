@@ -240,10 +240,8 @@ function make_cam()
             -- visible?
             if bits&(0x0.0001<<j)!=0 then
               local leaf=all_leaves[(i|j)+2]
-              -- tag visible parents
-              while leaf do
-                -- already tagged?
-                if(leaf.visframe==visframe) break
+              -- tag visible parents (if not already tagged)
+              while leaf and leaf.visframe!=visframe do
                 leaf.visframe=visframe
                 leaf=leaf.parent
               end
@@ -358,15 +356,16 @@ function make_cam()
               local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
                           
               for _,face in pairs(thing.model.f) do  
-                if v_dot(face.n,cam_pos)>face.cp then
-                  local pts,uvs,np,outcode,clipcode,w={},{},face.ni,0xffff,0,0
+                -- dual sided or visible?
+                if face.dual or v_dot(face.n,cam_pos)>face.cp then
+                  local pts,np,outcode,clipcode,w,uvs={},face.ni,0xffff,0,0,face.uvs and {}
                   for k=1,np do
                     -- base index in verts array
                     local a=v_cache[face[k]]
                     outcode&=a.outcode
                     clipcode+=a.outcode&2
                     pts[k]=a
-                    uvs[k]=face.uvs[k]
+                    if(uvs) uvs[k]=face.uvs[k]
                     w+=a.w
                   end
                   if outcode==0 then 
@@ -385,9 +384,14 @@ function make_cam()
           end 
           -- render in order
           rsort(faces)       
-          for _,pts in ipairs(faces) do
+          for _,pts in ipairs(faces) do            
             -- models are rendered in "affine" mode
-            polytex_ymajor(pts,#pts,pts.uvs,0)
+            local face=pts.f
+            if face.color then
+              polyfill(pts,#pts,face.color)
+            else
+              polytex_ymajor(pts,#pts,pts.uvs,0)
+            end
           end
         end
       end
@@ -525,7 +529,7 @@ function make_skull(pos,up)
     m=make_m_from_v_angle(up,0),
     nodes={},
     -- test
-    model=_models.cube,
+    model=_models.hammer,
     update=update_skull})
   register_thing_subs(_model.bsp,p,4)
   add(_skulls,p)
@@ -619,7 +623,7 @@ function register_thing_subs(node,thing,radius)
   if node.contents then
     -- thing -> leaf
     thing.nodes[node]=true
-    -- reverse
+    -- leaf -> thing
     if(not node.things) node.things={}
     node.things[thing]=true
     return
@@ -711,7 +715,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,1 do
-    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
@@ -764,7 +768,7 @@ function unpack_array(fn,name)
 	for i=1,unpack_variant() do
 		fn(i)
 	end
-  if(name) printh(name..":"..stat(0)-mem0.."kb")
+  if(name) printh(name..":\t"..ceil(stat(0)-mem0).."kb")
 end
 
 -- reference
@@ -1006,15 +1010,23 @@ function unpack_map()
       end)
       -- faces
       unpack_array(function()
-        local uvs={}
-        local flags,c,f=mpeek(),mpeek(),add(faces,{ni=mpeek(),uvs=uvs})
+        local flags,f=mpeek(),add(faces,{ni=mpeek()})
 
+        if(flags&0x1!=0) f.dual=true
         -- vertex indices
         for i=1,f.ni do
           -- direct reference to vertex
           f[i]=base+vert_sizeof*unpack_variant()
-          -- uvs
-          add(uvs,{mpeek()/8+64,4-mpeek()/8})
+        end
+        if flags&0x2!=0 then
+          local uvs={}
+          for i=1,f.ni do
+            -- uvs
+            add(uvs,{mpeek()/8+64,4-mpeek()/8})
+          end
+          f.uvs=uvs
+        else
+          f.color=mpeek()
         end
         -- normal
         f.n=unpack_vert()
@@ -1023,7 +1035,7 @@ function unpack_map()
       end)
     -- index by name
     _models[name]=model
-  end)
+  end,"3d models")
 
   return models[1],plyr_pos,plyr_angle
 end

@@ -152,7 +152,7 @@ __lua__
     f.write(cart)
 
 # extract blender models
-def pack_models(home_path, palette):
+def pack_models(home_path, models, palette):
     # data buffer
     blob = ""
 
@@ -161,9 +161,8 @@ def pack_models(home_path, palette):
 
     # 3d models
     # todo: read from map?
-    file_list = ['cube']
-    blob += pack_variant(len(file_list))
-    for blend_file in file_list:
+    blob += pack_variant(len(models))
+    for blend_file in models:
         logging.info("Exporting: {}.blend".format(blend_file))
         fd, path = tempfile.mkstemp()
         try:
@@ -190,7 +189,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   raw_data += level_data
 
   # extract models
-  raw_data += pack_models(os.path.join(carts_path,".."), palette)
+  raw_data += pack_models(os.path.join(carts_path,".."), ["hammer"], palette)
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data

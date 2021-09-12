@@ -325,9 +325,9 @@ class MapAtlas():
         s += pack_int32(dw)
     return s
   
-  def register(self, width, height, texdata, wrap=True, name=None):
-    if width>128 or height>32:
-      raise Exception("Invalid texture size: {}x{}, exceeds 128x32".format(width, height))
+  def register(self, width, height, texdata, wrap=True, name=None):    
+    if width>32 or height>32:
+      raise Exception("Invalid texture size: {}x{}, max. 32x32".format(width, height))
     if len(texdata)!=width*height:
       raise Exception("Data & size mismatch: len {} vs. {}x{}".format(len(texdata), width, height))
     
@@ -407,7 +407,7 @@ def alloc_block(w, h):
   return (True,x,y)
 
 
-def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):  
+def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, lightmap_scale=16):  
   global lightmaps_img
 
   s = ""
@@ -463,7 +463,12 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
       u_max=math.ceil(u_max/16)
       v_max=math.ceil(v_max/16)
       
-      lightmap_width,lightmap_height=((u_max-u_min)+1, (v_max-v_min)+1)   
+      # default "scale" is 16 texels per world unit
+      lightmap_scale = 16 / lightmap_scale
+      if lightmap_scale not in [1,2]:
+        raise Exception("Unsupported lightmap scale: {} (must be 1 or 2 - check light compiler parameters".format(lightmap_scale))
+
+      lightmap_width,lightmap_height=(int(lightmap_scale*(u_max-u_min)+1), int(lightmap_scale*(v_max-v_min)+1)) 
 
       # print(mip.width,"/",lightmap_width, " ", mip.height, "/", lightmap_height)
 
@@ -476,7 +481,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
       tex_width, tex_height = mip.width, mip.height
       # debug - dump lightmap
       if face.lightofs!=-1:   
-        texel = 16             
+        texel = int(16 / lightmap_scale)
         tex_width, tex_height = lightmap_width*texel,lightmap_height*texel
         shaded_tex = {}
         # block,blockx,blocky = alloc_block(lightmap_width,lightmap_height)
@@ -532,7 +537,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap):
       if total_light>0 and baselight>0:
         # enable texture
         flags |= 0x2
-        # find out unique tiles (lighted)
+        # find out unique tiles (lighted) into pico8 sprites (8x8)
         w,h = int(tex_width/8),int(tex_height/8)
         for j in range(0,h):
           for i in range(0,w):
@@ -796,6 +801,11 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
 
     s = ""
 
+    # level config & gameplay elements
+    entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1')).entities
+
+    worldspawn = next(e for e in entities if e.classname=='worldspawn')    
+
     # all vertices
     logging.info("Packing vertices: {}".format(len(vertices)))
     s += pack_variant(len(vertices))
@@ -826,13 +836,13 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
     with stream.read(filename) as face_handle:
       s += pack_variant(len(faces))      
       for i,face in enumerate(tqdm(faces, desc="Packing faces")):
-        s += pack_face(face_handle, i, face, colormap, sprites, maps, only_lightmap)
+        s += pack_face(face_handle, i, face, colormap, sprites, maps, only_lightmap, lightmap_scale=worldspawn.get("_lightmap_scale", 16))
     
     # if lightmaps_img:
     #   lightmaps_img.save("lightmaps_{}.png".format(lightmaps_count))
 
     if len(sprites)>255:
-      raise Exception("Too many sprites registered ({}). Max: 255".format(len(sprites)))
+      raise Exception("Too many sprites registered {}/256".format(len(sprites)))
 
     # maps
     s += maps.pack()
@@ -861,8 +871,6 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
     for model in [models[0]]:
       s += pack_model(model)
     
-    # level gameplay
-    entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1')).entities
     s += pack_entities(entities)
 
     return (s, sprites)
