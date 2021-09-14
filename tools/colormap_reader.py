@@ -7,6 +7,7 @@ from collections import namedtuple
 from dotdict import dotdict
 from PIL import Image, ImageFilter
 from abstract_stream import Stream
+from python2pico import *
 
 # RGB to pico8 color index
 rgb_to_pico8={
@@ -85,51 +86,6 @@ def std_palette():
 def std_rgba_palette():
   return {(int(rgb[2:4],16),int(rgb[4:6],16),int(rgb[6:8],16),255):p8 for rgb,p8 in rgb_to_pico8.items() if p8<16}
 
-# helper methods for gradient/colormap manipulation
-class ColormapReader():
-  def __init__(self, stream):
-    palette_data = stream.read("PLAYPAL")
-    if len(palette_data)!=16*16*3:
-      raise Exception("Invalid 'PLAYPAL' palette size: {} - must be 16*16*3".format(len(palette_data)))
-    palette = []
-    for i in range(0,16*16*3,3*16):
-      i += 3*8
-      r,g,b = palette_data[i],palette_data[i+1],palette_data[i+2]
-      palette.append((r,g,b,255))
-    self.palette = palette
-    self.stream = stream
-  
-  # returns a pico8 compatible array of gradients
-  # use_palette : indicates if color should be checked against the class palette
-  def read(self, name, use_palette = False):
-    palette = None
-    if use_palette:
-      palette = self.palette
-
-    palette_data = self.stream.read(name)
-
-    # align color formats
-    if palette is not None:
-      palette = ["0x{:02x}{:02x}{:02x}".format(pal[0],pal[1],pal[2]) for pal in palette]
-
-    # transpose
-    columns = [[] for i in range(16)]
-    for i,rgb in enumerate(["0x{:02x}{:02x}{:02x}".format(palette_data[i],palette_data[i+1],palette_data[i+2]) for i in range(0,3*16*16,3)]):
-      if palette is None:
-        # get hardware color (inc. extended color ids)
-        p8 = rgb_to_pico8.get(rgb, None)
-        if p8 is None:
-          raise Exception("Unknown PICO8 color: {} in palette: {}".format(rgb, name))
-      else:
-        # remap hardware color identifiers (0-15/129-145) to palette index (0-15) (for shading gradients)
-        if rgb not in palette:
-          raise Exception("Unable to reference: {}  in remap palette: {}".format(rgb,palette))
-        p8 = palette.index(rgb)
-      c = i%16
-      columns[c].append(p8)
-    # flatten list
-    return [item for sublist in columns for item in sublist]
-
 # helper class to check or build a new palette
 class AutoPalette:  
   # palette: an array of (r,g,b,a) tuples
@@ -161,6 +117,10 @@ class AutoPalette:
   def get_pal_id(self, rgb):
     return self.palette.index(rgb)
 
+  # return the rgba color list
+  def raw(self):
+    return self.palette
+
   # returns a list of hardware colors matching the palette
   # label indicates if color coding should be using 'fake' hexa or standard
   def pal(self, label=False):
@@ -168,3 +128,38 @@ class AutoPalette:
     if label:
       encoding = rgb_to_label
     return list(map(encoding.get,map("0x{0[0]:02x}{0[1]:02x}{0[2]:02x}".format,self.palette)))
+
+# helper methods for gradient/colormap manipulation
+class ColormapReader():
+  def __init__(self, stream):
+    # read palette (e.g. all known colors)
+    # convention: 16 solid bars
+    palette = AutoPalette()
+    with stream.read("gfx/palette.lmp") as lump:
+      for i in range(16*16):
+        rgb = lump.read(3)
+        palette.register((rgb[0],rgb[1],rgb[2]))
+    
+    hw_palette = palette.pal()
+    colormap = {}
+    with stream.read("gfx/colormap.lmp") as lump:
+      for color_index in range(16):
+        colormap[color_index] = dotdict({
+          'id': color_index,
+          'hw': hw_palette[color_index],
+          'rgb': palette.get_rgb(color_index),
+          'ramp': [palette.get_pal_id(tuple(list(lump.read(3)))) for i in range(16)]
+        })
+    self.palette = palette
+    self.colors = colormap
+
+  # transpose colormap for archive
+  def pack(self):
+    blob = ""
+    colormap = self.colors
+    for ramp_index in range(16):
+      for color_index in range(16):
+        ramp = colormap[color_index].ramp
+        blob += pack_byte(colormap[ramp[ramp_index]].hw)
+    return blob
+

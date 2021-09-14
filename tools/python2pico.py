@@ -232,3 +232,32 @@ def minify_file(infile, outfile):
       main_code = rule[0].sub(rule[1],main_code)
     with open(outfile, "w", encoding='utf-8') as f:
       f.write(main_code)
+
+# de-duplicate 8x8 sprites from the given image
+# image must use logical colors (eg. 2 pixels per byte)
+def register_sprites(sprites, tex, tex_width, tex_height, max_id=None, hint=None):
+  tiles = []
+  w,h = int(tex_width/8),int(tex_height/8)
+  for j in range(0,h):
+    for i in range(0,w):
+      data = bytes([])
+      for y in range(8):
+        # read nimbles
+        for x in range(0,8,2):
+          # image is using the pico palette (+transparency)
+          low = tex[(i*8 + x) + (j*8 + y) * tex_width]
+          high = tex[(i*8 + x + 1) + (j*8 + y) * tex_width]
+          data += bytes([high|low<<4])
+      tileid = 0
+      if data in sprites:
+        tileid = sprites.index(data)
+      else:
+        tileid = len(sprites)
+        sprites.append(data)   
+      if max_id and tileid>max_id:
+        msg = "Invalid sprite id: {} max: {}".format(tileid, max_id)
+        if hint:
+          msg += "\n{}".format(hint)
+        raise Exception(msg)
+      tiles.append(tileid)
+  return tiles

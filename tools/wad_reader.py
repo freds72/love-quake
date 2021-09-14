@@ -7,7 +7,8 @@ import argparse
 from ctypes import *
 from collections import namedtuple
 from file_stream import FileStream
-from colormap_reader import AutoPalette
+from colormap_reader import ColormapReader
+from image_reader import ImageReader
 from tqdm import tqdm
 from bsp_reader import pack_bsp
 from python2pico import *
@@ -47,36 +48,6 @@ def compress_byte_str(s,raw=False,more=False):
   if raw:
     return compressed
   return "".join(map("{:02x}".format, compressed))
-
-def read_colormap(stream):
-  # read palette (e.g. all known colors)
-  # convention: 16 solid bars
-  palette = AutoPalette()
-  with stream.read("gfx/palette.lmp") as lump:
-    for i in range(16*16):
-      rgb = lump.read(3)
-      palette.register((rgb[0],rgb[1],rgb[2]))
-  
-  hw_palette = palette.pal()
-  colormap = {}
-  with stream.read("gfx/colormap.lmp") as lump:
-    for color_index in range(16):
-      colormap[color_index] = dotdict({
-        'id': color_index,
-        'hw': hw_palette[color_index],
-        'rgb': palette.get_rgb(color_index),
-        'ramp': [palette.get_pal_id(tuple(list(lump.read(3)))) for i in range(16)]
-      })
-  return (colormap, hw_palette)
-
-# transpose colormap for archive
-def pack_colormap(colormap):
-  blob = ""
-  for ramp_index in range(16):
-    for color_index in range(16):
-      ramp = colormap[color_index].ramp
-      blob += pack_byte(colormap[ramp[ramp_index]].hw)
-  return blob
 
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
@@ -152,12 +123,18 @@ __lua__
     f.write(cart)
 
 # extract blender models
-def pack_models(home_path, models, palette):
+def pack_models(home_path, models, colormap):
     # data buffer
     blob = ""
 
-    # convert palette to parameter
-    colors = "".join(map(pack_byte, palette))
+    # convert HW palette to parameter
+    colors = "".join(map(pack_byte, colormap.palette.pal()))
+
+    # uv map (single file)
+    uvpath = os.path.join(home_path,"models","uv.png")
+    if os.path.exists(uvpath):
+      logging.info("Packing UV map: {}".format(uvpath))
+      blob += pack_image(uvpath)
 
     # 3d models
     # todo: read from map?
@@ -180,16 +157,17 @@ def pack_models(home_path, models, palette):
 
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False, only_lightmap=False):
   # extract palette
-  colormap, palette = read_colormap(stream)
+  colormap = ColormapReader(stream)
 
-  raw_data = pack_colormap(colormap)
-  
+  raw_data = colormap.pack()
+  uv = ImageReader(colormap.palette.raw()).read(stream, "progs/uvmap.png")
+
   # extract data  
-  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap, only_lightmap)
+  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap.colors, only_lightmap)
   raw_data += level_data
 
   # extract models
-  raw_data += pack_models(os.path.join(carts_path,".."), ["hammer"], palette)
+  raw_data += pack_models(os.path.join(carts_path,".."), ["hammer"], colormap)
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data

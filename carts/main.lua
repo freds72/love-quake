@@ -62,7 +62,10 @@ end
 function v_len(v)
 	local x,y,z=v[1],v[2],v[3]
   -- pick major
-  local d=max(max(abs(x),abs(y)),abs(z))
+  -- abs: 2.5 cycles
+  -- masking: 1 cycle
+  -- credits: https://twitter.com/pxlshk
+  local d=max(max(x^^(x>>31),y^^(y>>31)),z^^(z>>31))
   -- adjust
   x/=d
   y/=d
@@ -333,7 +336,8 @@ function make_cam()
                       poke4(dst,peek4(src,stride))
                     end
 
-                    if abs(u)>abs(v) then
+                    local umask,vmask=u>>31,v>>31                    
+                    if u^^umask>v^^vmask then
                       polytex_ymajor(pts,np,uvs,v/u)
                     else
                       polytex_xmajor(pts,np,uvs,u/v)
@@ -715,7 +719,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,1 do
-    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
