@@ -52,7 +52,7 @@ def compress_byte_str(s,raw=False,more=False):
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
-def to_gamecart(carts_path, name, map_data, gfx_data, compress=False, release=None):
+def to_gamecart(carts_path, name, map_data, map_width, gfx_data, compress=False, release=None):
   cart="""\
 pico-8 cartridge // http://www.pico-8.com
 version 29
@@ -94,10 +94,10 @@ __lua__
   cart += "\n"
 
   # pad map
-  # map_data = ["".join(map("{:02x}".format,map_data[i:i+width] + [0]*(128-width))) for i in range(0,len(map_data),width)]
-  # map_data = "".join(map_data)
-  # cart += "__map__\n"
-  # cart += re.sub("(.{256})", "\\1\n", map_data, 0, re.DOTALL)
+  map_data = ["".join(map("{:02x}".format,map_data[i:i+map_width] + [0]*(128-map_width))) for i in range(0,len(map_data),map_width)]
+  map_data = "".join(map_data)
+  cart += "__map__\n"
+  cart += re.sub("(.{256})", "\\1\n", map_data, 0, re.DOTALL)
 
   # music and sfx (from external cart)
   # group cart?
@@ -130,12 +130,6 @@ def pack_models(home_path, models, colormap):
     # convert HW palette to parameter
     colors = "".join(map(pack_byte, colormap.palette.pal()))
 
-    # uv map (single file)
-    uvpath = os.path.join(home_path,"models","uv.png")
-    if os.path.exists(uvpath):
-      logging.info("Packing UV map: {}".format(uvpath))
-      blob += pack_image(uvpath)
-
     # 3d models
     # todo: read from map?
     blob += pack_variant(len(models))
@@ -163,7 +157,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   uv = ImageReader(colormap.palette.raw()).read(stream, "progs/uvmap.png")
 
   # extract data  
-  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap.colors, only_lightmap)
+  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap.colors, uv.sprites, only_lightmap)
   raw_data += level_data
 
   # extract models
@@ -172,7 +166,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data
 
-    to_gamecart(carts_path, "q8k", None , sprite_data, compress, release)
+    to_gamecart(carts_path, "q8k", uv.tiles, uv.tiles_width , sprite_data, compress, release)
 
     # export to game
     to_multicart(game_data, pico_path, carts_path, "q8k")  

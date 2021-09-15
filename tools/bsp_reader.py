@@ -747,7 +747,7 @@ def read_miptex(f, entry):
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
-def pack_bsp(stream, filename, colormap, only_lightmap):
+def pack_bsp(stream, filename, colormap, sprites, only_lightmap):
   with stream.read(filename) as bsp_handle:
     header = dheader_t.read_from(bsp_handle)
 
@@ -810,8 +810,6 @@ def pack_bsp(stream, filename, colormap, only_lightmap):
       s += pack_texture(tex)
 
     # all faces
-    # all texture sprites
-    sprites = []
     # maps
     maps = MapAtlas()
 

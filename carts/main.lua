@@ -288,6 +288,8 @@ function make_cam()
       local m=self.m
       local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
       
+      -- lightmaps are copied to the 96x0 map location
+      poke(0x5f3a, 96)
       for j,leaf in ipairs(leaves) do
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
@@ -352,6 +354,7 @@ function make_cam()
         end
         -- draw entities in this convex space
         if leaf.things then
+          poke(0x5f3a, 0)
           local faces={}
           for thing,_ in pairs(leaf.things) do
             -- collect all faces "closest" to camera
@@ -917,7 +920,7 @@ function unpack_map()
     for i=0,size-1 do
       if i%mw==0 then
         -- record start of map span
-        tiles[0x2000+((i\mw)<<7)]=maps_addr
+        tiles[0x2060+((i\mw)<<7)]=maps_addr
       end
       poke4(maps_addr,unpack_fixed())
       maps_addr+=4

@@ -44,10 +44,10 @@ class ImageReader():
 
       # resize to multiple of 16x16
       # + force known image format
-      width = 16*(math.ceil(src_width/16))
-      height = 16*(math.ceil(src_height/16))
-      if width>64 or height>64:
-        raise Exception("Image: {} too large: {}x{} - must be 64x64 max.".format(name,width,height))
+      width = 8*(math.ceil(src_width/8))
+      height = 8*(math.ceil(src_height/8))
+      if width>512 or height>256:
+        raise Exception("Image: {} too large: {}x{}px - must be 512x256 max.".format(name,src_width,src_height))
 
       img = Image.new('RGBA', (width, height), (0,0,0,0))
       img.paste(src, (0,0,src_width,src_height))
@@ -67,12 +67,12 @@ class ImageReader():
       th = math.floor(height/8)
       # print("Processing: {} - {}x{} pix -> {}x{}".format(name,src_width,src_height,width,height))
 
-      sprites = []
-      frame_tiles = {}
+      sprites = [bytes([0]*64)]
+      frame_tiles = []
       tiles = 0
       for j in range(th):
         for i in range(tw):
-          # read 16x16 blocks
+          # read 8x8 blocks
           image_data = bytes([])
           for y in range(8):
             pixels = []
@@ -82,25 +82,27 @@ class ImageReader():
               low = self.pixel_to_pico(img, i*8 + x, j*8 + y, pico8_transparency)
               high = self.pixel_to_pico(img, i*8 + x + 1, j*8 + y, pico8_transparency)
               pixels.append(low|high<<4)
-          image_data += bytes(pixels[::-1])
+            image_data += bytes(pixels[::-1])
+          # skip tile 0 (transparent)
+          tileid = 0
           # skip fully transparent tile
           if not all(b==pico8_transparency|pico8_transparency<<4 for b in image_data):
             # remove duplicates (unlikely but "cheap" optimization)
-            tile_id = tiles
             if image_data in sprites:            
-              tile_id = sprites.index(image_data)
+              tileid = sprites.index(image_data)
             else:
+              tileid = len(sprites)
               sprites.append(image_data)
-              tiles += 1
-            # reference to corresponding tiles
-            frame_tiles[j*tw+i] = tile_id
+              tiles+=1
+          # reference to corresponding tiles
+          frame_tiles.append(tileid)
 
-      logging.info("Image: {} - tiles#: {}".format(name, tiles))
+      logging.info("Image: {} - unique tiles#: {}".format(name, tiles))
 
       return dotdict({
         'name': name,
         'tiles': frame_tiles,
-        'width':  tw,
-        'height': th,
+        'tiles_width':  tw,
+        'size_pixels': (src_width, src_height),
         'background': pico8_transparency,
         'sprites': sprites})
