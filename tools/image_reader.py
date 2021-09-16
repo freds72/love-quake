@@ -32,6 +32,7 @@ class ImageReader():
     return low
 
   # convert an image into a pair of tiles address and tiles data (binary)
+  # image must be 256x256
   def read(self, stream, name):
     logging.debug("Reading image: {}".format(name))
     with stream.read(name) as image_data:
@@ -40,23 +41,21 @@ class ImageReader():
       src_io = io.BytesIO(image_data.read())
 
       src = Image.open(src_io)
-      src_width, src_height = src.size
+      width, height = src.size
 
-      # resize to multiple of 16x16
+      # resize to multiple of 8x8
       # + force known image format
-      width = 8*(math.ceil(src_width/8))
-      height = 8*(math.ceil(src_height/8))
-      if width>512 or height>256:
-        raise Exception("Image: {} too large: {}x{}px - must be 512x256 max.".format(name,src_width,src_height))
+      if width!=256 and height!=256:
+        raise Exception("Invalid size for image: {} - must be 256x256.".format(name))
 
       img = Image.new('RGBA', (width, height), (0,0,0,0))
-      img.paste(src, (0,0,src_width,src_height))
+      img.paste(src, (0,0,width,height))
 
       # find a transparency color
       all_colors = set([rgba for rgba,i in self.rgba_to_pico.items() if i!=-1])
 
-      for j in range(src_height):
-        for i in range(src_width):
+      for j in range(width):
+        for i in range(height):
           rgba = img.getpixel((i,j))
           if rgba in all_colors: all_colors.remove(rgba)
       pico8_transparency = 0
@@ -103,6 +102,5 @@ class ImageReader():
         'name': name,
         'tiles': frame_tiles,
         'tiles_width':  tw,
-        'size_pixels': (src_width, src_height),
         'background': pico8_transparency,
         'sprites': sprites})

@@ -207,9 +207,10 @@ def pack_face(bm, f, obcontext, palette):
         for loop in f.loops:
             uv = loop[uv_layer].uv
             # align to pico8 tile boundaries
-            # todo: read uv map size?
-            s += pack_byte(int(round(32*uv[0])))
-            s += pack_byte(int(round(32*uv[1])))
+            # uv map must be 256x256
+            s += pack_byte(int(round(256*uv[0])))
+            # reverse image y
+            s += pack_byte(255-int(round(256*uv[1])))
     else:
         # color
         s += pack_byte(color)
