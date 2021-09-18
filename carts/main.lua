@@ -5,9 +5,17 @@
 local _particles,_cam,_plyr,_model,_models={}
 local plane_dot,plane_isfront,plane_get
 
--- texture coordinates + texture maps + s/t cache
-local _maps,_texcoords={},{}
-local _content_types={{contents=-1},{contents=-2}}
+-- lightmap memory address + flat u/v array + bsp content types
+local _maps,_texcoords,_content_types={},{},{}
+for i=1,6 do
+  -- -1: ordinary leaf
+  -- -2: the leaf is entirely inside a solid (nothing is displayed).
+  -- -3: Water, the vision is troubled.
+  -- -4: Slime, green acid that hurts the player.
+  -- -5: Lava, vision turns red and the player is badly hurt.   
+  -- -6 sky 
+  add(_content_types,{contents=-i})
+end
 
 -- maths & cam
 function lerp(a,b,t)
@@ -165,21 +173,21 @@ function rsort(buffer1)
   local len, buffer2, idx, count = #buffer1, {}, {}, {}
 
   for shift=0,5,5 do
-    for i=0,31 do count[i] = 0 end
+    for i=0,31 do count[i]=0 end
 
     for i,b in pairs(buffer1) do
       local k=(b.key>>shift)&31
-      idx[i] = k
-      count[k] += 1
+      idx[i]=k
+      count[k]+=1
     end
 
-    for i=1,31 do count[i] += count[i-1] end
+    for i=1,31 do count[i]+=count[i-1] end
 
     for i=len,1,-1 do
       local k=idx[i]
       local c=count[k]
-      buffer2[c] = buffer1[i]
-      count[k] = c-1
+      buffer2[c]=buffer1[i]
+      count[k]=c-1
     end
 
     buffer1, buffer2 = buffer2, buffer1
@@ -191,26 +199,22 @@ function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
-  -- unrolled true/false children traversing for performance
+  -- 
   local function collect_bsp(node,pos)
+    local function collect_leaf(side)
+      local child=node[side]
+      if child and child.visframe==visframe then
+        if child.contents then          
+          visleaves[#visleaves+1]=child
+        else
+          collect_bsp(child,pos)
+        end
+      end
+    end  
     local side=plane_isfront(node.plane,pos)
-    local child=node[not side]
-    if child and child.visframe==visframe then
-      if child.contents then
-        visleaves[#visleaves+1]=child
-      else
-        collect_bsp(child,pos)
-      end
-    end
-    local child=node[side]
-    if child and child.visframe==visframe then
-      if child.contents then
-        visleaves[#visleaves+1]=child
-      else
-        collect_bsp(child,pos)
-      end
-    end
-  end
+    collect_leaf(not side)
+    collect_leaf(side)
+  end  
 
 	return {
 		pos={0,0,0},    
@@ -288,9 +292,9 @@ function make_cam()
       local m=self.m
       local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
       
-      -- lightmaps are copied to the 96x0 map location
-      poke(0x5f3a, 96)
       for j,leaf in ipairs(leaves) do
+        -- lightmaps are copied to the 96x0 map location
+        poke(0x5f3a, 96)
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
           -- face index
@@ -685,16 +689,13 @@ function hitscan(node,p0,p1,out)
   local hit,otherhit=hitscan(node[side],p0,p10,out),hitscan(node[otherside],p10,p1,out)  
   if hit!=otherhit then
     -- not already registered?
-    if #out==0 then
+    if not out.n then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
       if is_empty(_model.clipnodes,p10) then
-        add(out,p10) 
         local scale=t<0 and -1 or 1
         local nx,ny,nz=plane_get(node.plane)
-        local n={scale*nx,scale*ny,scale*nz,node_dist}
-        p10.n=n
-        out.n=n
+        out.n={scale*nx,scale*ny,scale*nz,node_dist}
         out.t=frac
       end
     end
@@ -743,7 +744,9 @@ function _draw()
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves)
 
-  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves
+  local current_leaf=find_sub_sector(_model.bsp,_plyr.pos)
+
+  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves.."\ncontent:"..current_leaf.contents
   print(s,2,3,1)
   print(s,2,2,12)
 
@@ -936,7 +939,7 @@ function unpack_map()
       contents=mpeek()-128,
       pvs=pvs
     })
-    
+
     -- potentially visible set    
     unpack_array(function()
       pvs[unpack_variant()]=unpack_fixed()
@@ -1028,8 +1031,8 @@ function unpack_map()
         if flags&0x2!=0 then
           local uvs={}
           for i=1,f.ni do
-            -- uvs
-            add(uvs,{mpeek()/8+64,4-mpeek()/8})
+            -- uvs (rebased to a 256x256 picture)
+            add(uvs,{mpeek()>>8,mpeek()>>8})
           end
           f.uvs=uvs
         else
