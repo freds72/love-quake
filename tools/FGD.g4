@@ -23,6 +23,7 @@ classtype:
 
 classattribute:
   KEYWORD '(' (
+    (vectorproperty (',' vectorproperty)*) |
     (attributeproperty (',' attributeproperty)*) |
     ('{' untypedproperty* '}'))
   ')'
@@ -30,8 +31,12 @@ classattribute:
 
 attributeproperty:
   KEYWORD |
-  (NUMBER NUMBER*) |  
+  NUMBER |
   QUOTED_STRING
+  ;
+
+vectorproperty:
+  NUMBER NUMBER NUMBER
   ;
 
 classname:
@@ -86,10 +91,6 @@ optionkey:
 // lexer
 NUMBER
   : '-'? DIGIT+ ('.' DIGIT+)?
-  ;
-
-VEC3:
-  NUMBER NUMBER NUMBER
   ;
 
 QUOTED_STRING:

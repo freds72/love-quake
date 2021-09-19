@@ -34,6 +34,11 @@ class FGDVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by FGDParser#vectorproperty.
+    def visitVectorproperty(self, ctx:FGDParser.VectorpropertyContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by FGDParser#classname.
     def visitClassname(self, ctx:FGDParser.ClassnameContext):
         return self.visitChildren(ctx)

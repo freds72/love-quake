@@ -53,6 +53,15 @@ class FGDListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by FGDParser#vectorproperty.
+    def enterVectorproperty(self, ctx:FGDParser.VectorpropertyContext):
+        pass
+
+    # Exit a parse tree produced by FGDParser#vectorproperty.
+    def exitVectorproperty(self, ctx:FGDParser.VectorpropertyContext):
+        pass
+
+
     # Enter a parse tree produced by FGDParser#classname.
     def enterClassname(self, ctx:FGDParser.ClassnameContext):
         pass
