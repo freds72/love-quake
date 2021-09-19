@@ -7,6 +7,39 @@ from collections import namedtuple
 from dotdict import dotdict
 import logging
 
+class ClassDef:
+  def __init__(self, name, type):
+    self.name = name
+    self.type = type
+    self.bases = {}
+    self.properties = {}
+  def __repr__(self):
+    return type(self)
+  def __str__(self):
+    s = self.name + " @" + self.type
+    if len(self.bases)>0:
+      s += " : "
+      s += ",".join(self.bases.keys())
+    s += " "
+    s += str(self.properties)
+    return s
+  def addBaseClass(self, cls):
+    self.bases[cls.name] = cls
+    # flatten properties
+    for k,v in cls.properties.items():
+      self.add(k, v)
+
+  # find "name" property in self of base class
+  def add(self, name, value):
+    self.properties[name] = value
+
+  def get(self, name, default=None):
+    return self.properties.get(name, default)
+
+  # get all valued properties
+  def getAll(self):
+    return self.properties
+    
 class FGDWalker(FGDListener):     
     def __init__(self):
       self.result = dotdict({})
@@ -21,10 +54,7 @@ class FGDWalker(FGDListener):
       if classname in self.result:
         logging.warning("FGD class: {} already registered".format(classname))
 
-      classdef = dotdict({
-        'type': self.getText(ctx.classtype),
-        'bases': dotdict({})
-      })
+      classdef = ClassDef(classname, self.getText(ctx.classtype))
       self.result[classname] = classdef
 
       # extract class attributes (base class, size...)
@@ -37,7 +67,7 @@ class FGDWalker(FGDListener):
               if parentclass not in self.result:
                 raise Exception("Unknown parent class: {} defined for class: {}".format(parentclass, classname))
               # reference to parent
-              classdef.bases[parentclass] = self.result[parentclass]
+              classdef.addBaseClass(self.result[parentclass])
                     
       for prop in ctx.classprops().typedproperty():        
         name = self.getSafeText(prop.propertyname)        
@@ -57,7 +87,8 @@ class FGDWalker(FGDListener):
           elif name in ['angle','wait','delay']:
             value = float(value)
           # register property
-          classdef[name] = value
+          classdef.add(name, value)
+
       logging.debug("Found FGD class: {} = {}".format(classname, classdef))
 
 class FGDReader():
@@ -69,7 +100,8 @@ class FGDReader():
     walker = ParseTreeWalker()
 
     FGD_walker = FGDWalker()
-    walker.walk(FGD_walker, tree)    
+    walker.walk(FGD_walker, tree)   
+    self.result = FGD_walker.result
 
 if __name__ == '__main__':
   filename = "C:\\Users\\Frederic\\AppData\\Roaming\\TrenchBroom\\games\\q8k\\test.fgd"
