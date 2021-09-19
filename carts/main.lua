@@ -744,9 +744,7 @@ function _draw()
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves)
 
-  local current_leaf=find_sub_sector(_model.bsp,_plyr.pos)
-
-  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves.."\ncontent:"..current_leaf.contents
+  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves
   print(s,2,3,1)
   print(s,2,2,12)
 
