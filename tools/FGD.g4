@@ -44,7 +44,7 @@ classname:
   ;
 
 tooltip:
-  QUOTED_STRING
+  QUOTED_STRING ('+' QUOTED_STRING)*
   ;
 
 classprops:
