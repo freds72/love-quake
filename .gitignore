@@ -18,6 +18,8 @@ _label.png
 /maps/*-compile.map
 /maps/autosave
 *.blend1
+/env/
+
 
 
 

@@ -94,8 +94,8 @@ class StructHelper(object):
 class dentry_t(LittleEndianStructure, StructHelper):
   _pack_ = 1
   _fields_ = [
-    ("offset", c_long),
-    ("size", c_long)
+    ("offset", c_int),
+    ("size", c_int)
   ]
 
 class dheader_t(LittleEndianStructure, StructHelper):
@@ -494,9 +494,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
             # light = int((lightmaps[lexel]))
             # if block:
             #   lightmaps_img.putpixel((blockx+x,blocky+y),(light,light,light))
-            light=0
-            if lexel<len(lightmaps):
-              light = int((lightmaps[lexel] - baselight)/16)
+            light = int((lightmaps[lexel] - baselight)/16)
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):
