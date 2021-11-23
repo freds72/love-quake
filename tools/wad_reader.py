@@ -11,6 +11,7 @@ from colormap_reader import ColormapReader
 from image_reader import ImageReader
 from tqdm import tqdm
 from bsp_reader import pack_bsp
+from fgd_reader import FGDReader
 from python2pico import *
 from lzs import Codec
 from dotdict import dotdict
@@ -149,6 +150,25 @@ def pack_models(home_path, models, colormap):
             os.remove(path)
     return blob
 
+def pack_entities(entities):
+  blob = ""
+  # player start?
+  classnames=['info_player_start','info_player_deathmatch','testplayerstart']
+  player_starts=[e for e in entities if "classname" in e and e.classname in classnames]
+  if len(player_starts)==0:
+    logging.warning("Missing info_player_start entity in: {}".format(entities))
+    player_starts=[dotdict({
+      'classname':'debug_player_start',
+      'origin':dotdict({'x':0,'y':0,'z':0}),
+      'angle':0
+    })]
+  player_start = player_starts[0]
+  logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
+  blob += pack_vec3(player_start.origin)
+  blob += pack_fixed("angle" in player_start and player_start.angle or 0)
+  return blob
+
+
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False, only_lightmap=False):
   # extract palette
   colormap = ColormapReader(stream)
@@ -156,9 +176,19 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   raw_data = colormap.pack()
   uv = ImageReader(colormap.palette.raw()).read(stream, "progs/uvmap.png")
 
+  # get "game classes" (FGD)
+  fgd_classes = {}
+  # todo: parameter
+  filename = "C:\\Users\\Frederic\\AppData\\Roaming\\TrenchBroom\\games\\q8k\\q8k.fgd"
+  with open(filename,'r') as f:
+    reader = FGDReader(f.read())
+    fgd_classes = reader.result
+
   # extract data  
-  level_data,sprite_data = pack_bsp(stream, "maps/" + mapname + ".bsp", colormap.colors, uv.sprites, only_lightmap)
+  level_data,sprite_data,entities = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
+  
   raw_data += level_data
+  raw_data += pack_entities(entities)
 
   # extract models
   raw_data += pack_models(os.path.join(carts_path,".."), ["hammer"], colormap)

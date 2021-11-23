@@ -84,6 +84,10 @@ def pack_double(x):
         raise Exception('Unable to convert: {} into a word: {}'.format(x,h))
     return h
 
+def pack_vec3(v, scale=None):
+  scale = scale or 1
+  return pack_fixed(v.x * scale) + pack_fixed(v.y * scale) + pack_fixed(v.z * scale)
+
 # convert a byte array to a pico8 safe char set
 def bytes_to_base255(bs):    
     # safe pico chars

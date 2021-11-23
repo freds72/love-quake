@@ -487,14 +487,16 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         shaded_tex = {}
         # block,blockx,blocky = alloc_block(lightmap_width,lightmap_height)
         # draw = ImageDraw.Draw(img) 
-        # logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
+        logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
         for y in range(lightmap_height):
           for x in range(lightmap_width):
             lexel = face.lightofs+x+y*lightmap_width
             # light = int((lightmaps[lexel]))
             # if block:
             #   lightmaps_img.putpixel((blockx+x,blocky+y),(light,light,light))
-            light = int((lightmaps[lexel] - baselight)/16)
+            light=0
+            if lexel<len(lightmaps):
+              light = int((lightmaps[lexel] - baselight)/16)
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):
@@ -640,6 +642,7 @@ def pack_model(model):
     s += sc
   return s
 
+# convert compressed PVS into an array of 32bits numbers
 # https://mrelusive.com/publications/papers/Run-Length-Compression-of-Large-Sparse-Potential-Visible-Sets.pdf
 def unpack_node_pvs(node, model, cache):
   for k,child_id in enumerate(node.children):
@@ -684,29 +687,6 @@ def unpack_pvs(model, cache):
     if root_id<len(nodes): # ???      
       unpack_node_pvs(nodes[root_id], model, cache)
 
-def pack_entities(entities):
-  s = ""
-  # player start?
-  classnames=['info_player_start','info_player_deathmatch','testplayerstart']
-  player_starts=[e for e in entities if "classname" in e and e.classname in classnames]
-  if len(player_starts)==0:
-    logging.warning("Missing info_player_start entity in: {}".format(entities))
-    player_starts=[dotdict({
-      'classname':'debug_player_start',
-      'origin':dotdict({'x':0,'y':0,'z':0}),
-      'angle':0
-    })]
-  player_start = player_starts[0]
-  logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
-  s += pack_vec3(player_start.origin)
-  s += pack_fixed("angle" in player_start and player_start.angle or 0)
-    
-  return s
-
-def pack_vec3(v, scale=None):
-  scale = scale or 1
-  return pack_fixed(v.x * scale) + pack_fixed(v.y * scale) + pack_fixed(v.z * scale)
-
 def read_bytes(f, entry):
     f.seek(entry.offset)
     return f.read(entry.size)
@@ -747,7 +727,7 @@ def read_miptex(f, entry):
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
-def pack_bsp(stream, filename, colormap, sprites, only_lightmap):
+def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
   with stream.read(filename) as bsp_handle:
     header = dheader_t.read_from(bsp_handle)
 
@@ -784,7 +764,7 @@ def pack_bsp(stream, filename, colormap, sprites, only_lightmap):
     s = ""
 
     # level config & gameplay elements
-    entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1')).entities
+    entities = ENTITYReader(read_bytes(bsp_handle, header.entities).decode('iso-8859-1'), classes).entities
 
     worldspawn = next(e for e in entities if e.classname=='worldspawn')    
 
@@ -851,6 +831,4 @@ def pack_bsp(stream, filename, colormap, sprites, only_lightmap):
     for model in [models[0]]:
       s += pack_model(model)
     
-    s += pack_entities(entities)
-
-    return (s, sprites)
+    return (s, sprites, entities)
