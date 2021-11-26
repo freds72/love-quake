@@ -191,7 +191,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   raw_data += pack_entities(entities)
 
   # extract models
-  raw_data += pack_models(os.path.join(carts_path,".."), ["hammer"], colormap)
+  raw_data += pack_models(os.path.join(carts_path,".."), ["cube"], colormap)
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data
