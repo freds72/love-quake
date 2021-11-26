@@ -80,8 +80,8 @@ class ImageReader():
               # print(indexed_to_rgba[img.getpixel((i*16 + x + n, j*16 + y))])
               low = self.pixel_to_pico(img, i*8 + x, j*8 + y, pico8_transparency)
               high = self.pixel_to_pico(img, i*8 + x + 1, j*8 + y, pico8_transparency)
-              pixels.append(low|high<<4)
-            image_data += bytes(pixels[::-1])
+              pixels.append(high|low<<4)
+            image_data += bytes(pixels)
           # skip tile 0 (transparent)
           tileid = 0
           # skip fully transparent tile

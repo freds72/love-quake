@@ -203,7 +203,6 @@ def pack_face(bm, f, obcontext, palette):
         # + uv's
         uv_layer = bm.loops.layers.uv["UVMap"]
         # + vertex ids (= edge loop)
-        s += pack_byte(vlen)    
         for loop in f.loops:
             uv = loop[uv_layer].uv
             # align to pico8 tile boundaries

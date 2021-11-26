@@ -56,5 +56,3 @@ class ENTITYReader():
     ENTITY_walker = ENTITYWalker(classes)
     walker.walk(ENTITY_walker, tree)
     self.entities = ENTITY_walker.result
-
-    print(data)

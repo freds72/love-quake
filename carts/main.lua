@@ -358,7 +358,7 @@ function make_cam()
         end
         -- draw entities in this convex space
         if leaf.things then
-          poke(0x5f3a, 0)
+          poke(0x5f3a,0)
           local faces={}
           for thing,_ in pairs(leaf.things) do
             -- collect all faces "closest" to camera
@@ -540,7 +540,7 @@ function make_skull(pos,up)
     m=make_m_from_v_angle(up,0),
     nodes={},
     -- test
-    model=_models.hammer,
+    model=_models.cube,
     update=update_skull})
   register_thing_subs(_model.bsp,p,4)
   add(_skulls,p)
@@ -723,7 +723,7 @@ function _init()
   _cam=make_cam()
   _plyr=make_player(pos,angle)
   for i=1,1 do
-    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
@@ -750,7 +750,7 @@ function _draw()
 
   pset(64,64,15)  
 
-  -- set screen palette
+  -- set screen palette (color ramp 8 is neutral)
   memcpy(0x5f10,0x4300+16*8,16)
 end
 
@@ -1030,7 +1030,7 @@ function unpack_map()
           local uvs={}
           for i=1,f.ni do
             -- uvs (rebased to a 256x256 picture)
-            add(uvs,{mpeek()>>8,mpeek()>>8})
+            add(uvs,{mpeek()/8,mpeek()/8})
           end
           f.uvs=uvs
         else

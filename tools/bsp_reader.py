@@ -487,7 +487,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         shaded_tex = {}
         # block,blockx,blocky = alloc_block(lightmap_width,lightmap_height)
         # draw = ImageDraw.Draw(img) 
-        logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
+        # logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
         for y in range(lightmap_height):
           for x in range(lightmap_width):
             lexel = face.lightofs+x+y*lightmap_width
