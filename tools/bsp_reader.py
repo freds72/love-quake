@@ -488,7 +488,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         tex_width, tex_height = lightmap_scale * lightmap_width,lightmap_scale * lightmap_height
         shaded_tex = {}
         # block,blockx,blocky = alloc_block(lightmap_width,lightmap_height)
-        img = Image.new('RGB', (tex_width, tex_height), (0,0,0))
+        # img = Image.new('RGB', (tex_width, tex_height), (0,0,0))
 
         # draw = ImageDraw.Draw(img) 
         # logging.info("lightmap {}x{} @{}/{} - texmap: {}x{} pixels".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps), tex_width, tex_height))
@@ -517,7 +517,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
                 shade = colormap[colormap[color].ramp[light]]
                 total_light += shade.hw
                 shaded_tex[(u+texel_per_lexel*x)+(v+texel_per_lexel*y)*tex_width]=shade.id
-                img.putpixel((u+texel_per_lexel*x,v+texel_per_lexel*y),shade.rgb)
+                # img.putpixel((u+texel_per_lexel*x,v+texel_per_lexel*y),shade.rgb)
         # draw polygon boundaries
         # for i in range(len(face_verts)):
         #   vert0,vert1 = vertices[face_verts[i]], vertices[face_verts[(i+1)%len(face_verts)]]
@@ -526,7 +526,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         #   u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
         #   v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
         #   draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
-        img.save("face_{}.png".format(id))
+        # img.save("face_{}.png".format(id))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
         wrap_tex = False
