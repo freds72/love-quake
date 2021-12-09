@@ -307,7 +307,7 @@ class MapAtlas():
     self.length = 0
   # conver to a pico8 string
   def pack(self):
-    logging.info("Packing texture maps: {}".format(len(self.maps_index)))    
+    logging.info("Packing texture maps: {} ({} bytes)".format(len(self.maps_index),sum([len(self.maps[i+1])*4 for i in range(0,len(self.maps),2)])))
     s = pack_variant(self.length)    
     i = 0
     while i<len(self.maps):
@@ -322,7 +322,7 @@ class MapAtlas():
         s += "{:02x}".format(size.height)
       s += "{:02x}".format(len(padded_map))
       for dw in padded_map:
-        s += pack_int32(dw)
+        s += pack_int32(dw)    
     return s
   
   def register(self, width, height, texdata, wrap=True, name=None):    
