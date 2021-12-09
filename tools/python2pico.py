@@ -241,7 +241,7 @@ def minify_file(infile, outfile):
 # image must use logical colors (eg. 2 pixels per byte)
 def register_sprites(sprites, tex, tex_width, tex_height, max_id=None, hint=None):
   tiles = []
-  w,h = int(tex_width/8),int(tex_height/8)
+  w,h = tex_width // 8, tex_height // 8
   for j in range(0,h):
     for i in range(0,w):
       data = bytes([])

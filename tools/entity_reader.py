@@ -8,6 +8,7 @@ from ENTITYListener import ENTITYListener
 from collections import namedtuple
 from dotdict import dotdict
 from enum import IntFlag
+import logging
 
 class ENTITYWalker(ENTITYListener):     
     def __init__(self, classes):
@@ -38,7 +39,9 @@ class ENTITYWalker(ENTITYListener):
       
       # find defining class
       if classname not in self.classes:
-        raise Exception("Base class: {} not found for entity: {}".format(classname, ctx.getText()))
+        logging.warning("Base class: {} not found for entity: {}".format(classname, ctx.getText()))
+        return
+
       classdef = self.classes[classname]      
       for k,v in classdef.getAll().items():
         if k not in properties:

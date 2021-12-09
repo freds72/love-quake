@@ -330,11 +330,10 @@ class MapAtlas():
       raise Exception("Invalid texture size: {}x{}, max. 32x32".format(width, height))
     if len(texdata)!=width*height:
       raise Exception("Data & size mismatch: len {} vs. {}x{}".format(len(texdata), width, height))
-    
-    search_data = str([width+height*128] + texdata)
+
     id = 0
-    if search_data in self.maps_index:
-      id = self.maps_index[search_data]
+    if name in self.maps_index:
+      id = self.maps_index[name]
     else:
       # convert into a padded map
       padded = []
@@ -346,7 +345,7 @@ class MapAtlas():
           if texdata[x+y*width]>255:
             print("texture: {}x{} - data:{}".format(height, width, texdata))
           tmp.append(texdata[x+y*width])
-          mx = 4*int(x/4)
+          mx = 4*(x // 4)
           if len(tmp)>3:
             padded.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
             tmp = bytearray()
@@ -355,14 +354,14 @@ class MapAtlas():
           tmp += bytearray(max(0,4-len(tmp)))
           padded.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
       id = len(self.maps)
-      self.maps_index[search_data] = id
+      self.maps_index[name] = id
       self.maps.append(dotdict({
         'width': width,
         'height': height,
         'wrap': wrap
       }))
       self.maps.append(padded)
-      self.length += 1      
+      self.length += 1
     return id
 
 
@@ -410,6 +409,9 @@ def alloc_block(w, h):
 
 def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, lightmap_scale=16):  
   global lightmaps_img
+
+  if lightmap_scale not in [8,16]:
+    raise Exception("Unsupported lightmap scale: {} (must be 16 (default) or 8 - check lmscale compiler parameters".format(lightmap_scale))
 
   s = ""
   # supporting plane index
@@ -459,17 +461,13 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         u_max=max(u_max,u)
         v_max=max(v_max,v)
 
-      u_min=math.floor(u_min/16)
-      v_min=math.floor(v_min/16)
-      u_max=math.ceil(u_max/16)
-      v_max=math.ceil(v_max/16)
+      u_min=int(math.floor(u_min / lightmap_scale))
+      v_min=int(math.floor(v_min / lightmap_scale))
+      u_max=int(math.ceil(u_max / lightmap_scale))
+      v_max=int(math.ceil(v_max / lightmap_scale))
       
-      # default "scale" is 16 texels per world unit
-      lightmap_scale = 16 / lightmap_scale
-      if lightmap_scale not in [1,2]:
-        raise Exception("Unsupported lightmap scale: {} (must be 1 or 2 - check light compiler parameters".format(lightmap_scale))
-
-      lightmap_width,lightmap_height=(int(lightmap_scale*(u_max-u_min)+1), int(lightmap_scale*(v_max-v_min)+1)) 
+      # lightmap size
+      lightmap_width,lightmap_height=(u_max-u_min+1), (v_max-v_min+1) 
 
       # print(mip.width,"/",lightmap_width, " ", mip.height, "/", lightmap_height)
 
@@ -480,39 +478,46 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
       shaded_tex = []
       wrap_tex = True
       tex_width, tex_height = mip.width, mip.height
+      tex_name = mip.name
       # debug - dump lightmap
       if face.lightofs!=-1:   
-        texel = int(16 / lightmap_scale)
-        tex_width, tex_height = lightmap_width*texel,lightmap_height*texel
+        # scale 8  -> 8x8 pixels per lexel
+        # scale 16 -> 16x16 pixels per lexel (default)        
+        tex_name = mip.name + str(face.lightofs)
+        texel_per_lexel = lightmap_scale
+        tex_width, tex_height = lightmap_scale * lightmap_width,lightmap_scale * lightmap_height
         shaded_tex = {}
         # block,blockx,blocky = alloc_block(lightmap_width,lightmap_height)
+        img = Image.new('RGB', (tex_width, tex_height), (0,0,0))
+
         # draw = ImageDraw.Draw(img) 
-        # logging.info("lightmap {}x{} @{}/{}".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps)))
+        # logging.info("lightmap {}x{} @{}/{} - texmap: {}x{} pixels".format(lightmap_width,lightmap_height,face.lightofs,len(lightmaps), tex_width, tex_height))
         for y in range(lightmap_height):
           for x in range(lightmap_width):
             lexel = face.lightofs+x+y*lightmap_width
             # light = int((lightmaps[lexel]))
             # if block:
             #   lightmaps_img.putpixel((blockx+x,blocky+y),(light,light,light))
-            light = int((lightmaps[lexel] - baselight)/16)
+            light = (lightmaps[lexel] - baselight) // 16
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):
             #   for v in range(texel):
             #     shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id            
             # draw.rectangle((x<<4,y<<4,(x<<4)+15,(y<<4)+15),width=0,fill=(light,light,light))
-            for u in range(texel):
-              for v in range(texel):
+            u0, v0 = (u_min+x)*texel_per_lexel, (v_min+y)*texel_per_lexel
+            for u in range(texel_per_lexel):
+              for v in range(texel_per_lexel):
                 # sample texture color
                 color = 3
                 if only_lightmap==False:
-                  tx,ty = (u+(u_min+x)*texel)%mip.width,(v+(v_min+y)*texel)%mip.height
+                  tx,ty = (u0 + u)%mip.width,(v0 + v)%mip.height
                   color = mip.img[tx+ty*mip.width]
                 # shade from lightmap
                 shade = colormap[colormap[color].ramp[light]]
                 total_light += shade.hw
-                shaded_tex[(u+texel*x)+(v+texel*y)*tex_width]=shade.id
-                # img.putpixel((u+texel*x,v+texel*y),shade.rgb)
+                shaded_tex[(u+texel_per_lexel*x)+(v+texel_per_lexel*y)*tex_width]=shade.id
+                img.putpixel((u+texel_per_lexel*x,v+texel_per_lexel*y),shade.rgb)
         # draw polygon boundaries
         # for i in range(len(face_verts)):
         #   vert0,vert1 = vertices[face_verts[i]], vertices[face_verts[(i+1)%len(face_verts)]]
@@ -521,7 +526,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         #   u1=v_dot(vert1,tex.u_axis)+tex.u_offset-u_min*16
         #   v1=v_dot(vert1,tex.v_axis)+tex.v_offset-v_min*16
         #   draw.line((u0,v0, u1,v1), fill=(255,0,0), width=1)
-        # img.save("face_{}.png".format(id))
+        img.save("face_{}.png".format(id))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
         wrap_tex = False
@@ -541,7 +546,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         # find out unique tiles (lighted) into pico8 sprites (8x8)
         face_map += register_sprites(sprites, shaded_tex, tex_width, tex_height, 255, "Too many unique shaded tiles - try to reduce wall texture complexity and/or change lightning configuration")
         # register texture map
-        mapid = maps.register(int(tex_width/8), int(tex_height/8), face_map, wrap=wrap_tex, name=mip.name)
+        mapid = maps.register(tex_width // 8, tex_height // 8, face_map, wrap=wrap_tex, name=tex_name)
         
   s += "{:02x}".format(flags)
 
@@ -558,8 +563,8 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
     # texmap reference
     s += pack_variant(mapid + 1)
     # get uv min
-    s += pack_fixed(2*u_min)
-    s += pack_fixed(2*v_min)
+    s += pack_fixed((lightmap_scale * u_min) / 8)
+    s += pack_fixed((lightmap_scale * v_min) / 8)
 
   return s
 
