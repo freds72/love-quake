@@ -260,7 +260,7 @@ function make_cam()
       visleaves={}
       collect_bsp(bsp,self.pos)
       -- for all things on each leaves, pick closest leaf
-      for _,leaf in ipairs(visleaves) do
+      for leaf in all(visleaves) do
         for thing in pairs(leaf.things) do
           thing.visleaf=leaf
         end
@@ -292,9 +292,9 @@ function make_cam()
       local m=self.m
       local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
       
-      for j,leaf in ipairs(leaves) do
-        -- lightmaps are copied to the 96x0 map location
-        poke(0x5f3a, 96)
+      for leaf in all(leaves) do
+        -- lightmaps are copied to the 0x8000 location
+        poke(0x5f56, 0x80)
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
           -- face index
@@ -335,12 +335,9 @@ function make_cam()
                       fu_cache[fn]=u
                       fv_cache[fn]=v
                     end
+
                     -- copy texture to hw map
-                    local mi=faces[fi+7]
-                    local stride=_maps[mi]
-                    for dst,src in pairs(_maps[mi+1]) do
-                      poke4(dst,peek4(src,stride))
-                    end
+                    _maps[faces[fi+7]]()
 
                     local umask,vmask=u>>31,v>>31                    
                     if u^^umask>v^^vmask then
@@ -358,7 +355,8 @@ function make_cam()
         end
         -- draw entities in this convex space
         if leaf.things then
-          poke(0x5f3a,0)
+          -- default map location
+          poke(0x5f56,0x20)
           local faces={}
           for thing,_ in pairs(leaf.things) do
             -- collect all faces "closest" to camera
@@ -722,13 +720,12 @@ function _init()
   -- 
   _cam=make_cam()
   _plyr=make_player(pos,angle)
-  for i=1,1 do
-    make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
+  for i=1,2 do
+    --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
   end
 end
 
 function _update()
-
   _plyr:update()
   
   for p in all(_particles) do
@@ -910,21 +907,18 @@ function unpack_map()
   end,"faces")
 
   -- lightmap maps
-  local maps_addr=0x8000
   unpack_array(function()
     -- convert to tline coords
     -- add(_maps,(size&0xf)>>16|(size\16)>>8)
-    local height,size=mpeek(),mpeek()
+    local height,size,bytes=mpeek(),mpeek(),{}
     -- record stride (group of 4 bytes)
-    local mw,tiles=add(_maps,size\height),add(_maps,{})
-    -- copy to ram    
-    for i=0,size-1 do
-      if i%mw==0 then
-        -- record start of map span
-        tiles[0x2060+((i\mw)<<7)]=maps_addr
-      end
-      poke4(maps_addr,unpack_fixed())
-      maps_addr+=4
+    local stride=(size\height)<<2
+    add(_maps,function() poke(0x5f57,stride) poke4(0x8000,unpack(bytes)) end)
+    -- todo: remove
+    add(_maps,0)
+    -- copy to ram
+    for i=1,size do
+      add(bytes,unpack_fixed())
     end
   end,"maps")
   
