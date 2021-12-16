@@ -315,7 +315,7 @@ function make_cam()
               clipcode+=a.outcode&2
               pts[k]=a              
               if uvs then
-                uvs[k]=_texcoords[uvi+k]
+                uvs[k]={_texcoords[uvi+(k<<1)-1],_texcoords[uvi+(k<<1)]}
               end
             end
             if outcode==0 then 
@@ -891,9 +891,8 @@ function unpack_map()
       local umin,vmin=unpack_fixed(),unpack_fixed()
       for _,vi in ipairs(face_verts) do
         local v={verts[vi],verts[vi+1],verts[vi+2]}
-        add(_texcoords,{
-          v_dot(texcoords.s,v)+texcoords.u-umin,
-          v_dot(texcoords.t,v)+texcoords.v-vmin})
+        add(_texcoords,v_dot(texcoords.s,v)+texcoords.u-umin)
+        add(_texcoords,v_dot(texcoords.t,v)+texcoords.v-vmin)
       end
     else
       for i=1,3 do
