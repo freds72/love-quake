@@ -301,31 +301,38 @@ def v_dot(a,b):
   return a.x*b.x+a.y*b.y+a.z*b.z
 
 class MapAtlas():
-  def __init__(self):
+  # uvmap_offset: linear offset to start from
+  def __init__(self, uvmap_len):
     self.maps_index = {}
     self.maps = []
-    self.length = 0
-  # conver to a pico8 string
+    self.uvmap_len = uvmap_len
+  # convert to a pico8 string
   def pack(self):
-    logging.info("Packing texture maps: {} ({} bytes)".format(len(self.maps_index),sum([len(self.maps[i+1])*4 for i in range(0,len(self.maps),2)])))
-    s = pack_variant(self.length)    
-    i = 0
-    while i<len(self.maps):
-      size = self.maps[i]
-      i += 1
-      padded_map = self.maps[i]
-      i += 1            
-      if size.wrap:
-        raise Exception("Unlit texture not supported")
-        s += "{:02x}".format(size.width|size.height<<4)
+    hw_map = []
+    uvmap_len = self.uvmap_len
+    # logging.info("Packing texture maps: {} ({} bytes)".format(len(self.maps_index),sum([len(self.maps[i+1])*4 for i in range(0,len(self.maps),2)])))
+    s = pack_variant(len(self.maps))
+    for m in self.maps:
+      # flag
+      s += pack_byte(m.is_texture and 1 or 0)
+      if m.is_texture:
+        # express offset using "width" stride units
+        base_map = uvmap_len % 0x100
+        xoffset = base_map % m.width
+        yoffset = base_map // m.width
+        print("base: {} texture map: {}/{} {}x{} offset: {:02x}".format(uvmap_len, xoffset, yoffset, m.width, m.height, 0x80 + (uvmap_len // 0x100)))
+        s += pack_byte(0x80 + (uvmap_len // 0x100))
+        s += pack_int32(yoffset<<24|xoffset<<16|m.height<<8|m.width)
+        hw_map += m.data
+        uvmap_len += len(m.data)
       else:
-        s += "{:02x}".format(size.height)
-      s += "{:02x}".format(len(padded_map))
-      for dw in padded_map:
-        s += pack_int32(dw)    
-    return s
+        s += pack_byte(m.height)
+        s += pack_byte(len(m.data))
+        for dw in m.data:
+          s += pack_int32(dw)    
+    return (s, hw_map)
   
-  def register(self, width, height, texdata, wrap=True, name=None):    
+  def register(self, width, height, texdata, is_texture=True, name=None):    
     if width>32 or height>32:
       raise Exception("Invalid texture size: {}x{}, max. 32x32".format(width, height))
     if len(texdata)!=width*height:
@@ -335,39 +342,40 @@ class MapAtlas():
     if name in self.maps_index:
       id = self.maps_index[name]
     else:
-      # convert into a padded map
-      padded = []
-      for y in range(height):
-        tmp = bytearray()
-        my = 128*y
-        mx = 0
-        for x in range(width):   
-          if texdata[x+y*width]>255:
-            print("texture: {}x{} - data:{}".format(height, width, texdata))
-          tmp.append(texdata[x+y*width])
-          mx = 4*(x // 4)
-          if len(tmp)>3:
-            padded.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
-            tmp = bytearray()
-        # any remaining values?
-        if len(tmp)>0:
-          tmp += bytearray(max(0,4-len(tmp)))
-          padded.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
+      data = texdata
+      if not is_texture:
+        # convert into a padded map (e.g. lightmap)
+        data = []
+        for y in range(height):
+          tmp = bytearray()
+          my = 128*y
+          mx = 0
+          for x in range(width):   
+            if texdata[x+y*width]>255:
+              print("texture: {}x{} - data:{}".format(height, width, texdata))
+            tmp.append(texdata[x+y*width])
+            mx = 4*(x // 4)
+            if len(tmp)>3:
+              data.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
+              tmp = bytearray()
+          # any remaining values?
+          if len(tmp)>0:
+            tmp += bytearray(max(0,4-len(tmp)))
+            data.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
       id = len(self.maps)
       self.maps_index[name] = id
       self.maps.append(dotdict({
+        'data': data,
         'width': width,
         'height': height,
-        'wrap': wrap
+        'is_texture': is_texture
       }))
-      self.maps.append(padded)
-      self.length += 1
     return id
 
 
-allocated=[0] * 128
+allocated=[0] * 96
 lightmaps_count = 0
-lightmaps_img = Image.new('RGB', (128, 16), (0,0,0,0))
+lightmaps_img = Image.new('RGB', (96, 32), (0,0,0,0))
 
 def alloc_block(w, h):
   global allocated
@@ -377,7 +385,7 @@ def alloc_block(w, h):
 
   # FCS: At what height store the new lightmap
   best = 16
-  for i in range(128-w):
+  for i in range(96-w):
     best2 = 0
     j = 0
     while j<w:
@@ -392,13 +400,13 @@ def alloc_block(w, h):
       best = best2
       y = best
 
-  if (best + h > 16):
+  if (best + h > 32):
     print("no room left")
     lightmaps_img.save("lightmaps_{}.png".format(lightmaps_count))
 
-    allocated=[0] * 128
+    allocated=[0] * 96
     lightmaps_count += 1
-    lightmaps_img = Image.new('RGB', (128, 16), (0,0,0,0))
+    lightmaps_img = Image.new('RGB', (96, 32), (0,0,0,0))
     return alloc_block(w,h)
 
   print("block location: {}x{}".format(x,y))
@@ -449,6 +457,9 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
     else:
       logging.debug("Baking texture: {} (face:{} - lightmap: {})".format(mip.name, id, face.lightofs!=-1))
 
+      if face.lightofs==-1:
+        lightmap_scale = 16
+
       u_min=float('inf')
       u_max=float('-inf')
       v_min=float('inf')
@@ -470,15 +481,12 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
       lightmap_width,lightmap_height=(u_max-u_min+1), (v_max-v_min+1) 
 
       # print(mip.width,"/",lightmap_width, " ", mip.height, "/", lightmap_height)
-
-      # tile indices
-      face_map = []
   
       total_light = 0
       shaded_tex = []
-      wrap_tex = True
+      is_texture = True
       tex_width, tex_height = mip.width, mip.height
-      tex_name = mip.name
+      tex_name = mip.name    
       # debug - dump lightmap
       if face.lightofs!=-1:   
         # scale 8  -> 8x8 pixels per lexel
@@ -498,7 +506,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
             # light = int((lightmaps[lexel]))
             # if block:
             #   lightmaps_img.putpixel((blockx+x,blocky+y),(light,light,light))
-            light = (lightmaps[lexel] - baselight) // 16
+            light = (lightmaps[lexel]) // 16
             # shade = colormap[min(colormap[3].ramp[light],15)]
             # total_light += shade.hw
             # for u in range(texel):
@@ -509,10 +517,10 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
             for u in range(texel_per_lexel):
               for v in range(texel_per_lexel):
                 # sample texture color
-                color = 3
+                color = 8
                 if only_lightmap==False:
                   tx,ty = (u0 + u)%mip.width,(v0 + v)%mip.height
-                  color = mip.img[tx+ty*mip.width]
+                  color = mip.img[tx + ty*mip.width]
                 # shade from lightmap
                 shade = colormap[colormap[color].ramp[light]]
                 total_light += shade.hw
@@ -529,8 +537,8 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         # img.save("face_{}.png".format(id))
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
-        wrap_tex = False
-      else:
+        is_texture = False
+      elif tex_name == "*lava":
         # copy texture verbatim
         for y in range(mip.height):
           for x in range(mip.width):
@@ -538,17 +546,18 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
             color = colormap[mip.img[x+y*mip.width]]
             total_light += color.hw
             shaded_tex.append(color.id)
-        baselight = int((255 - baselight)/16)
+        # baselight = 0xff (makes no sense = full dark)
+        # todo: find another way...
       # full dark?
       if total_light>0 and baselight>0:
         # enable texture
         flags |= 0x2
         # find out unique tiles (lighted) into pico8 sprites (8x8)
-        face_map += register_sprites(sprites, shaded_tex, tex_width, tex_height, 255, "Too many unique shaded tiles - try to reduce wall texture complexity and/or change lightning configuration")
+        face_map = register_sprites(sprites, shaded_tex, tex_width, tex_height, 255, "Too many unique shaded tiles - try to reduce wall texture complexity and/or change lightning configuration")
         # register texture map
-        mapid = maps.register(tex_width // 8, tex_height // 8, face_map, wrap=wrap_tex, name=tex_name)
+        mapid = maps.register(tex_width // 8, tex_height // 8, face_map, is_texture=is_texture, name=tex_name)
         
-  s += "{:02x}".format(flags)
+  s += pack_byte(flags)
 
   # vertex indices
   s += pack_variant(len(face_verts))
@@ -557,8 +566,8 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
     
   # textured?
   if mapid!=-1:
-    s += "{:02x}".format(baselight)
-    # get texture    
+    s += pack_byte(baselight)
+    # get texture coords
     s += pack_variant(face.tex_id + 1)
     # texmap reference
     s += pack_variant(mapid + 1)
@@ -571,7 +580,7 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
 def pack_leaf(id, leaf, vis):
   s = ""
   # type
-  s += "{:02x}".format(128+leaf.contents)
+  s += pack_byte(128+leaf.contents)
 
   # visibility info
   s += pack_variant(len(vis))
@@ -641,7 +650,7 @@ def pack_model(model):
         flags |= (-child)<<(4*i)
       else:
         sc += pack_variant(child+1)
-    s += "{:02x}".format(flags)
+    s += pack_byte(flags)
     s += sc
   return s
 
@@ -784,7 +793,7 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
     for p in planes:
       s += pack_vec3(p.normal)
       s += pack_fixed(p.dist)
-      s += "{:02x}".format(plane_types[p.type])
+      s += pack_byte(plane_types[p.type])
 
     # all textures
     logging.info("Packing textures: {}".format(len(textures)))
@@ -794,7 +803,7 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
 
     # all faces
     # maps
-    maps = MapAtlas()
+    maps = MapAtlas(32*32)
 
     with stream.read(filename) as face_handle:
       s += pack_variant(len(faces))      
@@ -808,7 +817,8 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
       raise Exception("Too many sprites registered {}/256".format(len(sprites)))
 
     # maps
-    s += maps.pack()
+    memory_map, hw_map = maps.pack()
+    s += memory_map
 
     # visibility data
     logging.info("Packing visleafs: {}".format(len(visdata)))
@@ -834,4 +844,4 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
     for model in [models[0]]:
       s += pack_model(model)
     
-    return (s, sprites, entities)
+    return (s, sprites, hw_map, entities)

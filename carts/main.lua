@@ -168,10 +168,12 @@ function make_m_from_v_angle(up,angle)
 end
 
 -- radix sort
+-- note: works with positive numbers only
 -- from james edge
 function rsort(buffer1)
   local len, buffer2, idx, count = #buffer1, {}, {}, {}
 
+  -- 10 bits precision
   for shift=0,5,5 do
     for i=0,31 do count[i]=0 end
 
@@ -293,61 +295,57 @@ function make_cam()
       local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
       
       for leaf in all(leaves) do
-        -- lightmaps are copied to the 0x8000 location
-        poke(0x5f56, 0x80)
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
           -- face index
-          local fi=leaf[i]  
-          -- sky? skip
-          if not faces[fi+3] then
-            -- face normal          
-            local fn,side=faces[fi],faces[fi+2]
-            -- some sectors are sharing faces
-            -- make sure a face from a leaf is drawn only once
-            if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=side then            
-              f_cache[fi]=true
+          local fi=leaf[i]            
+          -- face normal          
+          local fn,side=faces[fi],faces[fi+2]
+          -- some sectors are sharing faces
+          -- make sure a face from a leaf is drawn only once
+          if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=side then            
+            f_cache[fi]=true
 
-              local face_verts,outcode,clipcode,uvi,uvs=faces[fi+4],0xffff,0,faces[fi+6]
-              if (uvi!=-1) uvs={}
-              local np=#face_verts
-              for k,vi in pairs(face_verts) do                
-                local a=v_cache[vi]
-                outcode&=a.outcode
-                clipcode+=a.outcode&2
-                pts[k]=a              
-                if uvs then
-                  uvs[k]=_texcoords[uvi+k]
-                end
+            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+4],0xffff,0,faces[fi+6]
+            if (uvi!=-1) uvs={}
+            local np=#face_verts
+            for k,vi in pairs(face_verts) do                
+              local a=v_cache[vi]
+              outcode&=a.outcode
+              clipcode+=a.outcode&2
+              pts[k]=a              
+              if uvs then
+                uvs[k]=_texcoords[uvi+k]
               end
-              if outcode==0 then 
-                if(np>2 and clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
-                -- still a valid polygon?
-                if np>2 then
-                  if uvi!=-1 then
-                    local u,v=fu_cache[fn],fv_cache[fn]
-                    if not u then
-                      -- not needed (we take abs u)
-                      -- if(side) s,t=-s,-t
-                      local a=atan2(plane_dot(fn,cam_u),plane_dot(fn,cam_v))
-                      -- normalized 2d vector
-                      u,v=sin(a),cos(a)
-                      fu_cache[fn]=u
-                      fv_cache[fn]=v
-                    end
-
-                    -- copy texture to hw map
-                    _maps[faces[fi+7]]()
-
-                    local umask,vmask=u>>31,v>>31                    
-                    if u^^umask>v^^vmask then
-                      polytex_ymajor(pts,np,uvs,v/u)
-                    else
-                      polytex_xmajor(pts,np,uvs,u/v)
-                    end                   
-                  else
-                    polyfill(pts,np,0)
+            end
+            if outcode==0 then 
+              if(np>2 and clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
+              -- still a valid polygon?
+              if np>2 then
+                if uvi!=-1 then
+                  local u,v=fu_cache[fn],fv_cache[fn]
+                  if not u then
+                    -- not needed (we take abs u)
+                    -- if(side) s,t=-s,-t
+                    local a=atan2(plane_dot(fn,cam_u),plane_dot(fn,cam_v))
+                    -- normalized 2d vector
+                    u,v=sin(a),cos(a)
+                    fu_cache[fn]=u
+                    fv_cache[fn]=v
                   end
+
+                  -- activate texture
+                  _maps[faces[fi+7]]()                  
+                  
+                  local umask,vmask=u>>31,v>>31                    
+                  if u^^umask>v^^vmask then
+                    polytex_ymajor(pts,np,uvs,v/u)
+                  else
+                    polytex_xmajor(pts,np,uvs,u/v)
+                  end
+                else
+                  -- sky?
+                  polyfill(pts,np,faces[fi+3] and 4 or 0)
                 end
               end
             end
@@ -358,7 +356,7 @@ function make_cam()
           -- default map location
           poke(0x5f56,0x20)
           local faces={}
-          for thing,_ in pairs(leaf.things) do
+          for thing in pairs(leaf.things) do
             -- collect all faces "closest" to camera
             if thing.visleaf==leaf then
               -- model to cam + cam pos in model space
@@ -713,6 +711,8 @@ function _init()
   _model,pos,angle=decompress("q8k",0,0,unpack_map)
   -- restore spritesheet
   reload()
+  -- copy map tiles to hi mem
+  memcpy(0x8000,0x2000,0x1000)
 
   palt(0,false)
   --pal({129, 133, 5, 134, 143, 15, 130, 132, 4, 137, 9, 136, 8, 13, 12},1,1)
@@ -736,7 +736,7 @@ function _update()
 end
 
 function _draw()
-  cls()
+  --cls()
   
   local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves)
@@ -909,16 +909,27 @@ function unpack_map()
   -- lightmap maps
   unpack_array(function()
     -- convert to tline coords
-    -- add(_maps,(size&0xf)>>16|(size\16)>>8)
-    local height,size,bytes=mpeek(),mpeek(),{}
-    -- record stride (group of 4 bytes)
-    local stride=(size\height)<<2
-    add(_maps,function() poke(0x5f57,stride) poke4(0x8000,unpack(bytes)) end)
-    -- todo: remove
-    add(_maps,0)
-    -- copy to ram
-    for i=1,size do
-      add(bytes,unpack_fixed())
+    local flag=mpeek()
+    if flag!=0 then
+      local offset,texaddr=mpeek(),unpack_fixed()
+      add(_maps,function()
+        -- global offset (using 0x8000 zone) + stride
+        poke(0x5f56,offset,(texaddr<<16)&0xff)
+        poke4(0x5f38,texaddr)
+      end)
+    else
+      local height,size,bytes=mpeek(),mpeek(),{}
+      add(_maps,function()
+        -- reset starting point + stride
+        poke(0x5f56,0x20,(size\height)<<2)
+        -- reset texcoords
+        poke4(0x5f38,0)
+        poke4(0x2000,unpack(bytes))
+      end)
+      -- copy to ram
+      for i=1,size do
+        add(bytes,unpack_fixed())
+      end
     end
   end,"maps")
   

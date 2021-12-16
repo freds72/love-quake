@@ -53,7 +53,7 @@ def compress_byte_str(s,raw=False,more=False):
 def pack_sprite(arr):
     return ["".join(map("{:02x}".format,arr[i*4:i*4+4])) for i in range(8)]
 
-def to_gamecart(carts_path, name, map_data, map_width, gfx_data, compress=False, release=None):
+def to_gamecart(carts_path, name, map_data, gfx_data, compress=False, release=None):
   cart="""\
 pico-8 cartridge // http://www.pico-8.com
 version 29
@@ -94,11 +94,9 @@ __lua__
   cart += re.sub("(.{128})", "\\1\n", s, 0, re.DOTALL)
   cart += "\n"
 
-  # pad map
-  map_data = ["".join(map("{:02x}".format,map_data[i:i+map_width] + [0]*(128-map_width))) for i in range(0,len(map_data),map_width)]
-  map_data = "".join(map_data)
+  # store map linearly
   cart += "__map__\n"
-  cart += re.sub("(.{256})", "\\1\n", map_data, 0, re.DOTALL)
+  cart += re.sub("(.{256})", "\\1\n", "".join(map(pack_byte,map_data)), 0, re.DOTALL)
 
   # music and sfx (from external cart)
   # group cart?
@@ -185,7 +183,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
     fgd_classes = reader.result
 
   # extract data  
-  level_data,sprite_data,entities = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
+  level_data, sprite_data, map_data, entities = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
   
   raw_data += level_data
   raw_data += pack_entities(entities)
@@ -196,7 +194,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data
 
-    to_gamecart(carts_path, "q8k", uv.tiles, uv.tiles_width , sprite_data, compress, release)
+    to_gamecart(carts_path, "q8k", uv.tiles + map_data, sprite_data, compress, release)
 
     # export to game
     to_multicart(game_data, pico_path, carts_path, "q8k")  
