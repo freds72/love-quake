@@ -300,10 +300,10 @@ function make_cam()
           -- face index
           local fi=leaf[i]            
           -- face normal          
-          local fn,side=faces[fi],faces[fi+2]
+          local fn,flags=faces[fi],faces[fi+2]
           -- some sectors are sharing faces
           -- make sure a face from a leaf is drawn only once
-          if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=side then            
+          if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
             f_cache[fi]=true
 
             local face_verts,outcode,clipcode,uvi,uvs=faces[fi+4],0xffff,0,faces[fi+6]
@@ -335,8 +335,22 @@ function make_cam()
                   end
 
                   -- activate texture
-                  _maps[faces[fi+7]]()                  
-                  
+                  local mi=faces[fi+7]
+                  if flags&8==0 then
+                    -- regular texture
+                    -- global offset (using 0x8000 zone) + stride
+                    local texaddr=_maps[mi+1]
+                    poke(0x5f56,_maps[mi],(texaddr<<16)&0xff)
+                    poke4(0x5f38,texaddr)
+                  else
+                    -- lightmap
+                    -- reset starting point + stride
+                    poke(0x5f56,0x20,_maps[mi])
+                    -- reset texcoords
+                    poke4(0x5f38,0)
+                    poke4(0x2000,unpack(_maps[mi+1]))                  
+                  end
+
                   local umask,vmask=u>>31,v>>31                    
                   if u^^umask>v^^vmask then
                     polytex_ymajor(pts,np,uvs,v/u)
@@ -345,7 +359,7 @@ function make_cam()
                   end
                 else
                   -- sky?
-                  polyfill(pts,np,faces[fi+3] and 4 or 0)
+                  polyfill(pts,np,flags&0x4!=0 and 4 or 0)
                 end
               end
             end
@@ -866,8 +880,8 @@ function unpack_map()
     add(faces,pi)
     -- 1: cp (placeholder)
     add(faces,0)
-    -- 2:side
-    add(faces,flags&0x1==0)
+    -- 2:flags (side, sky, texture?, lightmap?)
+    add(faces,flags)
     -- 3: sky flag
     add(faces,flags&0x4!=0)
 
@@ -910,21 +924,15 @@ function unpack_map()
     -- convert to tline coords
     local flag=mpeek()
     if flag!=0 then
-      local offset,texaddr=mpeek(),unpack_fixed()
-      add(_maps,function()
-        -- global offset (using 0x8000 zone) + stride
-        poke(0x5f56,offset,(texaddr<<16)&0xff)
-        poke4(0x5f38,texaddr)
-      end)
+      add(_maps,mpeek())
+      --add(_maps,(texaddr<<16)&0xff)
+      add(_maps,unpack_fixed())
     else
       local height,size,bytes=mpeek(),mpeek(),{}
-      add(_maps,function()
-        -- reset starting point + stride
-        poke(0x5f56,0x20,(size\height)<<2)
-        -- reset texcoords
-        poke4(0x5f38,0)
-        poke4(0x2000,unpack(bytes))
-      end)
+      -- stride (32bits padded)
+      add(_maps,(size\height)<<2)
+      -- data
+      add(_maps,bytes)
       -- copy to ram
       for i=1,size do
         add(bytes,unpack_fixed())

@@ -552,11 +552,15 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
       if total_light>0 and baselight>0:
         # enable texture
         flags |= 0x2
+        # lightmap?
+        if not is_texture: flags |= 0x8
+
         # find out unique tiles (lighted) into pico8 sprites (8x8)
         face_map = register_sprites(sprites, shaded_tex, tex_width, tex_height, 255, "Too many unique shaded tiles - try to reduce wall texture complexity and/or change lightning configuration")
         # register texture map
         mapid = maps.register(tex_width // 8, tex_height // 8, face_map, is_texture=is_texture, name=tex_name)
         
+              
   s += pack_byte(flags)
 
   # vertex indices
@@ -569,8 +573,8 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
     s += pack_byte(baselight)
     # get texture coords
     s += pack_variant(face.tex_id + 1)
-    # texmap reference
-    s += pack_variant(mapid + 1)
+    # texmap reference (1 out of two as map packs 2 data)
+    s += pack_variant(2*mapid+1)
     # get uv min
     s += pack_fixed((lightmap_scale * u_min) / 8)
     s += pack_fixed((lightmap_scale * v_min) / 8)
