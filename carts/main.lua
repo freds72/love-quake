@@ -306,7 +306,7 @@ function make_cam()
           if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
             f_cache[fi]=true
 
-            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+4],0xffff,0,faces[fi+6]
+            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+3],0xffff,0,faces[fi+5]
             if (uvi!=-1) uvs={}
             local np=#face_verts
             for k,vi in pairs(face_verts) do                
@@ -335,7 +335,7 @@ function make_cam()
                   end
 
                   -- activate texture
-                  local mi=faces[fi+7]
+                  local mi=faces[fi+6]
                   if flags&8==0 then
                     -- regular texture
                     -- global offset (using 0x8000 zone) + stride
@@ -872,7 +872,7 @@ function unpack_map()
   end)
 
   -- faces
-  local face_sizeof=8
+  local face_sizeof=7
   unpack_array(function()
     local base,face_verts,pi,flags=#faces+1,{},plane_sizeof*unpack_variant()+1,mpeek()
     
@@ -882,24 +882,22 @@ function unpack_map()
     add(faces,0)
     -- 2:flags (side, sky, texture?, lightmap?)
     add(faces,flags)
-    -- 3: sky flag
-    add(faces,flags&0x4!=0)
 
     unpack_array(function()
       add(face_verts,vert_sizeof*unpack_variant()+1)
     end)
-    -- 4: verts indices
+    -- 3: verts indices
     add(faces,face_verts)
 
     -- texture (if any)
     if flags&0x2!=0 then      
-      -- 5: base light (e.g. ramp)
+      -- 4: base light (e.g. ramp)
       add(faces,mpeek()) 
       -- texture coordinates (reference)
       local texcoords=unpack_ref(uvs)
-      -- 6: start of uv coords
+      -- 5: start of uv coords
       add(faces,#_texcoords)
-      -- 7: texture map (reference)
+      -- 6: texture map (reference)
       add(faces,unpack_variant())
       -- precompute textures coordinates
       local umin,vmin=unpack_fixed(),unpack_fixed()
