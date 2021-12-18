@@ -2,20 +2,11 @@
 -- by @freds72
 
 -- game globals
-local _particles,_cam,_plyr,_model,_models={}
+local _particles,_cam,_plyr,_model,_bsps,_models={}
 local plane_dot,plane_isfront,plane_get
 
 -- lightmap memory address + flat u/v array + bsp content types
-local _maps,_texcoords,_content_types={},{},{}
-for i=1,6 do
-  -- -1: ordinary leaf
-  -- -2: the leaf is entirely inside a solid (nothing is displayed).
-  -- -3: Water, the vision is troubled.
-  -- -4: Slime, green acid that hurts the player.
-  -- -5: Lava, vision turns red and the player is badly hurt.   
-  -- -6 sky 
-  add(_content_types,{contents=-i})
-end
+local _maps,_texcoords={},{}
 
 -- maths & cam
 function lerp(a,b,t)
@@ -201,7 +192,7 @@ function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
-  -- 
+  -- collect bps leaves in order
   local function collect_bsp(node,pos)
     local function collect_leaf(side)
       local child=node[side]
@@ -242,7 +233,7 @@ function make_cam()
       if current_leaf and current_leaf!=prev_leaf then
         prev_leaf=current_leaf
         visframe+=1
-        -- find all visible leaves
+        -- find all (potentially) visible leaves
         for i,bits in pairs(current_leaf.pvs) do
           i<<=5
           for j=0,31 do
@@ -722,7 +713,8 @@ function _init()
   poke(0x5f2d,7)
 
   -- unpack map
-  _model,pos,angle=decompress("q8k",0,0,unpack_map)
+  _bsps,pos,angle=decompress("q8k",0,0,unpack_map)
+  _model=_bsps[1]
   -- restore spritesheet
   reload()
   -- copy map tiles to hi mem
@@ -747,6 +739,13 @@ function _update()
   end
 
   _cam:track(v_add(_plyr.pos,{0,32,0}),_plyr.m,_plyr.angle)
+
+  for i=2,3 do
+    local hit=find_sub_sector(_bsps[i].clipnodes,_plyr.pos)
+    if hit and hit.contents==-2 then
+      printh("inside: "..i.." content: "..hit.contents)
+    end
+  end
 end
 
 function _draw()
@@ -818,7 +817,7 @@ end
 
 -- bsp map reader
 function unpack_map()
-  local verts,planes,faces,leaves,nodes,models,uvs={},{},{},{},{},{},{}
+  local verts,planes,faces,leaves,nodes,models,uvs,clipnodes={},{},{},{},{},{},{},{}
   
   printh("------------------------")
   -- color gradients (16 * 16 colors)
@@ -983,30 +982,42 @@ function unpack_map()
     attach_node(false,node.flags&0x2!=0)
   end
   
-  -- unpack "models"
+  -- shared content leaves
+  local content_types={}
+  for i=1,6 do
+    -- -1: ordinary leaf
+    -- -2: the leaf is entirely inside a solid (nothing is displayed).
+    -- -3: Water, the vision is troubled.
+    -- -4: Slime, green acid that hurts the player.
+    -- -5: Lava, vision turns red and the player is badly hurt.   
+    -- -6: sky 
+    add(content_types,{contents=-i})
+  end  
+  -- unpack "clipnodes" (collision hulls)
+  local clipnodes={}
   unpack_array(function()
-    local bsp=unpack_ref(nodes)
-    -- collision hull
-    local clipnodes={}
-    unpack_array(function()
-      local node,flags={plane=plane_sizeof*unpack_variant()+1},mpeek()
-      -- either empty, lava, ... or reference to a another half-space
-      local contents=flags&0xf
-      node[true]=contents!=0 and -contents or unpack_variant()
-      contents=(flags&0xf0)>>4
-      node[false]=contents!=0 and -contents or unpack_variant()
-      add(clipnodes,node)
-    end)
-    -- attach references
-    for node in all(clipnodes) do
-      local function attach_node(side)
-        local id=node[side]
-        node[side]=id<0 and _content_types[-id] or clipnodes[id]
-      end
-      attach_node(true)
-      attach_node(false)
+    local node,flags={plane=plane_sizeof*unpack_variant()+1},mpeek()
+    -- either empty, lava, ... or reference to a another half-space
+    local contents=flags&0xf
+    node[true]=contents!=0 and -contents or unpack_variant()
+    contents=(flags&0xf0)>>4
+    node[false]=contents!=0 and -contents or unpack_variant()
+    add(clipnodes,node)
+  end)
+  -- attach references
+  for node in all(clipnodes) do
+    local function attach_node(side)
+      local id=node[side]
+      node[side]=id<0 and content_types[-id] or clipnodes[id]
     end
-    add(models,{verts=verts,planes=planes,faces=faces,bsp=bsp,clipnodes=clipnodes[1],leaves=leaves})
+    attach_node(true)
+    attach_node(false)
+  end
+
+  -- unpack "models"  
+  unpack_array(function(i)
+    -- only main model has a cached collision hull
+    add(models,{verts=verts,planes=planes,faces=faces,bsp=unpack_ref(nodes),clipnodes=unpack_ref(clipnodes),leaves=leaves})
   end,"models")
 
   -- get top level node
@@ -1055,5 +1066,5 @@ function unpack_map()
     _models[name]=model
   end,"3d models")
 
-  return models[1],plyr_pos,plyr_angle
+  return models,plyr_pos,plyr_angle
 end

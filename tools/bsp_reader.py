@@ -637,13 +637,9 @@ def pack_node(node):
   s += "{:02x}{}".format(flags, children)
   return s
 
-def pack_model(model):
-  s = ""
-  # reference to root node
-  s += pack_variant(model.headnode[0]+1)
-  
+def pack_clipnodes(clipnodes):
   # clip nodes
-  s += pack_variant(len(clipnodes))
+  s = pack_variant(len(clipnodes))
   for c in clipnodes:
     s += pack_variant(c.plane_id)
     flags = 0
@@ -656,6 +652,14 @@ def pack_model(model):
         sc += pack_variant(child+1)
     s += pack_byte(flags)
     s += sc
+  return s
+
+def pack_model(model):
+  s = ""
+  # reference to root node
+  s += pack_variant(model.headnode[0]+1)
+  # reference to collision hull
+  s += pack_variant(model.headnode[1]+1)
   return s
 
 # convert compressed PVS into an array of 32bits numbers
@@ -842,10 +846,13 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
     for n in nodes:
       s += pack_node(n)
     
+    logging.info("Packing collision nodes: {}".format(len(clipnodes)))
+    s += pack_clipnodes(clipnodes)
+
     # load models 
     logging.info("Packing models: {}".format(len(models)))
-    s += pack_variant(1)
-    for model in [models[0]]:
+    s += pack_variant(len(models))
+    for model in models:
       s += pack_model(model)
     
     return (s, sprites, hw_map, entities)
