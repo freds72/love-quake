@@ -654,12 +654,16 @@ def pack_clipnodes(clipnodes):
     s += sc
   return s
 
-def pack_model(model):
+def pack_model(model,leaf_base=0):
   s = ""
   # reference to root node
   s += pack_variant(model.headnode[0]+1)
   # reference to collision hull
   s += pack_variant(model.headnode[1]+1)
+  # reference to first leave
+  s += pack_variant(leaf_base + 2)
+  # number of leaves
+  s += pack_variant(leaf_base + model.numleafs + 1)
   return s
 
 # convert compressed PVS into an array of 32bits numbers
@@ -852,7 +856,9 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
     # load models 
     logging.info("Packing models: {}".format(len(models)))
     s += pack_variant(len(models))
+    leaf_base = 0
     for model in models:
-      s += pack_model(model)
+      s += pack_model(model, leaf_base=leaf_base)
+      leaf_base += model.numleafs
     
     return (s, sprites, hw_map, entities)
