@@ -47,6 +47,14 @@ function polyfill(p,np,c)
 	end
 end
 
+function polyline(p,np,c)
+	color(c)
+	for i=1,np do
+		local v0,v1=p[i],p[i%np+1]	
+		line(v0.x,v0.y,v1.x,v1.y)
+	end
+end
+
 function polytex_ymajor(v,n,uvs,slope)
 
  local nodes_x,nodes_u,nodes_v,offset={},{},{},(slope<<7)&-1

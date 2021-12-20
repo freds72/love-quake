@@ -152,7 +152,7 @@ def pack_entities(entities):
   blob = ""
   # player start?
   classnames=['info_player_start','info_player_deathmatch','testplayerstart']
-  player_starts=[e for e in entities if "classname" in e and e.classname in classnames]
+  player_starts=[e for e in entities if e.classname in classnames]
   if len(player_starts)==0:
     logging.warning("Missing info_player_start entity in: {}".format(entities))
     player_starts=[dotdict({
@@ -164,6 +164,55 @@ def pack_entities(entities):
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   blob += pack_vec3(player_start.origin)
   blob += pack_fixed("angle" in player_start and player_start.angle or 0)
+
+  # (supported) triggers
+  trigger_filter = re.compile("trigger*")
+  triggers = []
+  for trigger in [e for e in entities if trigger_filter.match(e.classname)]:
+    flags = 0
+
+    # brush model reference
+    trigger_blob = pack_variant(int(trigger.model[1:])+1)
+    # delay (applies for all triggers) converted to number of frames
+    # cancel negative values
+    trigger_blob += pack_variant(max(0,int(trigger.delay*30)))
+    trigger_blob += pack_string(trigger.message)
+    if trigger.classname == "trigger_once":
+      flags = 0
+    elif trigger.classname == "trigger_multiple":
+      flags = 1
+      # cancel negative values for wait
+      trigger_blob += pack_variant(max(0,int(trigger.wait*30)))
+
+    # put decoding flag first
+    triggers.append(pack_byte(flags) + trigger_blob)
+
+  # pack "active" triggers
+  blob += pack_variant(len(triggers))
+  blob += "".join(triggers)
+
+  doors_filter = re.compile("func_door")
+  doors = []
+  for door in [e for e in entities if doors_filter.match(e.classname)]:
+    print(door)
+    flags = 0
+    # brush model reference
+    door_blob = pack_variant(int(door.model[1:])+1)
+    # wait time before door closes again
+    # cancel negative values for wait
+    door_blob += pack_variant(max(0,int(door.wait*30)))
+    # speed
+    door_blob += pack_variant(max(0,int(door.speed*30)))
+    # lip
+    door_blob += pack_fixed(door.lip)
+
+    # put decoding flag first
+    doors.append(pack_byte(flags) + door_blob)
+
+  # pack doors
+  blob += pack_variant(len(doors))
+  blob += "".join(doors)
+
   return blob
 
 
@@ -186,10 +235,12 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   level_data, sprite_data, map_data, entities = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
   
   raw_data += level_data
-  raw_data += pack_entities(entities)
 
   # extract models
   raw_data += pack_models(os.path.join(carts_path,".."), ["cube"], colormap)
+
+  # pack entities
+  raw_data += pack_entities(entities)
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data

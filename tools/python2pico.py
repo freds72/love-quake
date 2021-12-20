@@ -97,7 +97,7 @@ def bytes_to_base255(bs):
 def pack_string(s):
     blob = pack_variant(len(s))
     for c in s:
-        blob += "{:02x}".format(ord(c))
+        blob += pack_byte(ord(c))
     return blob
 
 def to_cart(s,pico_path,carts_path,cart_name,cart_id,cart_code=None, label=None):

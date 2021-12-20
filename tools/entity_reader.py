@@ -27,8 +27,10 @@ class ENTITYWalker(ENTITYListener):
           x,y,z=[float(v) for v in value.split(' ')]
           # fix Quake y/z orientation
           value=dotdict({'x':x,'y':z,'z':y})
-        elif attribute in ['angle','speed','spawnflags','_lightmap_scale']:
+        elif attribute in ['angle','speed','spawnflags','_lightmap_scale','lip']:
           value=int(value)
+        elif attribute in ['delay','wait']:
+          value=float(value)        
         elif attribute=="classname":
           classname = value
         # persist value
@@ -50,6 +52,9 @@ class ENTITYWalker(ENTITYListener):
 
 class ENTITYReader():
   def __init__(self, data, classes):    
+
+    print(data)
+
     lexer = ENTITYLexer(InputStream(data))
     stream = CommonTokenStream(lexer)
     parser = ENTITYParser(stream)

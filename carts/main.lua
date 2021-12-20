@@ -2,7 +2,7 @@
 -- by @freds72
 
 -- game globals
-local _particles,_cam,_plyr,_model,_bsps,_models={}
+local _particles,_futures,_cam,_plyr,_model,_leaves,_bsps,_models={},{}
 local plane_dot,plane_isfront,plane_get
 
 -- lightmap memory address + flat u/v array + bsp content types
@@ -158,6 +158,19 @@ function make_m_from_v_angle(up,angle)
 	}
 end
 
+-- registers a new coroutine
+-- returns a handle to the coroutine
+-- used to cancel a coroutine
+function do_async(fn)
+  return add(_futures,{co=cocreate(fn)})
+end
+-- wait until timer
+function wait_async(t)
+	for i=1,t do
+		yield()
+	end
+end
+
 -- radix sort
 -- note: works with positive numbers only
 -- from james edge
@@ -260,7 +273,7 @@ function make_cam()
       end
       return visleaves
     end,  
-    draw_faces=function(self,verts,faces,leaves)
+    draw_faces=function(self,verts,faces,leaves,lstart,lend,brushes)
       local v_cache_class={
         __index=function(self,vi)
           local m,code,x,y,z=self.m,0,verts[vi],verts[vi+1],verts[vi+2]
@@ -285,7 +298,8 @@ function make_cam()
       local m=self.m
       local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
       
-      for leaf in all(leaves) do
+      for j=lstart,lend do
+        local leaf=leaves[j]
         -- faces form a convex space, render in any order        
         for i=1,leaf.nf do
           -- face index
@@ -350,10 +364,23 @@ function make_cam()
                   end
                 else
                   -- sky?
-                  polyfill(pts,np,flags&0x4!=0 and 4 or 0)
+                  polyfill(pts,np,flags&0x4!=0 and 4 or i%14)
+                  --polyfill(pts,np,0)
                 end
               end
             end
+          end
+        end
+        local polys=brushes[leaf]
+        if polys then
+          -- 3d projection          
+          for i,poly in pairs(polys) do
+            for k,v in pairs(poly) do
+              poly[k]=_cam:project2d(v)
+            end
+            polyline(poly,#poly,14)
+            --polyfill(poly,#poly,i%14)
+            
           end
         end
         -- draw entities in this convex space
@@ -407,7 +434,13 @@ function make_cam()
           end
         end
       end
-    end
+    end,
+    project2d=function(self,v)
+      local m,x,y,z=self.m,v[1],v[2],v[3]
+      local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
+      local w=64/az
+      return {ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w}
+    end  
   }
 end
 
@@ -448,6 +481,65 @@ function z_poly_clip(v,nv,uvs)
 		d0=d1
 	end
 	return res,#res,res_uv
+end
+
+function poly_uv_clip(node,v)
+  if(#v<3) return
+	local res,out_res,v0={},{},v[#v]
+  local d0,dist=plane_dot(node.plane,v0)
+	d0-=dist
+	for i=1,#v do
+		local v1=v[i]
+		local d1=plane_dot(node.plane,v1)-dist  
+    if d0<=0 then
+      add(out_res,v0,1)
+    end
+		if d1>0 then
+      if d0<=0 then
+        -- push in front of list
+        add(out_res,v_lerp(v0,v1,d0/(d0-d1)),1)
+        -- add to end
+        res[#res+1]=v_lerp(v0,v1,d0/(d0-d1)) 
+			end
+      res[#res+1]=v1
+		elseif d0>0 then
+      add(out_res,v_lerp(v0,v1,d0/(d0-d1)),1)
+      res[#res+1]=v_lerp(v0,v1,d0/(d0-d1))
+		end
+    v0=v1
+		d0=d1
+	end
+
+	return res,out_res
+end
+
+function bsp_clip(node,poly,out)
+  -- use hyperplane to split poly
+  local res_in,res_out=poly_uv_clip(node,poly)
+  if #res_in>0 then
+    local child=node[true]
+    if child then
+      if child.contents then
+        local brushes=out[child] or {}
+        add(brushes,res_in)
+        out[child]=brushes
+      else
+        bsp_clip(child,res_in,out)
+      end
+    end
+  end
+  if #res_out>0 then
+    local child=node[false]
+    if child then
+      if child.contents then
+        local brushes=out[child] or {}
+        add(brushes,res_out)
+        out[child]=brushes
+      else   
+        bsp_clip(child,res_out,out)
+      end
+    end
+  end
 end
 
 function make_player(pos,a)
@@ -713,7 +805,7 @@ function _init()
   poke(0x5f2d,7)
 
   -- unpack map
-  _bsps,pos,angle=decompress("q8k",0,0,unpack_map)
+  _bsps,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
   _model=_bsps[1]
   -- restore spritesheet
   reload()
@@ -732,6 +824,18 @@ function _init()
 end
 
 function _update()
+  -- any futures?
+  for i=#_futures,1,-1 do
+    -- get actual coroutine
+    local f=_futures[i].co
+    -- still active?
+    if f and costatus(f)=="suspended" then
+      coresume(f)
+    else
+      deli(_futures,i)
+    end
+  end
+
   _plyr:update()
   
   for p in all(_particles) do
@@ -739,22 +843,39 @@ function _update()
   end
 
   _cam:track(v_add(_plyr.pos,{0,32,0}),_plyr.m,_plyr.angle)
-
-  for i=2,3 do
-    local hit=find_sub_sector(_bsps[i].clipnodes,_plyr.pos)
-    if hit and hit.contents==-2 then
-      printh("inside: "..i.." content: "..hit.contents)
-    end
-  end
 end
 
 function _draw()
   --cls()
   
-  local visleaves=_cam:collect_leaves(_model.bsp,_model.leaves)
-  _cam:draw_faces(_model.verts,_model.faces,visleaves)
+  local door=_bsps[2]
+  -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
 
-  local s="%:"..(flr(1000*stat(1))/10).."\n"..stat(0).."\nleaves:"..#visleaves
+  -- collect leaves with moving brushes
+  local out={}
+  local verts,faces=door.verts,door.faces
+  for j=door.leaf_start,door.leaf_end do
+    local leaf=_leaves[j]
+    -- todo: single leaf for all submodels?
+    for i=1,leaf.nf do
+      -- face index
+      local fi=leaf[i]            
+      -- face normal          
+      local poly,face_verts={},faces[fi+3]
+      for k,vi in pairs(face_verts) do
+        -- "move" brush
+        -- todo: optimize (shared vertices)
+        poly[k]=v_add({verts[vi],verts[vi+1],verts[vi+2]},{128*abs(cos(time()/16)),0,0})
+      end
+      -- clip against world
+      bsp_clip(_model.bsp,poly,out)
+    end
+  end
+
+  local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
+  _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)
+
+  local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."b"
   print(s,2,3,1)
   print(s,2,2,12)
 
@@ -1017,13 +1138,9 @@ function unpack_map()
   -- unpack "models"  
   unpack_array(function(i)
     -- only main model has a cached collision hull
-    add(models,{verts=verts,planes=planes,faces=faces,bsp=unpack_ref(nodes),clipnodes=unpack_ref(clipnodes),leaves=leaves})
+    add(models,{verts=verts,planes=planes,faces=faces,bsp=unpack_ref(nodes),clipnodes=unpack_ref(clipnodes),leaf_start=unpack_variant(),leaf_end=unpack_variant()})
   end,"models")
 
-  -- get top level node
-  -- unpack player position
-  local plyr_pos,plyr_angle=unpack_vert(),unpack_fixed()
-  
   -- 3d models
   _models={}
     -- for all models
@@ -1066,5 +1183,59 @@ function unpack_map()
     _models[name]=model
   end,"3d models")
 
-  return models,plyr_pos,plyr_angle
+  -- entities (player, triggers...)
+
+  -- unpack player position
+  -- todo: merge with general entities decode
+  local plyr_pos,plyr_angle=unpack_vert(),unpack_fixed()
+
+  -- triggers
+  unpack_array(function()
+    -- standard triggers parameters
+    local flags,model,delay,msg,wait=mpeek(),unpack_ref(models),unpack_variant(),unpack_string(),0
+    if flags==1 then
+        wait=unpack_variant()
+    end
+    do_async(function()
+      while true do
+        local hit=find_sub_sector(model.clipnodes,_plyr.pos)
+        -- inside volume?
+        if hit and hit.contents==-2 then
+          wait_async(delay)
+          if(msg) printh(msg)
+          -- trigger once?
+          if wait>0 then
+            wait_async(wait)
+          else
+            return
+          end
+        end
+        yield()
+      end
+    end)
+  end)
+
+    -- doors
+    unpack_array(function()
+      -- standard triggers parameters
+      local flags,model,wait,speed=mpeek(),unpack_ref(models),unpack_variant(),unpack_variant()
+      do_async(function()
+        while true do
+          local hit=find_sub_sector(model.clipnodes,_plyr.pos)
+          -- inside volume?
+          if hit and hit.contents==-2 then
+            printh("hit door")
+            -- trigger once?
+            if wait>0 then
+              wait_async(wait)
+            else
+              return
+            end
+          end
+          yield()
+        end
+      end)
+    end)
+
+  return models,leaves,plyr_pos,plyr_angle
 end
