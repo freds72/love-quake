@@ -311,7 +311,7 @@ function make_cam()
           if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
             f_cache[fi]=true
 
-            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+3],0xffff,0,faces[fi+5]
+            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+3],0xffff,0,-1--faces[fi+5]
             if (uvi!=-1) uvs={}
             local np=#face_verts
             for k,vi in pairs(face_verts) do                
@@ -378,9 +378,8 @@ function make_cam()
             for k,v in pairs(poly) do
               poly[k]=_cam:project2d(v)
             end
-            polyline(poly,#poly,14)
-            --polyfill(poly,#poly,i%14)
-            
+            --polyline(poly,#poly,14)
+            polyfill(poly,#poly,12)            
           end
         end
         -- draw entities in this convex space
@@ -485,26 +484,38 @@ end
 
 function poly_uv_clip(node,v)
   if(#v<3) return
-	local res,out_res,v0={},{},v[#v]
-  local d0,dist=plane_dot(node.plane,v0)
-	d0-=dist
+  local dists,side={},0
+  for k,p in pairs(v) do      
+    local d,dist=plane_dot(node.plane,p)  
+    d-=dist
+    side|=d>0 and 1 or 2
+    dists[k]=d
+  end
+  -- early exit tests (eg. no clipping)
+  if(side==1) return v,{}
+  if(side==2) return {},v
+  -- straddle
+	local res,out_res,v0,d0={},{},v[#v],dists[#v]
 	for i=1,#v do
-		local v1=v[i]
-		local d1=plane_dot(node.plane,v1)-dist  
+		local v1,d1=v[i],dists[i]
     if d0<=0 then
       add(out_res,v0,1)
     end
 		if d1>0 then
       if d0<=0 then
         -- push in front of list
-        add(out_res,v_lerp(v0,v1,d0/(d0-d1)),1)
+        local t=d0/(d0-d1)
+        local v2=v_lerp(v0,v1,t)
+        add(out_res,v2,1)
         -- add to end
-        res[#res+1]=v_lerp(v0,v1,d0/(d0-d1)) 
+        res[#res+1]=v2
 			end
       res[#res+1]=v1
 		elseif d0>0 then
-      add(out_res,v_lerp(v0,v1,d0/(d0-d1)),1)
-      res[#res+1]=v_lerp(v0,v1,d0/(d0-d1))
+      local t=d0/(d0-d1)
+      local v2=v_lerp(v0,v1,t)
+      add(out_res,v2,1)
+      res[#res+1]=v2
 		end
     v0=v1
 		d0=d1
@@ -865,12 +876,13 @@ function _draw()
       for k,vi in pairs(face_verts) do
         -- "move" brush
         -- todo: optimize (shared vertices)
-        poly[k]=v_add({verts[vi],verts[vi+1],verts[vi+2]},{128*abs(cos(time()/16)),0,0})
+        poly[k]=v_add({verts[vi],verts[vi+1],verts[vi+2]},{64,0,0})
       end
       -- clip against world
       bsp_clip(_model.bsp,poly,out)
     end
   end
+
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)
@@ -1215,27 +1227,26 @@ function unpack_map()
     end)
   end)
 
-    -- doors
-    unpack_array(function()
-      -- standard triggers parameters
-      local flags,model,wait,speed=mpeek(),unpack_ref(models),unpack_variant(),unpack_variant()
-      do_async(function()
-        while true do
-          local hit=find_sub_sector(model.clipnodes,_plyr.pos)
-          -- inside volume?
-          if hit and hit.contents==-2 then
-            printh("hit door")
-            -- trigger once?
-            if wait>0 then
-              wait_async(wait)
-            else
-              return
-            end
+  -- doors
+  unpack_array(function()
+    -- standard triggers parameters
+    local flags,model,wait,speed,lip,pos1,pos2=mpeek(),unpack_ref(models),unpack_variant(),unpack_variant(),unpack_fixed(),unpack_vert(),unpack_vert()
+    do_async(function()
+      while true do
+        local hit=find_sub_sector(model.clipnodes,_plyr.pos)
+        -- inside volume?
+        if hit and hit.contents==-2 then
+          -- trigger once?
+          if wait>0 then
+            wait_async(wait)
+          else
+            return
           end
-          yield()
         end
-      end)
+        yield()
+      end
     end)
+  end)
 
   return models,leaves,plyr_pos,plyr_angle
 end

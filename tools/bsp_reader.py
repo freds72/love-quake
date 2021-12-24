@@ -538,7 +538,8 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         # "kill" baselight (if mixed with lightmap)
         baselight = 11
         is_texture = False
-      elif tex_name == "*lava":
+      #elif tex_name == "*lava":
+      else:
         # copy texture verbatim
         for y in range(mip.height):
           for x in range(mip.width):
@@ -861,4 +862,4 @@ def pack_bsp(stream, filename, classes, colormap, sprites, only_lightmap):
       s += pack_model(model, leaf_base=leaf_base)
       leaf_base += model.numleafs
     
-    return (s, sprites, hw_map, entities)
+    return (s, sprites, hw_map, entities, models)

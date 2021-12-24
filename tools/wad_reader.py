@@ -148,7 +148,7 @@ def pack_models(home_path, models, colormap):
             os.remove(path)
     return blob
 
-def pack_entities(entities):
+def pack_entities(entities, models):
   blob = ""
   # player start?
   classnames=['info_player_start','info_player_deathmatch','testplayerstart']
@@ -197,14 +197,40 @@ def pack_entities(entities):
     print(door)
     flags = 0
     # brush model reference
-    door_blob = pack_variant(int(door.model[1:])+1)
+    model_id = int(door.model[1:])
+    door_blob = pack_variant(model_id+1)
     # wait time before door closes again
     # cancel negative values for wait
     door_blob += pack_variant(max(0,int(door.wait*30)))
     # speed
-    door_blob += pack_variant(max(0,int(door.speed*30)))
+    door_blob += pack_variant(max(0,int(door.speed)))
     # lip
     door_blob += pack_fixed(door.lip)
+    # 0-359: horizontal angle
+    # -1: up move
+    # -2: down move
+    angle = door.get('angle',0)
+    # bounding box extents
+    model = models[model_id]    
+    extents = dotdict({
+      'x':model.bound.max.x - model.bound.min.y,
+      'y':model.bound.max.y - model.bound.min.y,
+      'z':model.bound.max.z - model.bound.min.z})
+    
+    # pos1 (origin)
+    door_blob += pack_vec3(model.origin)
+    
+    # pos 2 (destination)
+    pos2 = model.origin
+    # todo: support all angles
+    if angle==-1:      
+      pos2.y+=extents.y
+    elif angle==-2:
+      pos2.y-=extents.y
+    else:
+      pos2.x+=extents.x
+
+    door_blob += pack_vec3(pos2)
 
     # put decoding flag first
     doors.append(pack_byte(flags) + door_blob)
@@ -232,15 +258,15 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
     fgd_classes = reader.result
 
   # extract data  
-  level_data, sprite_data, map_data, entities = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
+  level_data, sprite_data, map_data, entities, models = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
   
   raw_data += level_data
 
-  # extract models
+  # extract 3d models
   raw_data += pack_models(os.path.join(carts_path,".."), ["cube"], colormap)
 
   # pack entities
-  raw_data += pack_entities(entities)
+  raw_data += pack_entities(entities, models)
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data
