@@ -68,26 +68,32 @@ class FGDWalker(FGDListener):
                 raise Exception("Unknown parent class: {} defined for class: {}".format(parentclass, classname))
               # reference to parent
               classdef.addBaseClass(self.result[parentclass])
+          elif attr.untypedproperty():
+            # flatten additional properties using a dot notation
+            for pair in attr.untypedproperty():
+              attribute = pair.QUOTED_STRING().getText().lower().strip('"')
+              value = pair.value().getText().lower().strip('"')
+              classdef.add(name + "." + attribute, value)
                     
       for prop in ctx.classprops().typedproperty():        
         name = self.getSafeText(prop.propertyname)        
         valuetype = self.getSafeText(prop.valuetype)        
-        value = None
-        if prop.value():
-          value = self.getText(prop.value)
-          if valuetype == "flags":
-            value = 0
-            for option in prop.option():
-              optionvalue = int(self.getSafeText(option.value))
-              optionkey = int(self.getText(option.optionkey))
-              if optionvalue == 1:
-                value |= optionkey
-          elif name in ['dmg','sounds','health','light']:
+        value = prop.value() and self.getText(prop.value) or None
+        if valuetype == "flags": 
+          # decode bitfield         
+          value = 0
+          for option in prop.option():
+            optionvalue = int(self.getSafeText(option.value))
+            optionkey = int(self.getText(option.optionkey))
+            if optionvalue == 1:
+              value |= optionkey       
+        elif value:
+          if name in ['dmg','sounds','health','light','lip']:
             value = int(value)
           elif name in ['angle','wait','delay']:
             value = float(value)
-          # register property
-          classdef.add(name, value)
+        # register property
+        if value is not None: classdef.add(name, value)
 
       logging.debug("Found FGD class: {} = {}".format(classname, classdef))
 

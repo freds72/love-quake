@@ -122,7 +122,7 @@ __lua__
     f.write(cart)
 
 # extract blender models
-def pack_models(home_path, models, colormap):
+def pack_models(home_path, blender_files, colormap):
     # data buffer
     blob = ""
 
@@ -130,19 +130,17 @@ def pack_models(home_path, models, colormap):
     colors = "".join(map(pack_byte, colormap.palette.pal()))
 
     # 3d models
-    # todo: read from map?
-    blob += pack_variant(len(models))
-    for blend_file in models:
-        logging.info("Exporting: {}.blend".format(blend_file))
+    blob += pack_variant(len(blender_files))
+    for i, blender_file in enumerate(blender_files):
+        logging.info("Exporting 3d model: {}".format(blender_file))
         fd, path = tempfile.mkstemp()
         try:
             os.close(fd)
-            exitcode, out, err = call([blender_exe,os.path.join(home_path,"models",blend_file + ".blend"),"--background","--python","blender_reader.py","--","--colors",colors,"--out",path])
+            exitcode, out, err = call([blender_exe,os.path.join(home_path, blender_file),"--background","--python","blender_reader.py","--","--colors",colors,"--out",path])
             if err:
-                raise Exception('Unable to loadt: {}. Exception: {}'.format(blend_file,err))
+                raise Exception('Unable to loadt: {}. Exception: {}'.format(blender_file,err))
             logging.debug("Blender exit code: {} \n out:{}\n err: {}\n".format(exitcode,out,err))
-            with open(path, 'r') as outfile:
-                blob += pack_string(blend_file)
+            with open(path, 'r') as outfile:      
                 blob += outfile.read()
         finally:
             os.remove(path)
@@ -163,11 +161,27 @@ def pack_entities(entities, models):
   player_start = player_starts[0]
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   blob += pack_vec3(player_start.origin)
-  blob += pack_fixed("angle" in player_start and player_start.angle or 0)
+  blob += pack_fixed(player_start.angle)
+
+  # all entities with a model
+  threed_models = []
+  things = list([e for e in entities if "model.path" in e])
+  blob += pack_variant(len(things))
+  for thing in things:
+    blob += pack_vec3(thing.origin)    
+    threed_model = thing.get("model.path")
+    id = 0
+    if threed_model not in threed_models:
+      id = len(threed_models)
+      logging.info("Registering 3d model: {} with ID: {}".format(threed_model, id))
+      threed_models.append(threed_model)
+    else:
+      id = threed_models.index(threed_model)
+    blob += pack_variant(id + 1)
 
   # (supported) triggers
   trigger_filter = re.compile("trigger*")
-  triggers = []
+  triggers = []  
   for trigger in [e for e in entities if trigger_filter.match(e.classname)]:
     flags = 0
 
@@ -176,11 +190,15 @@ def pack_entities(entities, models):
     # delay (applies for all triggers) converted to number of frames
     # cancel negative values
     trigger_blob += pack_variant(max(0,int(trigger.delay*30)))
-    trigger_blob += pack_string(trigger.message)
+    
+    if "message" in trigger:
+      flags |= 2
+      trigger_blob += pack_string(trigger.message)
+
     if trigger.classname == "trigger_once":
-      flags = 0
+      flags |= 0
     elif trigger.classname == "trigger_multiple":
-      flags = 1
+      flags |= 1
       # cancel negative values for wait
       trigger_blob += pack_variant(max(0,int(trigger.wait*30)))
 
@@ -194,7 +212,6 @@ def pack_entities(entities, models):
   doors_filter = re.compile("func_door")
   doors = []
   for door in [e for e in entities if doors_filter.match(e.classname)]:
-    print(door)
     flags = 0
     # brush model reference
     model_id = int(door.model[1:])
@@ -204,8 +221,6 @@ def pack_entities(entities, models):
     door_blob += pack_variant(max(0,int(door.wait*30)))
     # speed
     door_blob += pack_variant(max(0,int(door.speed)))
-    # lip
-    door_blob += pack_fixed(door.lip)
     # 0-359: horizontal angle
     # -1: up move
     # -2: down move
@@ -213,7 +228,7 @@ def pack_entities(entities, models):
     # bounding box extents
     model = models[model_id]    
     extents = dotdict({
-      'x':model.bound.max.x - model.bound.min.y,
+      'x':model.bound.max.x - model.bound.min.x,
       'y':model.bound.max.y - model.bound.min.y,
       'z':model.bound.max.z - model.bound.min.z})
     
@@ -222,13 +237,13 @@ def pack_entities(entities, models):
     
     # pos 2 (destination)
     pos2 = model.origin
-    # todo: support all angles
     if angle==-1:      
-      pos2.y+=extents.y
+      pos2.y+=extents.y-door.lip
     elif angle==-2:
-      pos2.y-=extents.y
+      pos2.y-=extents.y-door.lip
     else:
-      pos2.x+=extents.x
+      # todo: support all angles
+      pos2.x+=extents.x-door.lip
 
     door_blob += pack_vec3(pos2)
 
@@ -239,7 +254,7 @@ def pack_entities(entities, models):
   blob += pack_variant(len(doors))
   blob += "".join(doors)
 
-  return blob
+  return (blob, threed_models)
 
 
 def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release=None, dump_lightmaps=False, compress_more=False, test=False, only_lightmap=False):
@@ -247,7 +262,7 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
   colormap = ColormapReader(stream)
 
   raw_data = colormap.pack()
-  uv = ImageReader(colormap.palette.raw()).read(stream, "progs/uvmap.png")
+  uv = ImageReader(colormap.palette.raw()).read(FileStream(os.path.join(carts_path,"..")), os.path.join("models","uvmap.png"))
 
   # get "game classes" (FGD)
   fgd_classes = {}
@@ -258,15 +273,18 @@ def pack_archive(pico_path, carts_path, stream, mapname, compress=False, release
     fgd_classes = reader.result
 
   # extract data  
-  level_data, sprite_data, map_data, entities, models = pack_bsp(stream, "maps/" + mapname + ".bsp", fgd_classes, colormap.colors, uv.sprites, only_lightmap)
+  level_data, sprite_data, map_data, entities, models = pack_bsp(stream, os.path.join("maps",mapname + ".bsp"), fgd_classes, colormap.colors, uv.sprites, only_lightmap)
   
   raw_data += level_data
 
-  # extract 3d models
-  raw_data += pack_models(os.path.join(carts_path,".."), ["cube"], colormap)
-
   # pack entities
-  raw_data += pack_entities(entities, models)
+  entities_data, threed_models = pack_entities(entities, models)
+
+  # extract 3d models
+  blender_data = pack_models(os.path.join(carts_path,".."), threed_models, colormap)
+
+  raw_data += blender_data
+  raw_data += entities_data
 
   if not test:
     game_data = compress and compress_byte_str(raw_data, more=compress_more) or raw_data

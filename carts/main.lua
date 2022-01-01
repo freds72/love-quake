@@ -311,7 +311,7 @@ function make_cam()
           if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
             f_cache[fi]=true
 
-            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+3],0xffff,0,-1--faces[fi+5]
+            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+3],0xffff,0,faces[fi+5]
             if (uvi!=-1) uvs={}
             local np=#face_verts
             for k,vi in pairs(face_verts) do                
@@ -364,28 +364,50 @@ function make_cam()
                   end
                 else
                   -- sky?
-                  polyfill(pts,np,flags&0x4!=0 and 4 or i%14)
+                  polyfill(pts,np,flags&0x4!=0 and 4 or 0)
+                  --polyline(pts,np,1)
                   --polyfill(pts,np,0)
                 end
               end
             end
           end
         end
-        local polys=brushes[leaf]
-        if polys then
-          -- 3d projection          
-          for i,poly in pairs(polys) do
-            for k,v in pairs(poly) do
-              poly[k]=_cam:project2d(v)
+        --[[
+        if brushes then
+          local polys=brushes[leaf]
+          if polys then
+            -- model to cam + cam pos in model space
+            local v_cache,cam_pos=setmetatable({m=self.m},v_cache_class),v_add(self.pos,brushes.model.origin,-1)
+            -- all "faces"
+            for i,poly in pairs(polys) do                          
+              -- dual sided or visible?
+              local fi=poly.fi
+              local fn,flags=faces[fi],faces[fi+2]
+              if plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
+                local pts,np,outcode,clipcode={},#poly,0xffff,0
+                for k=1,np do
+                  -- base index in verts array
+                  local a=v_cache[poly[k] ]
+                  outcode&=a.outcode
+                  clipcode+=a.outcode&2
+                  pts[k]=a
+                end
+                if outcode==0 then 
+                  if(clipcode>0) pts,np=z_poly_clip(pts,np)
+                  polyfill(pts,np,12)            
+                end
+              end
             end
-            --polyline(poly,#poly,14)
-            polyfill(poly,#poly,12)            
           end
         end
+        ]]
         -- draw entities in this convex space
+
         if leaf.things then
-          -- default map location
-          poke(0x5f56,0x20)
+          -- default map location+stride
+          poke(0x5f56,0x80,32)
+          -- reset texcoords
+          poke4(0x5f38,0)
           local faces={}
           for thing in pairs(leaf.things) do
             -- collect all faces "closest" to camera
@@ -431,7 +453,7 @@ function make_cam()
               polytex_ymajor(pts,#pts,pts.uvs,0)
             end
           end
-        end
+        end        
       end
     end,
     project2d=function(self,v)
@@ -483,19 +505,21 @@ function z_poly_clip(v,nv,uvs)
 end
 
 function poly_uv_clip(node,v)
-  if(#v<3) return
+  -- degenerate case
+  if(#v<3) return {},{}
   local dists,side={},0
-  for k,p in pairs(v) do      
-    local d,dist=plane_dot(node.plane,p)  
+  for i=1,#v do
+    local d,dist=plane_dot(node.plane,v[i])  
     d-=dist
     side|=d>0 and 1 or 2
-    dists[k]=d
+    dists[i]=d
   end
   -- early exit tests (eg. no clipping)
   if(side==1) return v,{}
   if(side==2) return {},v
-  -- straddle
-	local res,out_res,v0,d0={},{},v[#v],dists[#v]
+  -- straddling
+  -- copy original face index
+	local res,out_res,v0,d0={fi=v.fi},{fi=v.fi},v[#v],dists[#v]
 	for i=1,#v do
 		local v1,d1=v[i],dists[i]
     if d0<=0 then
@@ -589,8 +613,18 @@ function make_player(pos,a)
         local stairs=not is_empty(_model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,16,0}))
         -- check current to target pos
         for i=1,3 do
-          local hits={}            
-          if hitscan(_model.clipnodes,self.pos,next_pos,hits) and hits.n then
+          local hits,hitmodel={t=32000}
+          for k,model in pairs(_bsps) do
+            local tmphits={}                      
+            -- convert into model's space (mostly zero except moving brushes)
+            if model.solid and hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+              hits=tmphits
+              hitmodel=model
+            end
+          end
+          if hits.n then
+            -- trigger action?
+            if(hitmodel.touch) hitmodel.touch()
             local fix=v_dot(hits.n,velocity)
             -- separating?
             if fix<0 then
@@ -635,72 +669,19 @@ function make_player(pos,a)
   } 
 end
 
-local _skulls={}
-function make_skull(pos,up)
-  local p=add(_particles,{
+local _things={}
+function make_thing(bsp,pos,model)
+  local thing=add(_things,{
     pos=pos,
-    focus=0.1+rnd(0.1),
-    period=4+rnd(4),
-    m=make_m_from_v_angle(up,0),
+    m=make_m_from_v_angle({0,1,0},0),
     nodes={},
-    -- test
-    model=_models.cube,
-    update=update_skull})
-  register_thing_subs(_model.bsp,p,4)
-  add(_skulls,p)
+    model=model})
+  -- todo: get size from wad
+  register_thing_subs(bsp,thing,1)
   --
-  m_set_pos(p.m,p.pos)
+  m_set_pos(thing.m,thing.pos)
 end
 
-function update_skull(self)
-  local velocity=v_normz(make_v(self.pos,v_add(_plyr.pos,{0,48,0})))
-  -- update orientation
-  self.m=make_m_look_at({0,1,0},v_lerp(m_fwd(self.m),velocity,self.focus))
-
-  -- avoid other skulls
-  for _,other in pairs(_skulls) do
-    if other!=self then
-      local on,od=v_normz(make_v(self.pos,other.pos))
-      if od<24 then
-        velocity=v_add(velocity,on,-1)
-      end
-    end
-  end
-  -- mild gravity
-  velocity[2]-=0.9*cos(time()/self.period)
-  --if(rnd()>0.2) velocity[2]+=rnd(4)
-
-  -- check next position
-  local vn,vl=v_normz(velocity)
-  if vl>0.1 then
-    -- check current to target pos
-    for i=1,3 do
-      local hits={}            
-      if hitscan(_model.clipnodes,self.pos,v_add(self.pos,velocity),hits) and hits.n then
-        local fix=v_dot(hits.n,velocity)
-        -- separating?
-        if fix<0 then
-          velocity=v_add(velocity,hits.n,-fix)
-        end
-      else
-        goto clear
-      end
-    end
-    -- cornered?
-    velocity=nil
-::clear::
-  else
-    velocity=nil
-  end
-
-  if velocity then
-    unregister_thing_subs(self)
-    local right=m_right(self.m)
-    self.pos=v_add(self.pos,velocity)
-    register_thing_subs(_model.bsp,self,4)
-  end
-  m_set_pos(self.m,self.pos)
-end
 
 -->8
 -- bsp functions
@@ -722,6 +703,7 @@ function is_empty(node,pos)
     node=node[plane_isfront(node.plane,pos)]
   end  
   return node.contents!=-1
+  --return node.contents!=-2 or node.contents!=-1
 end
 
 -- detach a thing from a convex sector (leaf)
@@ -766,8 +748,8 @@ function hitscan(node,p0,p1,out)
   if(not node) return true
   local contents=node.contents
   if contents then
-  -- is "solid" space (bsp)
-     if(contents==-2) return true
+    -- is "solid" space (bsp)
+    if(contents==-2) return true
     -- in "empty" space
     if(contents<0) return
   end
@@ -863,31 +845,34 @@ function _draw()
   -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
 
   -- collect leaves with moving brushes
-  local out={}
-  local verts,faces=door.verts,door.faces
+  --[[
+  local out={model=door}
+  local brush_verts,verts,faces={},door.verts,door.faces
   for j=door.leaf_start,door.leaf_end do
-    local leaf=_leaves[j]
-    -- todo: single leaf for all submodels?
+    local leaf=_leaves[j]    
     for i=1,leaf.nf do
       -- face index
       local fi=leaf[i]            
-      -- face normal          
-      local poly,face_verts={},faces[fi+3]
+      local poly,face_verts={fi=fi},faces[fi+3]
       for k,vi in pairs(face_verts) do
-        -- "move" brush
-        -- todo: optimize (shared vertices)
-        poly[k]=v_add({verts[vi],verts[vi+1],verts[vi+2]},{64,0,0})
+        local v=brush_verts[vi]
+        if not v then
+          -- "move" brush        
+          v=v_add({verts[vi],verts[vi+1],verts[vi+2]},door.origin)
+          brush_verts[vi]=v
+        end
+        poly[k]=v
       end
       -- clip against world
       bsp_clip(_model.bsp,poly,out)
     end
   end
-
+  ]]
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)
 
-  local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."b"
+  local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."kB\nleaves:"..#visleaves
   print(s,2,3,1)
   print(s,2,2,12)
 
@@ -1033,13 +1018,15 @@ function unpack_map()
       add(faces,unpack_variant())
       -- precompute textures coordinates
       local umin,vmin=unpack_fixed(),unpack_fixed()
-      for _,vi in ipairs(face_verts) do
+      for vi in all(face_verts) do
         local v={verts[vi],verts[vi+1],verts[vi+2]}
         add(_texcoords,v_dot(texcoords.s,v)+texcoords.u-umin)
         add(_texcoords,v_dot(texcoords.t,v)+texcoords.v-vmin)
       end
     else
-      for i=1,3 do
+      -- 4: color (static)
+      add(faces,mpeek()) 
+      for i=1,2 do
         add(faces,-1)
       end      
     end
@@ -1066,7 +1053,7 @@ function unpack_map()
       -- copy to ram
       for i=1,size do
         add(bytes,unpack_fixed())
-      end
+      end      
     end
   end,"maps")
   
@@ -1148,18 +1135,26 @@ function unpack_map()
   end
 
   -- unpack "models"  
-  unpack_array(function(i)
-    -- only main model has a cached collision hull
-    add(models,{verts=verts,planes=planes,faces=faces,bsp=unpack_ref(nodes),clipnodes=unpack_ref(clipnodes),leaf_start=unpack_variant(),leaf_end=unpack_variant()})
+  unpack_array(function(i)  
+    add(models,{
+      origin={0,0,0},
+      solid=true,
+      verts=verts,
+      planes=planes,
+      faces=faces,
+      bsp=unpack_ref(nodes),
+      clipnodes=unpack_ref(clipnodes),
+      leaf_start=unpack_variant(),
+      leaf_end=unpack_variant()})
   end,"models")
 
   -- 3d models
   _models={}
     -- for all models
-	unpack_array(function()
+	unpack_array(function(i)
       local faces={}
-      local model,name={f=faces},unpack_string()
-      printh("decoding:"..name)
+      local model={f=faces}
+      printh("decoding model id:"..i)
 
       -- vertices
       local base=#verts+1
@@ -1192,20 +1187,33 @@ function unpack_map()
         f.cp=v_dot(f.n,{verts[base],verts[base+1],verts[base+1]})
       end)
     -- index by name
-    _models[name]=model
+    _models[i]=model
   end,"3d models")
-
-  -- entities (player, triggers...)
 
   -- unpack player position
   -- todo: merge with general entities decode
   local plyr_pos,plyr_angle=unpack_vert(),unpack_fixed()
+  
+  -- entities (player, triggers...)
+  -- todo: improve
+  unpack_array(function()    
+    make_thing(
+      models[1].bsp,
+      unpack_vert(),
+      unpack_ref(_models)
+    )
+  end)
 
   -- triggers
   unpack_array(function()
     -- standard triggers parameters
-    local flags,model,delay,msg,wait=mpeek(),unpack_ref(models),unpack_variant(),unpack_string(),0
-    if flags==1 then
+    local flags,model,delay,wait,msg=mpeek(),unpack_ref(models),unpack_variant(),0
+    -- triggers are not solid
+    model.solid=nil
+    if flags&2!=0 then
+      msg=unpack_string()
+    end
+    if flags&1!=0 then
         wait=unpack_variant()
     end
     do_async(function()
@@ -1230,22 +1238,30 @@ function unpack_map()
   -- doors
   unpack_array(function()
     -- standard triggers parameters
-    local flags,model,wait,speed,lip,pos1,pos2=mpeek(),unpack_ref(models),unpack_variant(),unpack_variant(),unpack_fixed(),unpack_vert(),unpack_vert()
-    do_async(function()
-      while true do
-        local hit=find_sub_sector(model.clipnodes,_plyr.pos)
-        -- inside volume?
-        if hit and hit.contents==-2 then
+    local flags,model,wait,speed,pos1,pos2=mpeek(),unpack_ref(models),unpack_variant(),unpack_variant(),unpack_vert(),unpack_vert()
+    local triggered
+    model.touch=function()    
+      -- avoid reentrancy
+      if(triggered) return
+      triggered=true
+      do_async(function()
+        while true do
+          -- todo: include speed
+          for i=0,30 do 
+            model.origin=v_lerp(pos1,pos2,i/30)
+            yield()
+          end
           -- trigger once?
           if wait>0 then
             wait_async(wait)
+            -- flip target/end
+            pos1,pos2=pos2,pos1
           else
             return
           end
         end
-        yield()
-      end
-    end)
+      end)
+    end
   end)
 
   return models,leaves,plyr_pos,plyr_angle

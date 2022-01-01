@@ -209,7 +209,7 @@ def pack_face(bm, f, obcontext, palette):
             # uv map must be 256x256
             s += pack_byte(int(round(256*uv[0])))
             # reverse image y
-            s += pack_byte(255-int(round(256*uv[1])))
+            s += pack_byte(int(round(256*(1-uv[1]))))
     else:
         # color
         s += pack_byte(color)

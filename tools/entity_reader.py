@@ -22,6 +22,7 @@ class ENTITYWalker(ENTITYListener):
       for pair in ctx.pair():
         attribute = pair.keyword().getText().lower().strip('"')
         value = pair.args().getText().lower().strip('"')
+
         # decode special attributes
         if attribute in ['origin']:
           x,y,z=[float(v) for v in value.split(' ')]
@@ -44,6 +45,8 @@ class ENTITYWalker(ENTITYListener):
         logging.warning("Base class: {} not found for entity: {}".format(classname, ctx.getText()))
         return
 
+      # flatten all parent properties
+      # bad idea? assumes no naming conflicts
       classdef = self.classes[classname]      
       for k,v in classdef.getAll().items():
         if k not in properties:
@@ -52,8 +55,6 @@ class ENTITYWalker(ENTITYListener):
 
 class ENTITYReader():
   def __init__(self, data, classes):    
-
-    print(data)
 
     lexer = ENTITYLexer(InputStream(data))
     stream = CommonTokenStream(lexer)

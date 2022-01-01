@@ -320,7 +320,7 @@ class MapAtlas():
         base_map = uvmap_len % 0x100
         xoffset = base_map % m.width
         yoffset = base_map // m.width
-        print("base: {} texture map: {}/{} {}x{} offset: {:02x}".format(uvmap_len, xoffset, yoffset, m.width, m.height, 0x80 + (uvmap_len // 0x100)))
+        # print("base: {} texture map: {}/{} {}x{} offset: {:02x}".format(uvmap_len, xoffset, yoffset, m.width, m.height, 0x80 + (uvmap_len // 0x100)))
         s += pack_byte(0x80 + (uvmap_len // 0x100))
         s += pack_int32(yoffset<<24|xoffset<<16|m.height<<8|m.width)
         hw_map += m.data
@@ -445,6 +445,8 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
   baselight = face.styles[1]
   mapid = -1
 
+  # face color match
+  color_re = re.compile("0x00*")
   if face.tex_id!=-1:
     # find texture
     tex = textures[face.tex_id]
@@ -539,6 +541,10 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         baselight = 11
         is_texture = False
       #elif tex_name == "*lava":
+      elif color_re.match(tex_name):
+        # decode color
+        baselight = [index for index,c in colormap.items() if int(tex_name[4:6],16)==c.hw][0]
+        print("found color texture: {} --> {} ".format(tex_name, baselight))
       else:
         # copy texture verbatim
         for y in range(mip.height):
@@ -548,7 +554,9 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
             total_light += color.hw
             shaded_tex.append(color.id)
         # baselight = 0xff (makes no sense = full dark)
-        # todo: find another way...
+        if tex_name != "*lava":
+          baselight = 0
+        # todo: find another way...        
       # full dark?
       if total_light>0 and baselight>0:
         # enable texture
@@ -560,25 +568,30 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
         face_map = register_sprites(sprites, shaded_tex, tex_width, tex_height, 255, "Too many unique shaded tiles - try to reduce wall texture complexity and/or change lightning configuration")
         # register texture map
         mapid = maps.register(tex_width // 8, tex_height // 8, face_map, is_texture=is_texture, name=tex_name)
-        
-              
+                      
   s += pack_byte(flags)
 
   # vertex indices
   s += pack_variant(len(face_verts))
   for vi in face_verts:
     s += pack_variant(vi)
-    
+
+  # color  
+  s += pack_byte(baselight)
+
   # textured?
   if mapid!=-1:
-    s += pack_byte(baselight)
     # get texture coords
     s += pack_variant(face.tex_id + 1)
     # texmap reference (1 out of two as map packs 2 data)
     s += pack_variant(2*mapid+1)
-    # get uv min
-    s += pack_fixed((lightmap_scale * u_min) / 8)
-    s += pack_fixed((lightmap_scale * v_min) / 8)
+    # get uv min (only relevant for lightmaps)
+    if is_texture:
+      s += pack_fixed(0)
+      s += pack_fixed(0)
+    else:
+      s += pack_fixed((lightmap_scale * u_min) / 8)
+      s += pack_fixed((lightmap_scale * v_min) / 8)
 
   return s
 
