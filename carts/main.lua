@@ -370,35 +370,79 @@ function make_cam()
             end
           end
         end
-        --[[
+        
         if brushes then
           local polys=brushes[leaf]
           if polys then
-            -- model to cam + cam pos in model space
-            local v_cache,cam_pos=setmetatable({m=self.m},v_cache_class),v_add(self.pos,brushes.model.origin,-1)
+            -- cam pos in model space (eg. shifted)
+            local m,cam_pos=self.m,v_add(self.pos,brushes.model.origin,-1)
             -- all "faces"
             for i,poly in pairs(polys) do                          
               -- dual sided or visible?
               local fi=poly.fi
               local fn,flags=faces[fi],faces[fi+2]
               if plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
-                local pts,np,outcode,clipcode={},#poly,0xffff,0
+                local pts,np,outcode,clipcode,uvi={},#poly,0xffff,0,faces[fi+5]
                 for k=1,np do
                   -- base index in verts array
-                  local a=v_cache[poly[k] ]
-                  outcode&=a.outcode
-                  clipcode+=a.outcode&2
-                  pts[k]=a
+                  local v=poly[k]
+                  local code,x,y,z=0,v[1],v[2],v[3]
+                  local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
+        
+                  -- znear=8
+                  if az<8 then code|=2 end
+                  --if az>2048 then code|=1 end
+                  if ax>az then code|=4
+                  elseif ax<-az then code|=8 end
+                  if ay>az then code|=16
+                  elseif ay<-az then code|=32 end
+                  -- save world space coords for clipping
+                  -- to screen space
+                  local w=64/az
+                  pts[k]={ax,ay,az,u=v.u,v=v.v,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
+                  outcode&=code
+                  clipcode+=outcode&2
                 end
                 if outcode==0 then 
-                  if(clipcode>0) pts,np=z_poly_clip(pts,np)
-                  polyfill(pts,np,12)            
+                  if(clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
+                  if np>2 then
+                    if uvi!=-1 then
+                      local a=atan2(plane_dot(fn,cam_u),plane_dot(fn,cam_v))
+                      -- normalized 2d vector
+                      local u,v=sin(a),cos(a)
+  
+                      ---- enable texture
+                      local mi=faces[fi+6]
+                      if flags&8==0 then
+                        -- regular texture
+                        -- global offset (using 0x8000 zone) + stride
+                        local texaddr=_maps[mi+1]
+                        poke(0x5f56,_maps[mi],(texaddr<<16)&0xff)
+                        poke4(0x5f38,texaddr)
+                      else
+                        -- lightmap
+                        -- reset starting point + stride
+                        poke(0x5f56,0x20,_maps[mi])
+                        -- reset texcoords
+                        poke4(0x5f38,0)
+                        poke4(0x2000,unpack(_maps[mi+1]))                  
+                      end
+                      local umask,vmask=u>>31,v>>31                    
+                      if u^^umask>v^^vmask then
+                        polytex_ymajor(pts,np,v/u)
+                      else
+                        polytex_xmajor(pts,np,u/v)
+                      end
+                    else                    
+                      polyfill(pts,np,0)            
+                    end
+                  end
                 end
               end
             end
           end
         end
-        ]]
+        
         -- draw entities in this convex space
 
         if leaf.things then
@@ -469,9 +513,10 @@ function z_poly_clip(v,nv,uvs)
     end
 		local v1=v[i]
 		local d1=v1[3]-8
-		if sgn(d1)!=sgn(d0) then
-      local t=d0/(d0-d1)
-      local nv=v_lerp(v0,v1,t,uvs)
+    -- not same sign?
+		if d1&0x8000!=d0&0x8000 then
+      local nv=v_lerp(v0,v1,d0/(d0-d1),uvs)
+      -- project against near plane
       nv.x=63.5+(nv[1]<<3)
       nv.y=63.5-(nv[2]<<3)
       nv.w=8
@@ -483,7 +528,7 @@ function z_poly_clip(v,nv,uvs)
 	return res,#res
 end
 
-function poly_uv_clip(node,v)
+function poly_uv_clip(node,v,uvs)
   -- degenerate case
   if(#v<3) return {},{}
   local dists,side={},0
@@ -507,16 +552,14 @@ function poly_uv_clip(node,v)
 		if d1>0 then
       if d0<=0 then
         -- push in front of list
-        local t=d0/(d0-d1)
-        local v2=v_lerp(v0,v1,t)
+        local v2=v_lerp(v0,v1,d0/(d0-d1),uvs)
         add(out_res,v2,1)
         -- add to end
         res[#res+1]=v2
 			end
       res[#res+1]=v1
 		elseif d0>0 then
-      local t=d0/(d0-d1)
-      local v2=v_lerp(v0,v1,t)
+      local v2=v_lerp(v0,v1,d0/(d0-d1),uvs)
       add(out_res,v2,1)
       res[#res+1]=v2
 		end
@@ -527,9 +570,9 @@ function poly_uv_clip(node,v)
 	return res,out_res
 end
 
-function bsp_clip(node,poly,out)
+function bsp_clip(node,poly,out,uvs)
   -- use hyperplane to split poly
-  local res_in,res_out=poly_uv_clip(node,poly)
+  local res_in,res_out=poly_uv_clip(node,poly,uvs)
   if #res_in>0 then
     local child=node[true]
     if child then
@@ -538,7 +581,7 @@ function bsp_clip(node,poly,out)
         add(brushes,res_in)
         out[child]=brushes
       else
-        bsp_clip(child,res_in,out)
+        bsp_clip(child,res_in,out,uvs)
       end
     end
   end
@@ -550,7 +593,7 @@ function bsp_clip(node,poly,out)
         add(brushes,res_out)
         out[child]=brushes
       else   
-        bsp_clip(child,res_out,out)
+        bsp_clip(child,res_out,out,uvs)
       end
     end
   end
@@ -683,8 +726,8 @@ function is_empty(node,pos)
   while node.contents==nil or node.contents>0 do
     node=node[plane_isfront(node.plane,pos)]
   end  
-  return node.contents!=-1
-  --return node.contents!=-2 or node.contents!=-1
+  --return node.contents!=-1
+  return node.contents!=-2 or node.contents!=-1
 end
 
 -- detach a thing from a convex sector (leaf)
@@ -826,7 +869,6 @@ function _draw()
   -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
 
   -- collect leaves with moving brushes
-  --[[
   local out={model=door}
   local brush_verts,verts,faces={},door.verts,door.faces
   for j=door.leaf_start,door.leaf_end do
@@ -834,7 +876,7 @@ function _draw()
     for i=1,leaf.nf do
       -- face index
       local fi=leaf[i]            
-      local poly,face_verts={fi=fi},faces[fi+3]
+      local poly,face_verts,uvi={fi=fi},faces[fi+3],faces[fi+5]
       for k,vi in pairs(face_verts) do
         local v=brush_verts[vi]
         if not v then
@@ -842,13 +884,21 @@ function _draw()
           v=v_add({verts[vi],verts[vi+1],verts[vi+2]},door.origin)
           brush_verts[vi]=v
         end
+        -- copy v
+        v={unpack(v)}
+        if uvi!=-1 then
+          if uvi!=-1 then
+            local kuv=uvi+(k<<1)
+            v.u=_texcoords[kuv-1]
+            v.v=_texcoords[kuv]
+          end
+        end
         poly[k]=v
       end
       -- clip against world
-      bsp_clip(_model.bsp,poly,out)
+      bsp_clip(_model.bsp,poly,out,uvi!=-1)
     end
   end
-  ]]
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)

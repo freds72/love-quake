@@ -146,3 +146,11 @@ function polytex_xmajor(v,n,slope)
 	end
 	clip()
 end
+
+function polyline(p,np,c)
+	color(c)
+	for i=1,np do
+		local v0,v1=p[i],p[i%np+1]	
+		line(v0.x,v0.y,v1.x,v1.y)
+	end
+end
