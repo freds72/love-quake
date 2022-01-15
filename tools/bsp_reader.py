@@ -544,7 +544,6 @@ def pack_face(bsp_handle, id, face, colormap, sprites, maps, only_lightmap, ligh
       elif color_re.match(tex_name):
         # decode color
         baselight = [index for index,c in colormap.items() if int(tex_name[4:6],16)==c.hw][0]
-        print("found color texture: {} --> {} ".format(tex_name, baselight))
       else:
         # copy texture verbatim
         for y in range(mip.height):

@@ -39,16 +39,18 @@ function v_add(v,dv,scale)
 		v[3]+scale*dv[3]}
 end
 function v_lerp(a,b,t)
+  local ax,ay,az=a[1],a[2],a[3]
 	return {
-		lerp(a[1],b[1],t),
-		lerp(a[2],b[2],t),
-		lerp(a[3],b[3],t)
+    ax+(b[1]-ax)*t,
+    ay+(b[2]-ay)*t,
+    az+(b[3]-az)*t
 	}
 end
 function v2_lerp(a,b,t)
+  local ax,ay=a[1],a[2]
 	return {
-		lerp(a[1],b[1],t),
-		lerp(a[2],b[2],t)
+    ax+(b[1]-ax)*t,
+    ay+(b[2]-ay)*t
 	}
 end
 
@@ -364,7 +366,7 @@ function make_cam()
                   end
                 else
                   -- sky?
-                  polyfill(pts,np,flags&0x4!=0 and 4 or 0)
+                  polyfill(pts,np,flags&0x4!=0 and 1 or 0)
                   --polyline(pts,np,1)
                   --polyfill(pts,np,0)
                 end
@@ -466,6 +468,34 @@ function make_cam()
 end
 
 -- znear=8
+function z_poly_clip(v,nv,uvs)
+	local res,v0,uv0,res_uv={},v[nv],uvs and uvs[nv],{}
+	local d0=v0[3]-8
+	for i=1,nv do
+		local v1,uv1=v[i],uvs and uvs[i]
+		local d1=v1[3]-8
+		if sgn(d1)!=sgn(d0) then
+      local t=d1/(d1-d0)
+      local nv=v_lerp(v1,v0,t) 
+      res[#res+1]={
+        x=63.5+(nv[1]<<3),
+        y=63.5-(nv[2]<<3),
+        w=8}
+      if uvs then
+        res_uv[#res_uv+1]=v2_lerp(uv1,uv0,t)
+      end
+    end
+    if d1>0 then
+      res[#res+1]=v1
+      res_uv[#res_uv+1]=uv1
+    end
+    v0=v1
+    uv0=uv1
+		d0=d1
+	end
+	return res,#res,res_uv
+end
+
 function z_poly_clip(v,nv,uvs)
 	local res,v0,uv0,res_uv={},v[nv],uvs and uvs[nv],{}
 	local d0=v0[3]-8
@@ -590,7 +620,9 @@ function make_player(pos,a)
       -- damping      
       angle[3]*=0.8
       v_scale(dangle,0.6)
-      v_scale(velocity,0.7)
+      velocity[1]*=0.7
+      velocity[2]*=0.9
+      velocity[3]*=0.7
 
       -- move
       local dx,dz,a,jmp=0,0,angle[2],0
@@ -635,7 +667,7 @@ function make_player(pos,a)
                 if stairs then
                   stairs=nil
                   -- move up
-                  velocity=v_add(velocity,{0,10,0})
+                  velocity=v_add(velocity,{0,8,0})
                 end
               end
             end
@@ -673,13 +705,13 @@ local _things={}
 function make_thing(bsp,pos,model)
   local thing=add(_things,{
     pos=pos,
-    m=make_m_from_v_angle({0,1,0},0),
+    m=make_m_from_v_angle({0,1,0},rnd()),
     nodes={},
     model=model})
   -- todo: get size from wad
   register_thing_subs(bsp,thing,1)
   --
-  m_set_pos(thing.m,thing.pos)
+  m_set_pos(thing.m,pos)
 end
 
 
@@ -876,6 +908,8 @@ function _draw()
   print(s,2,3,1)
   print(s,2,2,12)
 
+  if(_msg) print(_msg,64-2*#_msg,80,4)
+  
   pset(64,64,15)  
 
   -- set screen palette (color ramp 8 is neutral)
@@ -1222,13 +1256,13 @@ function unpack_map()
         -- inside volume?
         if hit and hit.contents==-2 then
           wait_async(delay)
-          if(msg) printh(msg)
+          if(msg) _msg=msg
           -- trigger once?
-          if wait>0 then
-            wait_async(wait)
-          else
+          wait_async(wait>0 and wait or 60)
+          -- clear text message
+          _msg=nil
+        if wait==0 then
             return
-          end
         end
         yield()
       end

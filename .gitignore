@@ -13,6 +13,7 @@ tools/__pycache__
 _label.png
 /bin
 /carts/q8k*.p8
+/carts/*.bin
 /maps/*.log
 /maps/*.prt
 /maps/*-compile.map

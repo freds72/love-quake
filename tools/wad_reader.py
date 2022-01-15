@@ -161,7 +161,7 @@ def pack_entities(entities, models):
   player_start = player_starts[0]
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   blob += pack_vec3(player_start.origin)
-  blob += pack_fixed(player_start.angle)
+  blob += pack_fixed(player_start.get("angle",0))
 
   # all entities with a model
   threed_models = []
@@ -189,7 +189,7 @@ def pack_entities(entities, models):
     trigger_blob = pack_variant(int(trigger.model[1:])+1)
     # delay (applies for all triggers) converted to number of frames
     # cancel negative values
-    trigger_blob += pack_variant(max(0,int(trigger.delay*30)))
+    trigger_blob += pack_variant(max(0,int(trigger.get("delay",0)*30)))
     
     if "message" in trigger:
       flags |= 2
@@ -220,7 +220,7 @@ def pack_entities(entities, models):
     # cancel negative values for wait
     door_blob += pack_variant(max(0,int(door.wait*30)))
     # speed
-    door_blob += pack_variant(max(0,int(door.speed)))
+    door_blob += pack_variant(max(0,int(door.get("speed",3))))
     # 0-359: horizontal angle
     # -1: up move
     # -2: down move
@@ -237,13 +237,14 @@ def pack_entities(entities, models):
     
     # pos 2 (destination)
     pos2 = model.origin
+    lip = door.get("lip",8)
     if angle==-1:      
-      pos2.y+=extents.y-door.lip
+      pos2.y+=extents.y-lip
     elif angle==-2:
-      pos2.y-=extents.y-door.lip
+      pos2.y-=extents.y-lip
     else:
       # todo: support all angles
-      pos2.x+=extents.x-door.lip
+      pos2.x+=extents.x-lip
 
     door_blob += pack_vec3(pos2)
 
