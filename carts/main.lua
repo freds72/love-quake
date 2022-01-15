@@ -38,20 +38,15 @@ function v_add(v,dv,scale)
 		v[2]+scale*dv[2],
 		v[3]+scale*dv[3]}
 end
-function v_lerp(a,b,t)
-  local ax,ay,az=a[1],a[2],a[3]
+function v_lerp(a,b,t,uv)
+  local ax,ay,az,u,v=a[1],a[2],a[3],a.u,a.v
 	return {
     ax+(b[1]-ax)*t,
     ay+(b[2]-ay)*t,
-    az+(b[3]-az)*t
-	}
-end
-function v2_lerp(a,b,t)
-  local ax,ay=a[1],a[2]
-	return {
-    ax+(b[1]-ax)*t,
-    ay+(b[2]-ay)*t
-	}
+    az+(b[3]-az)*t,
+    u=uv and u+(b.u-u)*t,
+    v=uv and v+(b.v-v)*t
+  }
 end
 
 function v_cross(a,b)
@@ -313,20 +308,21 @@ function make_cam()
           if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
             f_cache[fi]=true
 
-            local face_verts,outcode,clipcode,uvi,uvs=faces[fi+3],0xffff,0,faces[fi+5]
-            if (uvi!=-1) uvs={}
+            local face_verts,outcode,clipcode,uvi=faces[fi+3],0xffff,0,faces[fi+5]
             local np=#face_verts
             for k,vi in pairs(face_verts) do                
               local a=v_cache[vi]
               outcode&=a.outcode
               clipcode+=a.outcode&2
               pts[k]=a              
-              if uvs then
-                uvs[k]={_texcoords[uvi+(k<<1)-1],_texcoords[uvi+(k<<1)]}
+              if uvi!=-1 then
+                local kuv=uvi+(k<<1)
+                a.u=_texcoords[kuv-1]
+                a.v=_texcoords[kuv]
               end
             end
             if outcode==0 then 
-              if(np>2 and clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
+              if(np>2 and clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
               -- still a valid polygon?
               if np>2 then
                 if uvi!=-1 then
@@ -360,9 +356,9 @@ function make_cam()
 
                   local umask,vmask=u>>31,v>>31                    
                   if u^^umask>v^^vmask then
-                    polytex_ymajor(pts,np,uvs,v/u)
+                    polytex_ymajor(pts,np,v/u)
                   else
-                    polytex_xmajor(pts,np,uvs,u/v)
+                    polytex_xmajor(pts,np,u/v)
                   end
                 else
                   -- sky?
@@ -420,14 +416,17 @@ function make_cam()
               for _,face in pairs(thing.model.f) do  
                 -- dual sided or visible?
                 if face.dual or v_dot(face.n,cam_pos)>face.cp then
-                  local pts,np,outcode,clipcode,w,uvs={},face.ni,0xffff,0,0,face.uvs and {}
+                  local pts,np,outcode,clipcode,w,uvs={},face.ni,0xffff,0,0,face.uvs
                   for k=1,np do
                     -- base index in verts array
                     local a=v_cache[face[k]]
                     outcode&=a.outcode
                     clipcode+=a.outcode&2
                     pts[k]=a
-                    if(uvs) uvs[k]=face.uvs[k]
+                    if uvs then
+                      a.u=uvs[k][1]
+                      a.v=uvs[k][2]
+                    end
                     w+=a.w
                   end
                   if outcode==0 then 
@@ -436,7 +435,6 @@ function make_cam()
                     if np>2 then
                       pts.f=face
                       pts.key=(w/face.ni)<<8
-                      pts.uvs=uvs
                       add(faces,pts)
                     end
                   end
@@ -452,48 +450,37 @@ function make_cam()
             if face.color then
               polyfill(pts,#pts,face.color)
             else
-              polytex_ymajor(pts,#pts,pts.uvs,0)
+              polytex_ymajor(pts,#pts,0)
             end
           end
         end        
       end
-    end,
-    project2d=function(self,v)
-      local m,x,y,z=self.m,v[1],v[2],v[3]
-      local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
-      local w=64/az
-      return {ax,ay,az,x=63.5+ax*w,y=63.5-ay*w,w=w}
     end  
   }
 end
 
 -- znear=8
 function z_poly_clip(v,nv,uvs)
-	local res,v0,uv0,res_uv={},v[nv],uvs and uvs[nv],{}
+	local res,v0={},v[nv]
 	local d0=v0[3]-8
 	for i=1,nv do
     if d0>0 then
       res[#res+1]=v0
-      res_uv[#res_uv+1]=uv0
     end
-		local v1,uv1=v[i],uvs and uvs[i]
+		local v1=v[i]
 		local d1=v1[3]-8
 		if sgn(d1)!=sgn(d0) then
       local t=d0/(d0-d1)
-      local nv=v_lerp(v0,v1,t) 
-      res[#res+1]={
-        x=63.5+(nv[1]<<3),
-        y=63.5-(nv[2]<<3),
-        w=8}
-      if uvs then
-        res_uv[#res_uv+1]=v2_lerp(uv0,uv1,t)
-      end
+      local nv=v_lerp(v0,v1,t,uvs)
+      nv.x=63.5+(nv[1]<<3)
+      nv.y=63.5-(nv[2]<<3)
+      nv.w=8
+      res[#res+1]=nv
     end
     v0=v1
-    uv0=uv1
 		d0=d1
 	end
-	return res,#res,res_uv
+	return res,#res
 end
 
 function poly_uv_clip(node,v)
