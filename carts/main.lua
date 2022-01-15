@@ -472,53 +472,15 @@ function z_poly_clip(v,nv,uvs)
 	local res,v0,uv0,res_uv={},v[nv],uvs and uvs[nv],{}
 	local d0=v0[3]-8
 	for i=1,nv do
+    if d0>0 then
+      res[#res+1]=v0
+      res_uv[#res_uv+1]=uv0
+    end
 		local v1,uv1=v[i],uvs and uvs[i]
 		local d1=v1[3]-8
 		if sgn(d1)!=sgn(d0) then
-      local t=d1/(d1-d0)
-      local nv=v_lerp(v1,v0,t) 
-      res[#res+1]={
-        x=63.5+(nv[1]<<3),
-        y=63.5-(nv[2]<<3),
-        w=8}
-      if uvs then
-        res_uv[#res_uv+1]=v2_lerp(uv1,uv0,t)
-      end
-    end
-    if d1>0 then
-      res[#res+1]=v1
-      res_uv[#res_uv+1]=uv1
-    end
-    v0=v1
-    uv0=uv1
-		d0=d1
-	end
-	return res,#res,res_uv
-end
-
-function z_poly_clip(v,nv,uvs)
-	local res,v0,uv0,res_uv={},v[nv],uvs and uvs[nv],{}
-	local d0=v0[3]-8
-	for i=1,nv do
-		local v1,uv1=v[i],uvs and uvs[i]
-		local d1=v1[3]-8
-		if d1>0 then
-      if d0<=0 then
-        local t=d0/(d0-d1)
-        local nv=v_lerp(v0,v1,t) 
-        res[#res+1]={
-          x=63.5+(nv[1]<<3),
-          y=63.5-(nv[2]<<3),
-          w=8}
-        if uvs then
-          res_uv[#res_uv+1]=v2_lerp(uv0,uv1,t)
-        end
-			end
-      res[#res+1]=v1
-      res_uv[#res_uv+1]=uv1
-		elseif d0>0 then
       local t=d0/(d0-d1)
-			local nv=v_lerp(v0,v1,t)
+      local nv=v_lerp(v0,v1,t) 
       res[#res+1]={
         x=63.5+(nv[1]<<3),
         y=63.5-(nv[2]<<3),
@@ -526,7 +488,7 @@ function z_poly_clip(v,nv,uvs)
       if uvs then
         res_uv[#res_uv+1]=v2_lerp(uv0,uv1,t)
       end
-		end
+    end
     v0=v1
     uv0=uv1
 		d0=d1
@@ -1261,8 +1223,9 @@ function unpack_map()
           wait_async(wait>0 and wait or 60)
           -- clear text message
           _msg=nil
-        if wait==0 then
-            return
+          if wait==0 then
+              return
+          end
         end
         yield()
       end
