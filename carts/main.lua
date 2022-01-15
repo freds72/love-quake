@@ -514,7 +514,7 @@ function z_poly_clip(v,nv,uvs)
 		local v1=v[i]
 		local d1=v1[3]-8
     -- not same sign?
-		if d1&0x8000!=d0&0x8000 then
+		if (d1>0)!=(d0>0) then
       local nv=v_lerp(v0,v1,d0/(d0-d1),uvs)
       -- project against near plane
       nv.x=63.5+(nv[1]<<3)
@@ -549,20 +549,16 @@ function poly_uv_clip(node,v,uvs)
     if d0<=0 then
       add(out_res,v0,1)
     end
-		if d1>0 then
-      if d0<=0 then
-        -- push in front of list
-        local v2=v_lerp(v0,v1,d0/(d0-d1),uvs)
-        add(out_res,v2,1)
-        -- add to end
-        res[#res+1]=v2
-			end
-      res[#res+1]=v1
-		elseif d0>0 then
+		if (d1>0)!=(d0>0) then
+      -- push in front of list
       local v2=v_lerp(v0,v1,d0/(d0-d1),uvs)
       add(out_res,v2,1)
+      -- add to end
       res[#res+1]=v2
-		end
+    end
+    if d1>0 then
+      res[#res+1]=v1
+    end    
     v0=v1
 		d0=d1
 	end
