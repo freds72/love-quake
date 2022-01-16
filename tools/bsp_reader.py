@@ -348,13 +348,10 @@ class MapAtlas():
         data = []
         for y in range(height):
           tmp = bytearray()
-          my = 128*y
-          mx = 0
           for x in range(width):   
             if texdata[x+y*width]>255:
               print("texture: {}x{} - data:{}".format(height, width, texdata))
             tmp.append(texdata[x+y*width])
-            mx = 4*(x // 4)
             if len(tmp)>3:
               data.append(tmp[3]<<24|tmp[2]<<16|tmp[1]<<8|tmp[0])
               tmp = bytearray()

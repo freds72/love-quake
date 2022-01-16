@@ -270,10 +270,13 @@ function make_cam()
       end
       return visleaves
     end,  
-    draw_faces=function(self,verts,faces,leaves,lstart,lend,brushes)
-      local v_cache_class={
+    draw_faces=function(self,verts,faces,leaves,lstart,lend,brushes)    
+      local v_unpack=function(vi)
+        return verts[vi],verts[vi+1],verts[vi+2]
+      end
+      local v_cache_class={        
         __index=function(self,vi)
-          local m,code,x,y,z=self.m,0,verts[vi],verts[vi+1],verts[vi+2]
+          local m,code,x,y,z=self.m,0,self.v(vi)
           local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
 
           -- znear=8
@@ -293,12 +296,12 @@ function make_cam()
       }
 
       local m=self.m
-      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m},v_cache_class),{},{},{},self.pos
+      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m,v=v_unpack},v_cache_class),{},{},{},self.pos
       
       for j=lstart,lend do
         local leaf=leaves[j]
         -- faces form a convex space, render in any order        
-        for i=1,leaf.nf do
+        for i=1,#leaf do
           -- face index
           local fi=leaf[i]            
           -- face normal          
@@ -390,7 +393,7 @@ function make_cam()
                   local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
         
                   -- znear=8
-                  if az<8 then code|=2 end
+                  if az<8 then code=2 end
                   --if az>2048 then code|=1 end
                   if ax>az then code|=4
                   elseif ax<-az then code|=8 end
@@ -401,7 +404,7 @@ function make_cam()
                   local w=64/az
                   pts[k]={ax,ay,az,u=v.u,v=v.v,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
                   outcode&=code
-                  clipcode+=outcode&2
+                  clipcode+=code&2
                 end
                 if outcode==0 then 
                   if(clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
@@ -455,9 +458,9 @@ function make_cam()
             -- collect all faces "closest" to camera
             if thing.visleaf==leaf then
               -- model to cam + cam pos in model space
-              local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
+              local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m),v=v_unpack},v_cache_class),m_inv_x_v(thing.m,self.pos)
                           
-              for _,face in pairs(thing.model.f) do  
+              for face in all(thing.model.f) do  
                 -- dual sided or visible?
                 if face.dual or v_dot(face.n,cam_pos)>face.cp then
                   local pts,np,outcode,clipcode,w,uvs={},face.ni,0xffff,0,0,face.uvs
@@ -865,11 +868,12 @@ function _draw()
   -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
 
   -- collect leaves with moving brushes
+
   local out={model=door}
   local brush_verts,verts,faces={},door.verts,door.faces
   for j=door.leaf_start,door.leaf_end do
     local leaf=_leaves[j]    
-    for i=1,leaf.nf do
+    for i=1,#leaf do
       -- face index
       local fi=leaf[i]            
       local poly,face_verts,uvi={fi=fi},faces[fi+3],faces[fi+5]
@@ -895,6 +899,7 @@ function _draw()
       bsp_clip(_model.bsp,poly,out,uvi!=-1)
     end
   end
+
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)
@@ -1101,11 +1106,9 @@ function unpack_map()
       pvs[unpack_variant()]=unpack_fixed()
     end)
     
-    local n=unpack_variant()
-    l.nf=n
-    for i=1,n do      
+    unpack_array(function()
       add(l,face_sizeof*unpack_variant()+1)
-    end
+    end)
   end,"leaves")
 
   unpack_array(function()
