@@ -306,68 +306,54 @@ function make_cam()
           local fi=leaf[i]            
           -- face normal          
           local fn,flags=faces[fi],faces[fi+2]
-          -- some sectors are sharing faces
-          -- make sure a face from a leaf is drawn only once
-          if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
-            f_cache[fi]=true
+          if flags&0x4==0 then
+            -- some sectors are sharing faces
+            -- make sure a face from a leaf is drawn only once
+            if not f_cache[fi] and plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
+              f_cache[fi]=true
 
-            local face_verts,outcode,clipcode,uvi=faces[fi+3],0xffff,0,faces[fi+5]
-            local np=#face_verts
-            for k,vi in pairs(face_verts) do                
-              local a=v_cache[vi]
-              outcode&=a.outcode
-              clipcode+=a.outcode&2
-              pts[k]=a              
-              if uvi!=-1 then
-                local kuv=uvi+(k<<1)
-                a.u=_texcoords[kuv-1]
-                a.v=_texcoords[kuv]
-              end
-            end
-            if outcode==0 then 
-              if(np>2 and clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
-              -- still a valid polygon?
-              if np>2 then
+              local face_verts,outcode,clipcode,uvi=faces[fi+3],0xffff,0,faces[fi+5]
+              local np=#face_verts
+              for k,vi in pairs(face_verts) do                
+                local a=v_cache[vi]
+                outcode&=a.outcode
+                clipcode+=a.outcode&2
+                pts[k]=a              
                 if uvi!=-1 then
-                  local u,v=fu_cache[fn],fv_cache[fn]
-                  if not u then
-                    -- not needed (we take abs u)
-                    -- if(side) s,t=-s,-t
-                    local a=atan2(plane_dot(fn,cam_u),plane_dot(fn,cam_v))
-                    -- normalized 2d vector
-                    u,v=sin(a),cos(a)
-                    fu_cache[fn]=u
-                    fv_cache[fn]=v
-                  end
+                  local kuv=uvi+(k<<1)
+                  a.u=_texcoords[kuv-1]
+                  a.v=_texcoords[kuv]
+                end
+              end
+              if outcode==0 then 
+                if(np>2 and clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
+                -- still a valid polygon?
+                if np>2 then
+                  if uvi!=-1 then
+                    -- activate texture
+                    local mi=faces[fi+6]
+                    if flags&8==0 then
+                      -- regular texture
+                      -- global offset (using 0x8000 zone) + stride
+                      local texaddr=_maps[mi+1]
+                      poke(0x5f56,_maps[mi],(texaddr<<16)&0xff)
+                      poke4(0x5f38,texaddr)
+                    else
+                      -- lightmap
+                      -- reset starting point + stride
+                      poke(0x5f56,0x20,_maps[mi])
+                      -- reset texcoords
+                      poke4(0x5f38,0)
+                      poke4(0x2000,unpack(_maps[mi+1]))                  
+                    end
 
-                  -- activate texture
-                  local mi=faces[fi+6]
-                  if flags&8==0 then
-                    -- regular texture
-                    -- global offset (using 0x8000 zone) + stride
-                    local texaddr=_maps[mi+1]
-                    poke(0x5f56,_maps[mi],(texaddr<<16)&0xff)
-                    poke4(0x5f38,texaddr)
+                    polytex(pts,np)
                   else
-                    -- lightmap
-                    -- reset starting point + stride
-                    poke(0x5f56,0x20,_maps[mi])
-                    -- reset texcoords
-                    poke4(0x5f38,0)
-                    poke4(0x2000,unpack(_maps[mi+1]))                  
+                    -- sky?                  
+                    polyfill(pts,np,i%15)
+                    --polyline(pts,np,1)
+                    --polyfill(pts,np,0)
                   end
-
-                  local umask,vmask=u>>31,v>>31                    
-                  if u^^umask>v^^vmask then
-                    polytex_ymajor(pts,np,v/u)
-                  else
-                    polytex_xmajor(pts,np,u/v)
-                  end
-                else
-                  -- sky?
-                  polyfill(pts,np,flags&0x4!=0 and 1 or 0)
-                  --polyline(pts,np,1)
-                  --polyfill(pts,np,0)
                 end
               end
             end
@@ -862,13 +848,14 @@ function _update()
 end
 
 function _draw()
-  --cls()
+  cls()
+  spans={}
   
   local door=_bsps[2]
   -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
 
   -- collect leaves with moving brushes
-
+  --[[
   local out={model=door}
   local brush_verts,verts,faces={},door.verts,door.faces
   for j=door.leaf_start,door.leaf_end do
@@ -899,7 +886,7 @@ function _draw()
       bsp_clip(_model.bsp,poly,out,uvi!=-1)
     end
   end
-
+  ]]
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)
