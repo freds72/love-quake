@@ -344,13 +344,14 @@ function make_cam()
                       poke(0x5f56,0x20,_maps[mi])
                       -- reset texcoords
                       poke4(0x5f38,0)
+                      -- copy lightmap/texture
                       poke4(0x2000,unpack(_maps[mi+1]))                  
                     end
 
                     polytex(pts,np)
                   else
                     -- sky?                  
-                    polyfill(pts,np,i%15)
+                    polyfill(pts,np,0)
                     --polyline(pts,np,1)
                     --polyfill(pts,np,0)
                   end
@@ -396,10 +397,6 @@ function make_cam()
                   if(clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
                   if np>2 then
                     if uvi!=-1 then
-                      local a=atan2(plane_dot(fn,cam_u),plane_dot(fn,cam_v))
-                      -- normalized 2d vector
-                      local u,v=sin(a),cos(a)
-  
                       ---- enable texture
                       local mi=faces[fi+6]
                       if flags&8==0 then
@@ -416,12 +413,7 @@ function make_cam()
                         poke4(0x5f38,0)
                         poke4(0x2000,unpack(_maps[mi+1]))                  
                       end
-                      local umask,vmask=u>>31,v>>31                    
-                      if u^^umask>v^^vmask then
-                        polytex_ymajor(pts,np,v/u)
-                      else
-                        polytex_xmajor(pts,np,u/v)
-                      end
+                      polytex(pts,np)
                     else                    
                       polyfill(pts,np,0)            
                     end
@@ -483,7 +475,7 @@ function make_cam()
             if face.color then
               polyfill(pts,#pts,face.color)
             else
-              polytex_ymajor(pts,#pts,0)
+              polytex(pts,#pts)
             end
           end
         end        
