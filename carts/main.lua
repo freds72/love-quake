@@ -215,8 +215,8 @@ function make_cam()
       end
     end  
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(not side)
     collect_leaf(side)
+    collect_leaf(not side)
   end  
 
 	return {
@@ -270,13 +270,10 @@ function make_cam()
       end
       return visleaves
     end,  
-    draw_faces=function(self,verts,faces,leaves,lstart,lend,brushes)    
-      local v_unpack=function(vi)
-        return verts[vi],verts[vi+1],verts[vi+2]
-      end
+    draw_faces=function(self,model,verts,faces,leaves,lstart,lend)    
       local v_cache_class={        
         __index=function(self,vi)
-          local m,code,x,y,z=self.m,0,self.v(vi)
+          local m,code,x,y,z=self.m,0,verts[vi],verts[vi+1],verts[vi+2]
           local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
 
           -- znear=8
@@ -296,7 +293,7 @@ function make_cam()
       }
 
       local m=self.m
-      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m,v=v_unpack},v_cache_class),{},{},{},self.pos
+      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(self.m,model.m)},v_cache_class),{},{},{},v_add(self.pos,model.origin,-1)
       
       for j=lstart,lend do
         local leaf=leaves[j]
@@ -361,69 +358,6 @@ function make_cam()
           end
         end
         
-        if brushes then
-          local polys=brushes[leaf]
-          if polys then
-            -- cam pos in model space (eg. shifted)
-            local m,cam_pos=self.m,v_add(self.pos,brushes.model.origin,-1)
-            -- all "faces"
-            for i,poly in pairs(polys) do                          
-              -- dual sided or visible?
-              local fi=poly.fi
-              local fn,flags=faces[fi],faces[fi+2]
-              if plane_dot(fn,cam_pos)<faces[fi+1]!=(flags&1==0) then            
-                local pts,np,outcode,clipcode,uvi={},#poly,0xffff,0,faces[fi+5]
-                for k=1,np do
-                  -- base index in verts array
-                  local v=poly[k]
-                  local code,x,y,z=0,v[1],v[2],v[3]
-                  local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
-        
-                  -- znear=8
-                  if az<8 then code=2 end
-                  --if az>2048 then code|=1 end
-                  if ax>az then code|=4
-                  elseif ax<-az then code|=8 end
-                  if ay>az then code|=16
-                  elseif ay<-az then code|=32 end
-                  -- save world space coords for clipping
-                  -- to screen space
-                  local w=64/az
-                  pts[k]={ax,ay,az,u=v.u,v=v.v,x=63.5+ax*w,y=63.5-ay*w,w=w,outcode=code}
-                  outcode&=code
-                  clipcode+=code&2
-                end
-                if outcode==0 then 
-                  if(clipcode>0) pts,np=z_poly_clip(pts,np,uvi!=-1)
-                  if np>2 then
-                    if uvi!=-1 then
-                      ---- enable texture
-                      local mi=faces[fi+6]
-                      if flags&8==0 then
-                        -- regular texture
-                        -- global offset (using 0x8000 zone) + stride
-                        local texaddr=_maps[mi+1]
-                        poke(0x5f56,_maps[mi],(texaddr<<16)&0xff)
-                        poke4(0x5f38,texaddr)
-                      else
-                        -- lightmap
-                        -- reset starting point + stride
-                        poke(0x5f56,0x20,_maps[mi])
-                        -- reset texcoords
-                        poke4(0x5f38,0)
-                        poke4(0x2000,unpack(_maps[mi+1]))                  
-                      end
-                      polytex(pts,np)
-                    else                    
-                      polyfill(pts,np,0)            
-                    end
-                  end
-                end
-              end
-            end
-          end
-        end
-        
         -- draw entities in this convex space
 
         if leaf.things then
@@ -436,7 +370,7 @@ function make_cam()
             -- collect all faces "closest" to camera
             if thing.visleaf==leaf then
               -- model to cam + cam pos in model space
-              local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m),v=v_unpack},v_cache_class),m_inv_x_v(thing.m,self.pos)
+              local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
                           
               for face in all(thing.model.f) do  
                 -- dual sided or visible?
@@ -507,73 +441,6 @@ function z_poly_clip(v,nv,uvs)
 		d0=d1
 	end
 	return res,#res
-end
-
-function poly_uv_clip(node,v,uvs)
-  -- degenerate case
-  if(#v<3) return {},{}
-  local dists,side={},0
-  for i=1,#v do
-    local d,dist=plane_dot(node.plane,v[i])  
-    d-=dist
-    side|=d>0 and 1 or 2
-    dists[i]=d
-  end
-  -- early exit tests (eg. no clipping)
-  if(side==1) return v,{}
-  if(side==2) return {},v
-  -- straddling
-  -- copy original face index
-	local res,out_res,v0,d0={fi=v.fi},{fi=v.fi},v[#v],dists[#v]
-	for i=1,#v do
-		local v1,d1=v[i],dists[i]
-    if d0<=0 then
-      add(out_res,v0,1)
-    end
-		if (d1>0)!=(d0>0) then
-      -- push in front of list
-      local v2=v_lerp(v0,v1,d0/(d0-d1),uvs)
-      add(out_res,v2,1)
-      -- add to end
-      res[#res+1]=v2
-    end
-    if d1>0 then
-      res[#res+1]=v1
-    end    
-    v0=v1
-		d0=d1
-	end
-
-	return res,out_res
-end
-
-function bsp_clip(node,poly,out,uvs)
-  -- use hyperplane to split poly
-  local res_in,res_out=poly_uv_clip(node,poly,uvs)
-  if #res_in>0 then
-    local child=node[true]
-    if child then
-      if child.contents then
-        local brushes=out[child] or {}
-        add(brushes,res_in)
-        out[child]=brushes
-      else
-        bsp_clip(child,res_in,out,uvs)
-      end
-    end
-  end
-  if #res_out>0 then
-    local child=node[false]
-    if child then
-      if child.contents then
-        local brushes=out[child] or {}
-        add(brushes,res_out)
-        out[child]=brushes
-      else   
-        bsp_clip(child,res_out,out,uvs)
-      end
-    end
-  end
 end
 
 function make_player(pos,a)
@@ -801,6 +668,12 @@ function _init()
   -- unpack map
   _bsps,_leaves,pos,angle=decompress("q8k",0,0,unpack_map)
   _model=_bsps[1]
+  _model.m={
+    1,0,0,0,
+    0,1,0,0,
+    0,0,1,0,
+    0,0,0,1    
+  }
   -- restore spritesheet
   reload()
   -- copy map tiles to hi mem
@@ -844,6 +717,13 @@ function _draw()
   spans={}
   
   local door=_bsps[2]
+  local pos=door.origin
+  door.m={
+    1,0,0,0,
+    0,1,0,0,
+    0,0,1,0,
+    pos[1],pos[2],pos[3],1
+  }
   -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
 
   -- collect leaves with moving brushes
@@ -881,7 +761,8 @@ function _draw()
   ]]
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
-  _cam:draw_faces(_model.verts,_model.faces,visleaves,1,#visleaves,out)
+  _cam:draw_faces(_model,_model.verts,_model.faces,visleaves,1,#visleaves)
+  _cam:draw_faces(door,door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)  
 
   local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."kB\nleaves:"..#visleaves
   print(s,2,3,1)
