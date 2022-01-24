@@ -41,8 +41,8 @@ function line(...)
 oline(...)
 cflip()
 end
-otline=tline
-function tline(...)
+otline=tline3d
+function tline3d(...)
 otline(...)
 cflip()
 end

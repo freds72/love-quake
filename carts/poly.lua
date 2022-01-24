@@ -42,7 +42,8 @@ function polyfill(p,np,c)
 			--sub-pixel correction
 			rx+=(y-y0)*rdx
 		end
-		rectfill(rx,y,lx,y)
+		local a,b=rx\1,lx\1-1
+		if(b-a>=0) rectfill(a,y,b,y)
 		--spanfill(y,rx,lx)
 		lx+=ldx
 		rx+=rdx
@@ -50,18 +51,20 @@ function polyfill(p,np,c)
 end
 
 
-local spans={}
+local _spans={}
 function spanfill(x0,x1,y,u,v,w,du,dv,dw)
-	local span,old=spans[y]
+	if(x1<0 or x0>127) return
+	if(x1-x0<0) return
+	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
-		if(x1-x0<0) return
 		tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
-		spans[y]={x0=x0,x1=x1,u=u,v=v,w=w,du=du,dv=dv,dw=dw}
+		_spans[y]={x0=x0,x1=x1,u=u,v=v,w=w,du=du,dv=dv,dw=dw}
 		return
 	end
 	while span do
 		local s0,s1=span.x0,span.x1
+		
 		if s0>x0 then
 			if s0>x1 then
 				-- nnnn
@@ -74,7 +77,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 					old.next=n
 				else
 					-- new first
-					spans[y]=n
+					_spans[y]=n
 				end
 				return
 			end
@@ -89,10 +92,10 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 			if old then 
 				old.next=n				
 			else
-				spans[y]=n
+				_spans[y]=n
 			end
 			x0=s0
-			assert(x1-x0>=0,"empty right seg")
+			--assert(x1-x0>=0,"empty right seg")
 			u+=dx*du
 			v+=dx*dv
 			w+=dx*dw
@@ -102,101 +105,81 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 		elseif s1>=x0 then
 			--     ??nnnn????
 			--     xxxxxxx	
-			if s1>=x1 then
-				--     ??nnnn?
-				--     xxxxxxx	
-				-- totally hidden (or not!)
-				local dx=x0-s0
-				local sw=span.w+dx*span.dw
-				if sw<=w and dw>span.dw then
-					-- insert (left) clipped existing span as a "new" span
-					if dx>0 then
-						local n={
-							x0=s0,
-							x1=x0-1,
-							u=span.u,
-							v=span.v,
-							w=span.w,
-							du=span.du,
-							dv=span.dv,
-							dw=span.dw,
-							next=span}	
-						if old then
-							old.next=n
-						else
-							spans[y]=n
-						end
-						old=n
-					end
-					-- middle ("new")
-					tline3d(x0,y,x1,y,u,v,w,du,dv,dw)					
-					local n={x0=x0,x1=x1,u=u,v=v,w=w,du=du,dv=dv,dw=dw,next=span}
-					if old then 
-						old.next=n				
+
+			--     ??nnnn?
+			--     xxxxxxx	
+			-- totally hidden (or not!)
+			local dx=x0-s0
+			local sw=span.w+dx*span.dw			
+			
+			if sw<w or (sw==w and dw>span.dw) then
+				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
+				-- insert (left) clipped existing span as a "new" span
+				if dx>0 then
+					local n={
+						x0=s0,
+						x1=x0-1,
+						u=span.u,
+						v=span.v,
+						w=span.w,
+						du=span.du,
+						dv=span.dv,
+						dw=span.dw,
+						next=span}	
+					if old then
+						old.next=n
 					else
-						spans[y]=n
+						_spans[y]=n
 					end
-					-- any remaining "right" from current span?
-					dx=s1-x1-1
-					if dx>=0 then
-						dx=x1+1-s0
-						-- "shrink" current span
-						span.x0=x1+1
-						span.u+=dx*span.du
-						span.v+=dx*span.dv
-						span.w+=dx*span.dw
-					else
-						-- drop current span
-						n.next=span.next
-					end					
-				end	
-				return
-			else
-				--         nnnnnn
-				--     xxxxxxx	
-				local dx=x0-s0
-				local sw=span.w+dx*span.dw
-				if sw<=w and dw>span.dw then
-					-- insert (left) clipped existing span as a "new" span
-					if dx>0 then
-						local n={
-							x0=s0,
-							x1=x0-1,
-							u=span.u,
-							v=span.v,
-							w=span.w,
-							du=span.du,
-							dv=span.dv,
-							dw=span.dw,
-							next=span}	
-						if old then
-							old.next=n
-							old=n
-						else
-							spans[y]=n
-						end
-					end
-					-- middle ("new")
-					tline3d(x0,y,s1,y,u,v,w,du,dv,dw)					
-					local n={x0=x0,x1=s1,u=u,v=v,w=w,du=du,dv=dv,dw=dw,next=span}
-					if old then 
-						old.next=n				
-					else
-						spans[y]=n
-					end
+					old=n
+				end
+				-- middle ("new")
+				local x2=x1
+				if s1<x1 then
+					--     ??nnnnn???
+					--     xxxxxxx			
+					-- draw only up to s1
+					x2=s1
+				end
+				tline3d(x0,y,x2,y,u,v,w,du,dv,dw)					
+				local n={x0=x0,x1=x2,u=u,v=v,w=w,du=du,dv=dv,dw=dw,next=span}
+				if old then 
+					old.next=n				
+				else
+					_spans[y]=n
+				end
+				
+				-- any remaining "right" from current span?
+				dx=s1-x1-1
+				if dx>=0 then
+					dx=x1+1-s0
+					-- "shrink" current span
+					span.x0=x1+1
+					span.u+=dx*span.du
+					span.v+=dx*span.dv
+					span.w+=dx*span.dw
+				else
 					-- drop current span
 					n.next=span.next
-				end
-				-- clip incomping segment
-				dx=s1-x0
-				assert(dx>=0,"empty right (incoming) seg")
-				-- 
-				dx=s1+1-x0
-				x0=s1+1
-				u+=dx*du
-				v+=dx*dv
-				w+=dx*dw
+					span=n
+				end					
 			end
+
+			if s1>=x1 then
+				--     ///////
+				--     xxxxxxx	
+				return
+			end
+			--         ///nnn
+			--     xxxxxxx
+			-- clip incomping segment
+			--assert(dx>=0,"empty right (incoming) seg")
+			-- 
+			local dx=s1+1-x0
+			x0=s1+1
+			u+=dx*du
+			v+=dx*dv
+			w+=dx*dw
 
 			--            nnnn
 			--     xxxxxxx	
@@ -219,7 +202,7 @@ function tline3d(x0,y,x1,_,u,v,w,du,dv,dw)
 		-- "flat" line: direct rendering
 		poke(0x5f22,128)
 		local u,v=u/w,v/w
-		tline(x0,y,x1,y,u,v,du/dw,dv/dw)
+		tline(x0,y,x1,y,u,v,(du>>3)/dw,(dv>>3)/dw)
 	else
 		-- 8-pixel stride deltas
 		du<<=3
@@ -227,7 +210,7 @@ function tline3d(x0,y,x1,_,u,v,w,du,dv,dw)
 		dw<<=3
 		
 		-- clip right span edge
-		if(x1>136) x1=136
+		--if(x1>136) x1=136
 		poke(0x5f22,x1+1)
 		for x=x0,x1,8 do
 			-- perspective correct texel
@@ -309,8 +292,9 @@ function polytex(p,np)
 		-- todo: faster to clip polygon?
 		local x,u,v,w=rx,ru,rv,rw
 		if(x<0) u-=x*du v-=x*dv w-=x*dw x=0 a=0
-		local sa=a-x
+		local sa=1-x%1
 		spanfill(a,min((lx&-1)-1,127),y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
+		--rectfill(a,y,min(lx\1-1,127),y,w*16)
 
 		lx+=ldx
 		lw+=ldw

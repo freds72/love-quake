@@ -714,7 +714,7 @@ end
 
 function _draw()
   cls()
-  spans={}
+  _spans={}
   
   local door=_bsps[2]
   local pos=door.origin
@@ -764,6 +764,7 @@ function _draw()
   _cam:draw_faces(_model,_model.verts,_model.faces,visleaves,1,#visleaves)
   _cam:draw_faces(door,door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)  
 
+  
   local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."kB\nleaves:"..#visleaves
   print(s,2,3,1)
   print(s,2,2,12)
