@@ -1,7 +1,6 @@
 -- plain color polygon rasterization
 function polyfill(p,np,c)
 	color(c)
-	if(true) return
 	local miny,maxy,mini=32000,-32000
 	-- find extent
 	for i=1,np do
@@ -59,7 +58,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 	-- empty scanline?
 	if not span then
 		tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
-		_spans[y]={x0=x0,x1=x1,u=u,v=v,w=w,du=du,dv=dv,dw=dw}
+		_spans[y]={x0=x0,x1=x1,w=w,dw=dw}
 		return
 	end
 	while span do
@@ -71,7 +70,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 				--       xxxxxx	
 				-- fully visible
 				tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
-				local n={x0=x0,x1=x1,u=u,v=v,w=w,du=du,dv=dv,dw=dw,next=span}
+				local n={x0=x0,x1=x1,w=w,dw=dw,next=span}
 				if old then
 					-- chain to previous
 					old.next=n
@@ -88,7 +87,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 			local x2=s0-1
 			local dx=x2-x0
 			tline3d(x0,y,x2,y,u,v,w,du,dv,dw)
-			local n={x0=x0,x1=x2,u=u,v=v,w=w,du=du,dv=dv,dw=dw,next=span}
+			local n={x0=x0,x1=x2,w=w,dw=dw,next=span}
 			if old then 
 				old.next=n				
 			else
@@ -109,7 +108,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 			--     ??nnnn?
 			--     xxxxxxx	
 			-- totally hidden (or not!)
-			local dx=x0-s0
+			local dx=x0-s0+1
 			local sw=span.w+dx*span.dw			
 			
 			if sw<w or (sw==w and dw>span.dw) then
@@ -119,11 +118,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 					local n={
 						x0=s0,
 						x1=x0-1,
-						u=span.u,
-						v=span.v,
 						w=span.w,
-						du=span.du,
-						dv=span.dv,
 						dw=span.dw,
 						next=span}	
 					if old then
@@ -142,7 +137,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 					x2=s1
 				end
 				tline3d(x0,y,x2,y,u,v,w,du,dv,dw)					
-				local n={x0=x0,x1=x2,u=u,v=v,w=w,du=du,dv=dv,dw=dw,next=span}
+				local n={x0=x0,x1=x2,w=w,dw=dw,next=span}
 				if old then 
 					old.next=n				
 				else
@@ -155,8 +150,6 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 					dx=x1+1-s0
 					-- "shrink" current span
 					span.x0=x1+1
-					span.u+=dx*span.du
-					span.v+=dx*span.dv
 					span.w+=dx*span.dw
 				else
 					-- drop current span
@@ -193,16 +186,15 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 	if x1-x0>=0 then
 		tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans
-		old.next={x0=x0,x1=x1,u=u,v=v,w=w,du=du,dv=dv,dw=dw}
+		old.next={x0=x0,x1=x1,w=w,dw=dw}
 	end
 end
 
 function tline3d(x0,y,x1,_,u,v,w,du,dv,dw)
-	if false then-- (dw^^(dw>>31))<1 then
+	if dw==0 then
 		-- "flat" line: direct rendering
 		poke(0x5f22,128)
-		local u,v=u/w,v/w
-		tline(x0,y,x1,y,u,v,(du>>3)/dw,(dv>>3)/dw)
+		tline(x0,y,x1,y,u/w,v/w,du/w,dv/w)		
 	else
 		-- 8-pixel stride deltas
 		du<<=3

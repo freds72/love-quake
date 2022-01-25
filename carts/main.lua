@@ -365,7 +365,6 @@ function make_cam()
           poke(0x5f56,0x80,32)
           -- reset texcoords
           poke4(0x5f38,0)
-          local faces={}
           for thing in pairs(leaf.things) do
             -- collect all faces "closest" to camera
             if thing.visleaf==leaf then
@@ -374,8 +373,8 @@ function make_cam()
                           
               for face in all(thing.model.f) do  
                 -- dual sided or visible?
-                if face.dual or v_dot(face.n,cam_pos)>face.cp then
-                  local pts,np,outcode,clipcode,w,uvs={},face.ni,0xffff,0,0,face.uvs
+                if face.dual or v_dot(face.n,cam_pos)<face.cp then
+                  local np,outcode,clipcode,uvs=face.ni,0xffff,0,face.uvs
                   for k=1,np do
                     -- base index in verts array
                     local a=v_cache[face[k]]
@@ -386,32 +385,22 @@ function make_cam()
                       a.u=uvs[k][1]
                       a.v=uvs[k][2]
                     end
-                    w+=a.w
                   end
                   if outcode==0 then 
                     if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
           
                     if np>2 then
-                      pts.f=face
-                      pts.key=(w/face.ni)<<8
-                      add(faces,pts)
+                      if face.color then
+                        polyfill(pts,np,face.color)
+                      else
+                        polytex(pts,np)
+                      end 
                     end
                   end
                 end  
               end
             end
           end 
-          -- render in order
-          rsort(faces)       
-          for _,pts in ipairs(faces) do            
-            -- models are rendered in "affine" mode
-            local face=pts.f
-            if face.color then
-              polyfill(pts,#pts,face.color)
-            else
-              polytex(pts,#pts)
-            end
-          end
         end        
       end
     end  
@@ -538,12 +527,13 @@ function make_player(pos,a)
 end
 
 local _things={}
-function make_thing(bsp,pos,model)
+function make_thing(bsp,pos,angle,model)
   local thing=add(_things,{
     pos=pos,
-    m=make_m_from_v_angle({0,1,0},rnd()),
+    m=make_m_from_v_angle({0,1,0},angle),
     nodes={},
     model=model})
+  printh("pos:"..pos[1].." "..pos[2].." "..pos[3].." model: "..tostr(model))
   -- todo: get size from wad
   register_thing_subs(bsp,thing,1)
   --
@@ -570,8 +560,8 @@ function is_empty(node,pos)
   while node.contents==nil or node.contents>0 do
     node=node[plane_isfront(node.plane,pos)]
   end  
-  --return node.contents!=-1
-  return node.contents!=-2 or node.contents!=-1
+  return node.contents!=-1
+  --return node.contents!=-2 or node.contents!=-1
 end
 
 -- detach a thing from a convex sector (leaf)
@@ -684,6 +674,7 @@ function _init()
 
   -- 
   _cam=make_cam()
+  printh("player pos:"..pos[1].." "..pos[2].." "..pos[3].." model: "..tostr(model))
   _plyr=make_player(pos,angle)
   for i=1,2 do
     --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
@@ -795,11 +786,11 @@ end
 
 -- unpack an array of bytes
 function unpack_array(fn,name)
-  local mem0=stat(0)
-	for i=1,unpack_variant() do
+  local mem0,n=stat(0),unpack_variant()
+	for i=1,n do
 		fn(i)
 	end
-  if(name) printh(name..":\t"..ceil(stat(0)-mem0).."kb")
+  if(name) printh(name.." ("..n.."):\t"..ceil(stat(0)-mem0).."kb")
 end
 
 -- reference
@@ -1078,7 +1069,7 @@ function unpack_map()
         f.n=unpack_vert()
         -- n.p cache
         f.cp=v_dot(f.n,{verts[base],verts[base+1],verts[base+1]})
-      end)
+      end,"faces")
     -- index by name
     _models[i]=model
   end,"3d models")
@@ -1093,9 +1084,10 @@ function unpack_map()
     make_thing(
       models[1].bsp,
       unpack_vert(),
+      unpack_fixed(),
       unpack_ref(_models)
     )
-  end)
+  end,"things")
 
   -- triggers
   unpack_array(function()

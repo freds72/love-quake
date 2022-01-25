@@ -138,7 +138,7 @@ def pack_models(home_path, blender_files, colormap):
             os.close(fd)
             exitcode, out, err = call([blender_exe,os.path.join(home_path, blender_file),"--background","--python","blender_reader.py","--","--colors",colors,"--out",path])
             if err:
-                raise Exception('Unable to loadt: {}. Exception: {}'.format(blender_file,err))
+                raise Exception('Unable to load: {}. Exception: {}'.format(blender_file,err))
             logging.debug("Blender exit code: {} \n out:{}\n err: {}\n".format(exitcode,out,err))
             with open(path, 'r') as outfile:      
                 blob += outfile.read()
@@ -169,6 +169,7 @@ def pack_entities(entities, models):
   blob += pack_variant(len(things))
   for thing in things:
     blob += pack_vec3(thing.origin)    
+    blob += pack_fixed(thing.get("angle",0))
     threed_model = thing.get("model.path")
     id = 0
     if threed_model not in threed_models:

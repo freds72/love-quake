@@ -1,3 +1,4 @@
+from logging import exception
 import bpy
 import bmesh
 import argparse
@@ -180,6 +181,7 @@ def pack_face(bm, f, obcontext, palette):
         slot = obcontext.material_slots[f.material_index]
         mat = slot.material
         flags |= mat.use_backface_culling==False and FACE_FLAG_DUALSIDED or 0
+
         # if material use nodes, assumes "textured"
         if mat.use_nodes:
             flags |= FACE_FLAG_UVMAP
@@ -263,10 +265,9 @@ def main():
         parser.add_argument('-o','--out', help='Output file', required=True, dest='out')
         parser.add_argument('-c','--colors', help='Pico8 hardware colors (hex packed)', required=True, dest='colors')
         args = parser.parse_args(argv)
+        write_model(args.out, args.colors)
     except Exception as e:
-        sys.exit(repr(e))
-    
-    write_model(args.out, args.colors)
+        sys.exit(repr(e))    
 
 if __name__ == '__main__':
     main()
