@@ -242,8 +242,8 @@ function make_cam()
       end
       return visleaves
     end,  
-    draw_faces=function(self,model,verts,faces,leaves,lstart,lend)    
-      local v_cache_class={        
+    draw_faces=function(self,model,verts,faces,leaves,lstart,lend)
+      local v_cache_class={
         __index=function(self,vi)
           local m,code,x,y,z=self.m,0,verts[vi],verts[vi+1],verts[vi+2]
           local ax,ay,az=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
@@ -265,7 +265,7 @@ function make_cam()
       }
 
       local m=self.m
-      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},{},{},v_add(self.pos,model.origin,-1)
+      local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
       
       for j=lstart,lend do
         local leaf=leaves[j]
@@ -283,8 +283,8 @@ function make_cam()
 
               local face_verts,outcode,clipcode,uvi=faces[fi+3],0xffff,0,faces[fi+5]
               local np=#face_verts
-              for k,vi in pairs(face_verts) do                
-                local a=v_cache[vi]
+              for k=1,np do
+                local a=v_cache[face_verts[k]]
                 outcode&=a.outcode
                 clipcode+=a.outcode&2
                 pts[k]=a              
@@ -383,13 +383,14 @@ function z_poly_clip(v,nv,uvs)
 	local res,v0={},v[nv]
 	local d0=v0[3]-8
 	for i=1,nv do
-    if d0>0 then
+    local side=d0>0
+    if side then
       res[#res+1]=v0
     end
 		local v1=v[i]
 		local d1=v1[3]-8
     -- not same sign?
-		if (d1>0)!=(d0>0) then
+		if (d1>0)!=side then
       local nv=v_lerp(v0,v1,d0/(d0-d1),uvs)
       -- project against near plane
       nv.x=63.5+(nv[1]<<3)
@@ -501,7 +502,7 @@ local _things={}
 function make_thing(bsp,pos,angle,model)
   local thing=add(_things,{
     pos=pos,
-    m=make_m_from_v_angle({0,1,0},-0.25),
+    m=make_m_from_v_angle({0,1,0},0.25),
     nodes={},
     model=model})
   -- todo: get size from wad
@@ -674,6 +675,7 @@ end
 
 function _draw()
   cls(1)
+  -- kill span buffer
   _spans={}
   
   local door=_bsps[2]
@@ -688,7 +690,7 @@ function _draw()
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model,_model.verts,_model.faces,visleaves,1,#visleaves)
   _cam:draw_faces(door,door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)  
-  
+ 
   local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."kB\nleaves:"..#visleaves
   print(s,2,3,1)
   print(s,2,2,12)

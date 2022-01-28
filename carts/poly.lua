@@ -51,13 +51,13 @@ function polyfill(p,np,c)
 			rw+=cy*rdw
 		end
 
-		local a=rx&-1
 		local dw=(lw-rw)/(lx-rx)
 		-- todo: faster to clip polygon?
-		local x,w=rx,rw
-		if(x<0) w-=x*dw x=0 a=0
-		local sa=1-x%1
-		spanfill(a,min((lx&-1)-1,127),y,c,0,w+sa*dw,0,0,dw,rectfill)
+		local x0,x1,w=rx,lx,rw
+		if(x0<0) w-=x0*dw x0=0
+		local sa=1-x0%1
+		if(x1>128) x1=128
+		spanfill(x0&-1,(x1&-1)-1,y,c,0,w+sa*dw,0,0,dw,rectfill)
 		--rectfill(a,y,min(lx\1-1,127),y,w*16)
 
 		lx+=ldx
@@ -69,9 +69,8 @@ end
 
 
 local _spans={}
-function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
-	if(x1<0 or x0>127) return
-	if(x1-x0<0) return
+function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
+	if(x1<0 or x0>127 or x1-x0<0) return
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
@@ -126,10 +125,10 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			--     ??nnnn?
 			--     xxxxxxx	
 			-- totally hidden (or not!)
-			local dx=x0-s0+1
-			local sw=span.w+dx*span.dw			
+			local dx,sdw=x0-s0+1,span.dw
+			local sw=span.w+dx*sdw		
 			
-			if sw<w or (sw==w and dw>span.dw) then
+			if sw<w or (sw==w and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
 				-- insert (left) clipped existing span as a "new" span
 				if dx>0 then
@@ -137,7 +136,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 						x0=s0,
 						x1=x0-1,
 						w=span.w,
-						dw=span.dw,
+						dw=sdw,
 						next=span}	
 					if old then
 						old.next=n
@@ -163,12 +162,10 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				end
 				
 				-- any remaining "right" from current span?
-				dx=s1-x1-1
-				if dx>=0 then
-					dx=x1+1-s0
+				if s1-x1-1>=0 then
 					-- "shrink" current span
 					span.x0=x1+1
-					span.w+=dx*span.dw
+					span.w+=(x1+1-s0)*sdw
 				else
 					-- drop current span
 					n.next=span.next
@@ -237,8 +234,7 @@ function polytex(p,np)
 	local miny,maxy,mini=32000,-32000
 	-- find extent
 	for i=1,np do
-		local v=p[i]
-		local y=v.y
+		local y=p[i].y
 		if (y<miny) mini,miny=i,y
 		if (y>maxy) maxy=y
 	end
@@ -297,13 +293,14 @@ function polytex(p,np)
 			rv+=cy*rdv
 		end
 
-		local a,dx=rx&-1,lx-rx
+		local dx=lx-rx
 		local du,dv,dw=(lu-ru)/dx,(lv-rv)/dx,(lw-rw)/dx
 		-- todo: faster to clip polygon?
-		local x,u,v,w=rx,ru,rv,rw
-		if(x<0) u-=x*du v-=x*dv w-=x*dw x=0 a=0
-		local sa=1-x%1		
-		spanfill(a,min((lx&-1)-1,127),y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
+		local x0,x1,u,v,w=rx,lx,ru,rv,rw
+		if(x0<0) u-=x0*du v-=x0*dv w-=x0*dw x0=0
+		local sa=1-x0%1
+		if(x1>128) x1=128
+		spanfill(x0&-1,(x1&-1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
 		--rectfill(a,y,min(lx\1-1,127),y,w*16)
 
 		lx+=ldx
