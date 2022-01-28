@@ -198,14 +198,15 @@ def pack_face(bm, f, obcontext, palette):
 
     # + vertex ids (= edge loop)
     s += pack_byte(vlen)    
-    for loop in f.loops:
+    # !! align face orientation to match bsp rules
+    for loop in reversed(f.loops):
         s += pack_variant(loop.vert.index) 
 
     if flags & FACE_FLAG_UVMAP:
         # + uv's
         uv_layer = bm.loops.layers.uv["UVMap"]
         # + vertex ids (= edge loop)
-        for loop in f.loops:
+        for loop in reversed(f.loops):
             uv = loop[uv_layer].uv
             # align to pico8 tile boundaries
             # uv map must be 256x256
@@ -231,7 +232,7 @@ def pack_layer(layer, palette):
     # all vertices
     s += pack_variant(len(bm.verts))
     for v in bm.verts:
-        s += pack_vector(v.co)
+        s += pack_vector(8*v.co)
 
     # faces 
     s += pack_variant(len(bm.faces))

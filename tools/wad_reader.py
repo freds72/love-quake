@@ -161,15 +161,15 @@ def pack_entities(entities, models):
   player_start = player_starts[0]
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   blob += pack_vec3(player_start.origin)
-  blob += pack_fixed(player_start.get("angle",0))
+  blob += pack_fixed(player_start.angle)
 
   # all entities with a model
   threed_models = []
   things = list([e for e in entities if "model.path" in e])
   blob += pack_variant(len(things))
   for thing in things:
-    blob += pack_vec3(thing.origin)    
-    blob += pack_fixed(thing.get("angle",0))
+    blob += pack_vec3(thing.origin)
+    blob += pack_fixed(thing.angle)
     threed_model = thing.get("model.path")
     id = 0
     if threed_model not in threed_models:

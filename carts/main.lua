@@ -168,35 +168,6 @@ function wait_async(t)
 	end
 end
 
--- radix sort
--- note: works with positive numbers only
--- from james edge
-function rsort(buffer1)
-  local len, buffer2, idx, count = #buffer1, {}, {}, {}
-
-  -- 10 bits precision
-  for shift=0,5,5 do
-    for i=0,31 do count[i]=0 end
-
-    for i,b in pairs(buffer1) do
-      local k=(b.key>>shift)&31
-      idx[i]=k
-      count[k]+=1
-    end
-
-    for i=1,31 do count[i]+=count[i-1] end
-
-    for i=len,1,-1 do
-      local k=idx[i]
-      local c=count[k]
-      buffer2[c]=buffer1[i]
-      count[k]=c-1
-    end
-
-    buffer1, buffer2 = buffer2, buffer1
-  end
-end
-
 -- camera
 function make_cam()
   local up={0,1,0}
@@ -263,7 +234,8 @@ function make_cam()
       visleaves={}
       collect_bsp(bsp,self.pos)
       -- for all things on each leaves, pick closest leaf
-      for leaf in all(visleaves) do
+      for i=#visleaves,1,-1 do
+        local leaf=visleaves[i]
         for thing in pairs(leaf.things) do
           thing.visleaf=leaf
         end
@@ -293,11 +265,11 @@ function make_cam()
       }
 
       local m=self.m
-      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(self.m,model.m)},v_cache_class),{},{},{},v_add(self.pos,model.origin,-1)
+      local pts,cam_u,cam_v,v_cache,f_cache,fu_cache,fv_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},{},{},v_add(self.pos,model.origin,-1)
       
       for j=lstart,lend do
         local leaf=leaves[j]
-        -- faces form a convex space, render in any order        
+        -- faces form a convex space, render in any order   
         for i=1,#leaf do
           -- face index
           local fi=leaf[i]            
@@ -357,7 +329,7 @@ function make_cam()
             end
           end
         end
-        
+
         -- draw entities in this convex space
 
         if leaf.things then
@@ -369,11 +341,10 @@ function make_cam()
             -- collect all faces "closest" to camera
             if thing.visleaf==leaf then
               -- model to cam + cam pos in model space
-              local v_cache,cam_pos=setmetatable({m=m_x_m(self.m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
-                          
+              local v_cache,cam_pos=setmetatable({m=m_x_m(m,thing.m)},v_cache_class),m_inv_x_v(thing.m,self.pos)
               for face in all(thing.model.f) do  
                 -- dual sided or visible?
-                if face.dual or v_dot(face.n,cam_pos)<face.cp then
+                if face.dual or v_dot(face.n,cam_pos)>face.cp then                  
                   local np,outcode,clipcode,uvs=face.ni,0xffff,0,face.uvs
                   for k=1,np do
                     -- base index in verts array
@@ -387,7 +358,7 @@ function make_cam()
                     end
                   end
                   if outcode==0 then 
-                    if(clipcode>0) pts,np,uvs=z_poly_clip(pts,np,uvs)
+                    if(clipcode>0) pts,np=z_poly_clip(pts,np,uvs)
           
                     if np>2 then
                       if face.color then
@@ -530,10 +501,9 @@ local _things={}
 function make_thing(bsp,pos,angle,model)
   local thing=add(_things,{
     pos=pos,
-    m=make_m_from_v_angle({0,1,0},angle),
+    m=make_m_from_v_angle({0,1,0},-0.25),
     nodes={},
     model=model})
-  printh("pos:"..pos[1].." "..pos[2].." "..pos[3].." model: "..tostr(model))
   -- todo: get size from wad
   register_thing_subs(bsp,thing,1)
   --
@@ -560,8 +530,8 @@ function is_empty(node,pos)
   while node.contents==nil or node.contents>0 do
     node=node[plane_isfront(node.plane,pos)]
   end  
-  return node.contents!=-1
-  --return node.contents!=-2 or node.contents!=-1
+  --return node.contents!=-1
+  return node.contents!=-2 or node.contents!=-1
 end
 
 -- detach a thing from a convex sector (leaf)
@@ -674,7 +644,6 @@ function _init()
 
   -- 
   _cam=make_cam()
-  printh("player pos:"..pos[1].." "..pos[2].." "..pos[3].." model: "..tostr(model))
   _plyr=make_player(pos,angle)
   for i=1,2 do
     --make_skull(v_add(pos,{0.5-rnd(),rnd(),0.5-rnd()},48),{0,1,0})
@@ -696,15 +665,15 @@ function _update()
 
   _plyr:update()
   
-  for p in all(_particles) do
-    p:update()
+  for thing in all(_things) do
+    if(thing.update) thing:update()
   end
 
   _cam:track(v_add(_plyr.pos,{0,32,0}),_plyr.m,_plyr.angle)
 end
 
 function _draw()
-  cls()
+  cls(1)
   _spans={}
   
   local door=_bsps[2]
@@ -715,46 +684,10 @@ function _draw()
     0,0,1,0,
     pos[1],pos[2],pos[3],1
   }
-  -- _cam:draw_faces(door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)
-
-  -- collect leaves with moving brushes
-  --[[
-  local out={model=door}
-  local brush_verts,verts,faces={},door.verts,door.faces
-  for j=door.leaf_start,door.leaf_end do
-    local leaf=_leaves[j]    
-    for i=1,#leaf do
-      -- face index
-      local fi=leaf[i]            
-      local poly,face_verts,uvi={fi=fi},faces[fi+3],faces[fi+5]
-      for k,vi in pairs(face_verts) do
-        local v=brush_verts[vi]
-        if not v then
-          -- "move" brush        
-          v=v_add({verts[vi],verts[vi+1],verts[vi+2]},door.origin)
-          brush_verts[vi]=v
-        end
-        -- copy v
-        v={unpack(v)}
-        if uvi!=-1 then
-          if uvi!=-1 then
-            local kuv=uvi+(k<<1)
-            v.u=_texcoords[kuv-1]
-            v.v=_texcoords[kuv]
-          end
-        end
-        poly[k]=v
-      end
-      -- clip against world
-      bsp_clip(_model.bsp,poly,out,uvi!=-1)
-    end
-  end
-  ]]
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model,_model.verts,_model.faces,visleaves,1,#visleaves)
   _cam:draw_faces(door,door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)  
-
   
   local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."kB\nleaves:"..#visleaves
   print(s,2,3,1)
@@ -842,18 +775,18 @@ function unpack_map()
     return planes[pi],planes[pi+1],planes[pi+2]
   end
   plane_dot=function(pi,v)
-    local t=planes[pi+4]
+    local t,d=planes[pi+4],planes[pi+3]
     if t<3 then    
-      return planes[pi+t]*v[t+1],planes[pi+3]
+      return planes[pi+t]*v[t+1],d
     end
-    return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3],planes[pi+3]
+    return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3],d
   end
   plane_isfront=function(pi,v)
-    local t=planes[pi+4]
+    local t,d=planes[pi+4],planes[pi+3]
     if t<3 then
-      return planes[pi+t]*v[t+1]>planes[pi+3]
+      return planes[pi+t]*v[t+1]>d
     end
-    return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3]>planes[pi+3]
+    return planes[pi]*v[1]+planes[pi+1]*v[2]+planes[pi+2]*v[3]>d
   end
 
   unpack_array(function()  
@@ -1068,7 +1001,8 @@ function unpack_map()
         -- normal
         f.n=unpack_vert()
         -- n.p cache
-        f.cp=v_dot(f.n,{verts[base],verts[base+1],verts[base+1]})
+        local base=f[1]
+        f.cp=v_dot(f.n,{verts[base],verts[base+1],verts[base+2]})
       end,"faces")
     -- index by name
     _models[i]=model
@@ -1083,7 +1017,9 @@ function unpack_map()
   unpack_array(function()    
     make_thing(
       models[1].bsp,
+      -- pos
       unpack_vert(),
+      -- angle
       unpack_fixed(),
       unpack_ref(_models)
     )

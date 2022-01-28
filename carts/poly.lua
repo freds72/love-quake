@@ -1,6 +1,5 @@
 -- plain color polygon rasterization
 function polyfill(p,np,c)
-	color(c)
 	local miny,maxy,mini=32000,-32000
 	-- find extent
 	for i=1,np do
@@ -11,7 +10,7 @@ function polyfill(p,np,c)
 	end
 
 	--data for left & right edges:
-	local lj,rj,ly,ry,lx,ldx,rx,rdx=mini,mini,miny,miny
+	local lj,rj,ly,ry,lx,lw,ldx,ldw,rx,rw,rdx,rdw=mini,mini,miny,miny
 	--step through scanlines.
 	if(maxy>127) maxy=127
 	if(miny<0) miny=-1
@@ -23,11 +22,16 @@ function polyfill(p,np,c)
 			if (lj>np) lj=1
 			local v1=p[lj]
 			local y0,y1=v0.y,v1.y
+			local dy=y1-y0
 			ly=y1&-1
 			lx=v0.x
-			ldx=(v1.x-lx)/(y1-y0)
+			lw=v0.w
+			ldx=(v1.x-lx)/dy
+			ldw=(v1.w-lw)/dy
 			--sub-pixel correction
-			lx+=(y-y0)*ldx
+			local cy=y-y0
+			lx+=cy*ldx
+			lw+=cy*ldw
 		end   
 		while ry<y do
 			local v0=p[rj]
@@ -35,29 +39,43 @@ function polyfill(p,np,c)
 			if (rj<1) rj=np
 			local v1=p[rj]
 			local y0,y1=v0.y,v1.y
+			local dy=y1-y0
 			ry=y1&-1
 			rx=v0.x
-			rdx=(v1.x-rx)/(y1-y0)
+			rw=v0.w
+			rdx=(v1.x-rx)/dy
+			rdw=(v1.w-rw)/dy
 			--sub-pixel correction
-			rx+=(y-y0)*rdx
+			local cy=y-y0
+			rx+=cy*rdx
+			rw+=cy*rdw
 		end
-		local a,b=rx\1,lx\1-1
-		if(b-a>=0) rectfill(a,y,b,y)
-		--spanfill(y,rx,lx)
+
+		local a=rx&-1
+		local dw=(lw-rw)/(lx-rx)
+		-- todo: faster to clip polygon?
+		local x,w=rx,rw
+		if(x<0) w-=x*dw x=0 a=0
+		local sa=1-x%1
+		spanfill(a,min((lx&-1)-1,127),y,c,0,w+sa*dw,0,0,dw,rectfill)
+		--rectfill(a,y,min(lx\1-1,127),y,w*16)
+
 		lx+=ldx
+		lw+=ldw
 		rx+=rdx
+		rw+=rdw
 	end
 end
 
 
 local _spans={}
-function spanfill(x0,x1,y,u,v,w,du,dv,dw)
+function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	if(x1<0 or x0>127) return
 	if(x1-x0<0) return
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
-		tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
+		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		_spans[y]={x0=x0,x1=x1,w=w,dw=dw}
 		return
 	end
@@ -69,7 +87,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 				-- nnnn
 				--       xxxxxx	
 				-- fully visible
-				tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
+				fn(x0,y,x1,y,u,v,w,du,dv,dw)
 				local n={x0=x0,x1=x1,w=w,dw=dw,next=span}
 				if old then
 					-- chain to previous
@@ -86,7 +104,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 			-- clip + display left
 			local x2=s0-1
 			local dx=x2-x0
-			tline3d(x0,y,x2,y,u,v,w,du,dv,dw)
+			fn(x0,y,x2,y,u,v,w,du,dv,dw)
 			local n={x0=x0,x1=x2,w=w,dw=dw,next=span}
 			if old then 
 				old.next=n				
@@ -136,7 +154,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 					-- draw only up to s1
 					x2=s1
 				end
-				tline3d(x0,y,x2,y,u,v,w,du,dv,dw)					
+				fn(x0,y,x2,y,u,v,w,du,dv,dw)					
 				local n={x0=x0,x1=x2,w=w,dw=dw,next=span}
 				if old then 
 					old.next=n				
@@ -184,7 +202,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw)
 	end
 	-- new last?
 	if x1-x0>=0 then
-		tline3d(x0,y,x1,y,u,v,w,du,dv,dw)
+		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans
 		old.next={x0=x0,x1=x1,w=w,dw=dw}
 	end
@@ -284,8 +302,8 @@ function polytex(p,np)
 		-- todo: faster to clip polygon?
 		local x,u,v,w=rx,ru,rv,rw
 		if(x<0) u-=x*du v-=x*dv w-=x*dw x=0 a=0
-		local sa=1-x%1
-		spanfill(a,min((lx&-1)-1,127),y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
+		local sa=1-x%1		
+		spanfill(a,min((lx&-1)-1,127),y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
 		--rectfill(a,y,min(lx\1-1,127),y,w*16)
 
 		lx+=ldx
@@ -299,4 +317,12 @@ function polytex(p,np)
 	end
 	-- reset clip
 	poke(0x5f22,128)	
+end
+
+function polyline(p,np,c)
+	color(c)
+	for i=1,np do
+		local v0,v1=p[i],p[i%np+1]	
+		line(v0.x,v0.y,v1.x,v1.y)
+	end
 end
