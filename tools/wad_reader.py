@@ -161,7 +161,7 @@ def pack_entities(entities, models):
   player_start = player_starts[0]
   logging.info("Found player start: {} at: {}".format(player_start.classname, player_start.origin))
   blob += pack_vec3(player_start.origin)
-  blob += pack_fixed(player_start.angle)
+  blob += pack_fixed(player_start.get("angle",0))
 
   # all entities with a model
   threed_models = []

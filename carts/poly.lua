@@ -55,7 +55,7 @@ function polyfill(p,np,c)
 		-- todo: faster to clip polygon?
 		local x0,x1,w=rx,lx,rw
 		if(x0<0) w-=x0*dw x0=0
-		local sa=1-x0%1
+		local sa=1-(x0&0x0.ffff)
 		if(x1>128) x1=128
 		spanfill(x0&-1,(x1&-1)-1,y,c,0,w+sa*dw,0,0,dw,rectfill)
 		--rectfill(a,y,min(lx\1-1,127),y,w*16)
@@ -206,9 +206,9 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 end
 
 function tline3d(x0,y,x1,_,u,v,w,du,dv,dw)
+	poke(0x5f22,x1+1)
 	if dw==0 then
 		-- "flat" line: direct rendering
-		poke(0x5f22,128)
 		tline(x0,y,x1,y,u/w,v/w,du/w,dv/w)		
 	else
 		-- 8-pixel stride deltas
@@ -218,7 +218,6 @@ function tline3d(x0,y,x1,_,u,v,w,du,dv,dw)
 		
 		-- clip right span edge
 		--if(x1>136) x1=136
-		poke(0x5f22,x1+1)
 		for x=x0,x1,8 do
 			-- perspective correct texel
 			local tu,tv=u/w,v/w
@@ -298,7 +297,7 @@ function polytex(p,np)
 		-- todo: faster to clip polygon?
 		local x0,x1,u,v,w=rx,lx,ru,rv,rw
 		if(x0<0) u-=x0*du v-=x0*dv w-=x0*dw x0=0
-		local sa=1-x0%1
+		local sa=1-(x0&0x0.ffff)
 		if(x1>128) x1=128
 		spanfill(x0&-1,(x1&-1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
 		--rectfill(a,y,min(lx\1-1,127),y,w*16)
