@@ -678,18 +678,23 @@ function _draw()
   -- kill span buffer
   _spans={}
   
-  local door=_bsps[2]
-  local pos=door.origin
-  door.m={
-    1,0,0,0,
-    0,1,0,0,
-    0,0,1,0,
-    pos[1],pos[2],pos[3],1
-  }
 
   local visleaves=_cam:collect_leaves(_model.bsp,_leaves)
   _cam:draw_faces(_model,_model.verts,_model.faces,visleaves,1,#visleaves)
-  _cam:draw_faces(door,door.verts,door.faces,_leaves,door.leaf_start,door.leaf_end)  
+
+  for i=2,#_bsps do    
+    local brush=_bsps[i]
+    if brush.solid then
+      local pos=brush.origin
+      brush.m={
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        pos[1],pos[2],pos[3],1
+      }  
+      _cam:draw_faces(brush,brush.verts,brush.faces,_leaves,brush.leaf_start,brush.leaf_end)  
+    end
+  end
  
   local s=(flr(1000*stat(1))/10).."%\n"..(stat(0)\1).."kB\nleaves:"..#visleaves
   print(s,2,3,1)
