@@ -232,7 +232,7 @@ def pack_layer(layer, palette):
     # all vertices
     s += pack_variant(len(bm.verts))
     for v in bm.verts:
-        s += pack_vector(8*v.co)
+        s += pack_vector(8 * v.co)
 
     # faces 
     s += pack_variant(len(bm.faces))

@@ -169,7 +169,7 @@ def pack_entities(entities, models):
   blob += pack_variant(len(things))
   for thing in things:
     blob += pack_vec3(thing.origin)
-    blob += pack_fixed(thing.angle)
+    blob += pack_fixed(thing.get("angle",0))
     threed_model = thing.get("model.path")
     id = 0
     if threed_model not in threed_models:
@@ -243,9 +243,9 @@ def pack_entities(entities, models):
       pos2.y+=extents.y-lip
     elif angle==-2:
       pos2.y-=extents.y-lip
-    else:
-      # todo: support all angles
-      pos2.x+=extents.x-lip
+    else:         
+      pos2.x+=(extents.x-lip)*math.cos(angle)
+      pos2.z+=(extents.z-lip)*math.sin(angle)
 
     door_blob += pack_vec3(pos2)
 
