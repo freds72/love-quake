@@ -160,6 +160,10 @@ local plane_dot,plane_isfront,plane_get
 
 
 function love.load(args)
+
+    hw = love.graphics.getWidth( )/2
+    hh = love.graphics.getWidth( )/2
+
     print("INFO - loading: "..args[1])
     love.filesystem.setIdentity("bsp")
 
@@ -198,13 +202,56 @@ function love.load(args)
         print("origin: "..model.origin[0].."/"..model.origin[1].."/"..model.origin[2])
     end
     ]]
-    unpack_array(function(face)
-      print("faces: "..face.firstedge.." #faces: "..face.numedges)      
-    end, bsp.faces)
 
     -- convert to flat array
     models,leaves=unpack_map(bsp)  
     models.data=data  
+end
+
+function find_sub_sector(node,pos)
+  while node do
+    node=node[plane_isfront(node.plane,pos)]
+    if node and node.contents then
+      -- leaf?
+      return node
+    end
+  end
+end
+
+function v_lerp(a,b,t,uv)
+  local ax,ay,az,u,v=a[1],a[2],a[3],a.u,a.v
+	return {
+    ax+(b[1]-ax)*t,
+    ay+(b[2]-ay)*t,
+    az+(b[3]-az)*t,
+    u=uv and u+(b.u-u)*t,
+    v=uv and v+(b.v-v)*t
+  }
+end
+
+function z_poly_clip(v,nv,uvs)
+	local res,v0={},v[nv]
+	local d0=v0[3]-8
+	for i=1,nv do
+    local side=d0>0
+    if side then
+      res[#res+1]=v0
+    end
+		local v1=v[i]
+		local d1=v1[3]-8
+    -- not same sign?
+		if (d1>0)~=side then
+      local nv=v_lerp(v0,v1,d0/(d0-d1),uvs)
+      -- project against near plane
+      nv.x=hw+(nv[1]*16)
+      nv.y=hh-(nv[2]*16)
+      nv.w=16
+      res[#res+1]=nv
+    end
+    v0=v1
+		d0=d1
+	end
+	return res,#res
 end
 
 mx,my=0,0
@@ -220,9 +267,9 @@ end
 zoom=1
 function love.wheelmoved(x, y)
   if y > 0 then
-    zoom = zoom + 0.1
+    zoom = zoom + 5
   elseif y < 0 then
-    zoom = max(zoom - 0.1, 0.1)
+    zoom = zoom - 5
   end
 end
 
@@ -232,27 +279,68 @@ function love.update(dt)
       camx = mx - diffx
       camy = my - diffy
   end
+  
 end
 
 function love.draw()
   love.graphics.clear()
-  love.graphics.setLineWidth(2)  
+  love.graphics.setLineJoin("none") 
+  --love.graphics.setLineWidth(2)  
 
-  for i,model in ipairs(models) do
-    love.graphics.setColor( 0.5, i/#models, 0, 1 )
-    for i=model.leaf_start,model.leaf_end do   
-      local leaf=leaves[i]
-      for _,face in ipairs(leaf) do
+  local pos={[0]=camx,camy,zoom}
+  local node = find_sub_sector(models[1].bsp,pos)
+  local visleaves={}
+  if node then
+    function collect_bsp(node,pos)
+      local function collect_leaf(side)
+        local child=node[side]
+        if child then
+          if child.contents then          
+            visleaves[#visleaves+1]=child
+          else
+            collect_bsp(child,pos)
+          end
+        end
+      end  
+      local side=plane_isfront(node.plane,pos)
+      collect_leaf(side)
+      collect_leaf(not side)
+    end   
+    collect_bsp(models[1].bsp,pos)
+  else
+    visleaves=leaves
+    print("out: "..camx.." "..camy)
+  end
+
+  local f_cache={}
+
+  for i=#visleaves,1,-1 do
+    local leaf=visleaves[i]
+  --for i,leaf in ipairs(visleaves) do
+    for j,face in ipairs(leaf) do
+      if not f_cache[face] and plane_dot(face.plane,pos)>face.cp~=face.side then
+        f_cache[face]=true
+        love.graphics.setColor( 0, i/#visleaves, j/#leaf)
         local poly={}
+        local vis=true
         for _,vi in ipairs(face.verts) do
           local v=models.verts[vi]
-          add(poly,zoom * v[0]+camx)
-          add(poly,zoom * v[1]+camy)
+          local x,y,z=v[0]-camx,v[2]-zoom,v[1]-camy
+          local w=128/z          
+          add(poly,{x,y,z,x=hw+x*w,y=hh-y*w,w=w})        
         end
-        -- close poly
-        add(poly,poly[1])
-        add(poly,poly[2])
-        love.graphics.line(poly)
+        poly = z_poly_clip(poly,#poly)
+        if #poly>2 then
+          local ngon={}
+          for i=1,#poly do            
+            add(ngon,poly[i].x)
+            add(ngon,poly[i].y)
+          end
+          -- close poly
+          add(ngon,ngon[1])
+          add(ngon,ngon[2])
+          love.graphics.polygon("fill", ngon)
+        end
       end
     end
   end
@@ -321,19 +409,13 @@ function unpack_map(bsp)
       face.cp=plane_dot(f.planenum, bsp.vertices[face_verts[1]])
       add(faces, face)
     end, bsp.faces)
-
-    local function get_leaf_faces(leaf)
-      local res = {}
-      for i=0,leaf.nummarksurfaces-1 do
-        -- de-ref face
-        add(res, faces[bsp.marksurfaces[leaf.firstmarksurface + i] + 1])
-      end
-      return res
-    end    
   
     unpack_array(function(leaf)
-      local l = get_leaf_faces(leaf)
-      l.contents = leaf.contents
+      local l={contents = leaf.contents}
+      for i=0,leaf.nummarksurfaces-1 do
+        -- de-ref face
+        add(l, faces[bsp.marksurfaces[leaf.firstmarksurface + i] + 1])
+      end
       add(leaves,l)
     end, bsp.leaves)
 
@@ -349,6 +431,8 @@ function unpack_map(bsp)
           if child_id ~= 0 then
             flags = bor(flags, i+1)
             child_id = child_id + 1
+          else
+            child_id = 0
           end
         else
           -- node
