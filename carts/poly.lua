@@ -1,73 +1,3 @@
--- plain color polygon rasterization
-function polyfill(p,np,c)
-	local miny,maxy,mini=32000,-32000
-	-- find extent
-	for i=1,np do
-		local v=p[i]
-		local y=v.y
-		if (y<miny) mini,miny=i,y
-		if (y>maxy) maxy=y
-	end
-
-	--data for left & right edges:
-	local lj,rj,ly,ry,lx,lw,ldx,ldw,rx,rw,rdx,rdw=mini,mini,miny,miny
-	--step through scanlines.
-	if(maxy>127) maxy=127
-	if(miny<0) miny=-1
-	for y=1+miny&-1,maxy do
-		--maybe update to next vert
-		while ly<y do
-			local v0=p[lj]
-			lj+=1
-			if (lj>np) lj=1
-			local v1=p[lj]
-			local y0,y1=v0.y,v1.y
-			local dy=y1-y0
-			ly=y1&-1
-			lx=v0.x
-			lw=v0.w
-			ldx=(v1.x-lx)/dy
-			ldw=(v1.w-lw)/dy
-			--sub-pixel correction
-			local cy=y-y0
-			lx+=cy*ldx
-			lw+=cy*ldw
-		end   
-		while ry<y do
-			local v0=p[rj]
-			rj-=1
-			if (rj<1) rj=np
-			local v1=p[rj]
-			local y0,y1=v0.y,v1.y
-			local dy=y1-y0
-			ry=y1&-1
-			rx=v0.x
-			rw=v0.w
-			rdx=(v1.x-rx)/dy
-			rdw=(v1.w-rw)/dy
-			--sub-pixel correction
-			local cy=y-y0
-			rx+=cy*rdx
-			rw+=cy*rdw
-		end
-
-		local dw=(lw-rw)/(lx-rx)
-		-- todo: faster to clip polygon?
-		local x0,x1,w=rx,lx,rw
-		if(x0<0) w-=x0*dw x0=0
-		local sa=1-(x0&0x0.ffff)
-		if(x1>128) x1=128
-		spanfill(x0&-1,(x1&-1)-1,y,c,0,w+sa*dw,0,0,dw,rectfill)
-		--rectfill(a,y,min(lx\1-1,127),y,w*16)
-
-		lx+=ldx
-		lw+=ldw
-		rx+=rdx
-		rw+=rdw
-	end
-end
-
-
 local _spans={}
 function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	if(x1<0 or x0>127 or x1-x0<0) return
@@ -205,120 +135,182 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	end
 end
 
-function tline3d(x0,y,x1,_,u,v,w,du,dv,dw)
-	poke(0x5f22,x1+1)
-	if dw==0 then
-		-- "flat" line: direct rendering
-		tline(x0,y,x1,y,u/w,v/w,du/w,dv/w)		
-	else
-		-- 8-pixel stride deltas
-		du<<=3
-		dv<<=3
-		dw<<=3
-		
-		-- clip right span edge
-		--if(x1>136) x1=136
-		for x=x0,x1,8 do
-			-- perspective correct texel
-			local tu,tv=u/w,v/w
-			w+=dw			
-			tline(x,y,x+7,y,tu,tv,((du-tu*dw)>>3)/w,((dv-tv*dw)>>3)/w)
-			u+=du
-			v+=dv
-		end
+function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw,mem)		
+	for x=x0,x1 do
+		local s,t=flr(tw*u/w)%tw,flr(th*v/w)%th
+		local r,g,b,a=textureData:getPixel(s,t)
+		mem[x+y0*wndW]=0xff000000+shl(flr(256*b),16)+shl(flr(256*g),8)+flr(256*r)
+		u=u+du
+		v=v+dv
+		w=w+dw
 	end
 end
 
-function polytex(p,np)
-	local miny,maxy,mini=32000,-32000
+function polyfill(p,np,c,mem)
+	local miny,maxy,mini=math.huge,-math.huge
 	-- find extent
 	for i=1,np do
-		local y=p[i].y
-		if (y<miny) mini,miny=i,y
-		if (y>maxy) maxy=y
+		local v=p[i]
+		local y=v.y
+		if y<miny then
+      mini,miny=i,y
+    end
+		if y>maxy then
+      maxy=y
+    end
 	end
 
 	--data for left & right edges:
-	local lj,rj,ly,ry,lx,lw,lu,lv,ldx,ldw,ldu,ldv,rx,rw,ru,rv,rdx,rdw,rdu,rdv=mini,mini,miny,miny
+	local lj,rj,ly,ry,lx,lw,ldx,ldw,rx,rw,rdx,rdw=mini,mini,miny,miny
 	--step through scanlines.
-	if(maxy>127) maxy=127
-	if(miny<0) miny=-1
-	for y=1+miny&-1,maxy do
+	if maxy>=wndH then
+    maxy=wndH-1
+  end
+	if miny<0 then
+    miny=-1
+  end
+	for y=1+flr(miny),maxy do
 		--maybe update to next vert
 		while ly<y do
 			local v0=p[lj]
-			lj+=1
-			if (lj>np) lj=1
+			lj=lj+1
+			if lj>np then lj=1 end
 			local v1=p[lj]
 			local y0,y1=v0.y,v1.y
 			local dy=y1-y0
-			ly=y1&-1
+			ly=flr(y1)
+			lx=v0.x
+			lw=v0.w
+			ldx=(v1.x-lx)/dy
+			ldw=(v1.w-lw)/dy
+			--sub-pixel correction
+			local cy=y-y0
+			lx=lx+cy*ldx
+			lw=lw+cy*ldw
+		end   
+		while ry<y do
+			local v0=p[rj]
+			rj=rj-1
+			if rj<1 then rj=np end
+			local v1=p[rj]
+			local y0,y1=v0.y,v1.y
+			local dy=y1-y0
+			ry=flr(y1)
+			rx=v0.x
+			rw=v0.w
+			rdx=(v1.x-rx)/dy
+			rdw=(v1.w-rw)/dy
+			--sub-pixel correction
+			local cy=y-y0
+			rx=rx+cy*rdx
+			rw=rw+cy*rdw
+		end
+  
+		--rectfill(a,y,min(lx\1-1,127),y,w*16)
+    	for x=max(flr(rx),0),min(flr(lx),wndW)-1 do
+    	  mem[x+y*wndW]=c
+    	end
+
+		lx=lx+ldx
+		lw=lw+ldw
+		rx=rx+rdx
+		rw=rw+rdw
+	end
+end
+
+function polytex(p,np,mem)
+	local miny,maxy,mini=math.huge,-math.huge
+	-- find extent
+	for i=1,np do
+		local v=p[i]
+		local y=v.y
+		if y<miny then
+      		mini,miny=i,y
+    	end
+		if y>maxy then
+      		maxy=y
+    	end
+	end
+
+	--data for left & right edges:
+	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldw,rx,ru,rv,rw,rdx,rdw=mini,mini,miny,miny
+	--step through scanlines.
+	if maxy>=wndH then
+    	maxy=wndH-1
+  	end
+	if miny<0 then
+	    miny=-1
+  	end
+	for y=1+flr(miny),maxy do
+		--maybe update to next vert
+		while ly<y do
+			local v0=p[lj]
+			lj=lj+1
+			if lj>np then lj=1 end
+			local v1=p[lj]
+			local y0,y1=v0.y,v1.y
+			local dy=y1-y0
+			ly=flr(y1)
 			lx=v0.x
 			lw=v0.w
 			lu=v0.u*lw
 			lv=v0.v*lw
 			ldx=(v1.x-lx)/dy
-			ldw=(v1.w-lw)/dy
 			ldu=(v1.u*v1.w-lu)/dy
 			ldv=(v1.v*v1.w-lv)/dy
+			ldw=(v1.w-lw)/dy
 			--sub-pixel correction
 			local cy=y-y0
-			lx+=cy*ldx
-			lw+=cy*ldw
-			lu+=cy*ldu
-			lv+=cy*ldv
+			lx=lx+cy*ldx
+			lu=lu+cy*ldu
+			lv=lv+cy*ldv
+			lw=lw+cy*ldw
 		end   
 		while ry<y do
 			local v0=p[rj]
-			rj-=1
-			if (rj<1) rj=np
+			rj=rj-1
+			if rj<1 then rj=np end
 			local v1=p[rj]
 			local y0,y1=v0.y,v1.y
 			local dy=y1-y0
-			ry=y1&-1
+			ry=flr(y1)
 			rx=v0.x
 			rw=v0.w
 			ru=v0.u*rw
 			rv=v0.v*rw
 			rdx=(v1.x-rx)/dy
-			rdw=(v1.w-rw)/dy
 			rdu=(v1.u*v1.w-ru)/dy
 			rdv=(v1.v*v1.w-rv)/dy
+			rdw=(v1.w-rw)/dy
 			--sub-pixel correction
 			local cy=y-y0
-			rx+=cy*rdx
-			rw+=cy*rdw
-			ru+=cy*rdu
-			rv+=cy*rdv
+			rx=rx+cy*rdx
+			ru=ru+cy*rdu
+			rv=rv+cy*rdv
+			rw=rw+cy*rdw
 		end
-
+  
 		local dx=lx-rx
 		local du,dv,dw=(lu-ru)/dx,(lv-rv)/dx,(lw-rw)/dx
 		-- todo: faster to clip polygon?
 		local x0,x1,u,v,w=rx,lx,ru,rv,rw
-		if(x0<0) u-=x0*du v-=x0*dv w-=x0*dw x0=0
-		local sa=1-(x0&0x0.ffff)
-		if(x1>128) x1=128
-		spanfill(x0&-1,(x1&-1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
-		--rectfill(a,y,min(lx\1-1,127),y,w*16)
+		if x0<0 then
+			u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
+		end
+		local sa=flr(x0)-x0
+		if x1>wndW then
+			x1=wndW
+		end
 
-		lx+=ldx
-		lw+=ldw
-		lu+=ldu
-		lv+=ldv
-		rx+=rdx
-		rw+=rdw
-		ru+=rdu
-		rv+=rdv
-	end
-	-- reset clip
-	poke(0x5f22,128)	
-end
+		tline3d(flr(x0),y,flr(lx)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,mem)
 
-function polyline(p,np,c)
-	color(c)
-	for i=1,np do
-		local v0,v1=p[i],p[i%np+1]	
-		line(v0.x,v0.y,v1.x,v1.y)
+		lx=lx+ldx
+		lu=lu+ldu
+		lv=lv+ldv
+		lw=lw+ldw
+		rx=rx+rdx
+		ru=ru+rdu
+		rv=rv+rdv
+		rw=rw+rdw
 	end
 end
