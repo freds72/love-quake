@@ -131,7 +131,8 @@ typedef struct
 local add=table.insert
 local flr=math.floor
 local min,max=math.min,math.max
-local band,bor,shl,bnot=bit.band,bit.bor,bit.lshift,bit.bnot
+local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
+local sin,cos=math.sin,math.cos
 
 function printh(...)
     print(...)
@@ -182,7 +183,7 @@ function love.load(args)
     local bsp={
         models = read_all("dmodel_t", header.models, src),
         vertices = read_all("dvertex_t", header.vertices, src)[0],
-        -- visdata = read_bytes(bsp_handle, header.visilist)
+        visdata = read_all("unsigned char", header.visibility, src)[0],
         -- lightmaps = read_bytes(bsp_handle, header.lightmaps)
         nodes = read_all("dnode_t", header.nodes, src),
         clipnodes = read_all("dclipnode_t", header.clipnodes, src),
@@ -204,7 +205,7 @@ function love.load(args)
     ]]
 
     -- convert to flat array
-    models,leaves=unpack_map(bsp)  
+    models=unpack_map(bsp)  
     models.data=data  
 end
 
@@ -265,11 +266,20 @@ function love.mousepressed(mx, my, b)
 end
 
 zoom=1
+angle=0
 function love.wheelmoved(x, y)
-  if y > 0 then
-    zoom = zoom + 5
-  elseif y < 0 then
-    zoom = zoom - 5
+  if love.mouse.isDown(1) then
+    if y > 0 then
+      angle = angle + 0.1
+    elseif y < 0 then
+      angle = angle - 0.1
+    end
+  else
+    if y > 0 then
+      zoom = zoom + 5
+    elseif y < 0 then
+      zoom = zoom - 5
+    end
   end
 end
 
@@ -282,19 +292,47 @@ function love.update(dt)
   
 end
 
+local visframe,prev_leaf=0
 function love.draw()
   love.graphics.clear()
   love.graphics.setLineJoin("none") 
   --love.graphics.setLineWidth(2)  
 
   local pos={[0]=camx,camy,zoom}
-  local node = find_sub_sector(models[1].bsp,pos)
+  local current_leaf = find_sub_sector(models[1].bsp,pos)
+
+  local collect_leaves=function(leaves)
+    -- changed sector?
+    if current_leaf and current_leaf~=prev_leaf then
+      prev_leaf = current_leaf
+      visframe = visframe + 1
+      -- find all (potentially) visible leaves
+      for i,bits in pairs(current_leaf.pvs) do
+        i=shl(i,5)
+        for j=0,31 do
+          -- visible?
+          if band(bits,shl(0x1,j))~=0 then
+            local leaf=leaves[bor(i,j)+2]
+            -- tag visible parents (if not already tagged)
+            while leaf and leaf.visframe~=visframe do
+              leaf.visframe=visframe
+              leaf=leaf.parent
+            end
+          end
+        end
+      end    
+    end
+  end
+
+  -- refresh visible set
+  collect_leaves(models.leaves)
+
   local visleaves={}
-  if node then
+  if current_leaf then
     function collect_bsp(node,pos)
       local function collect_leaf(side)
         local child=node[side]
-        if child then
+        if child and child.visframe==visframe then
           if child.contents then          
             visleaves[#visleaves+1]=child
           else
@@ -308,12 +346,12 @@ function love.draw()
     end   
     collect_bsp(models[1].bsp,pos)
   else
-    visleaves=leaves
+    visleaves=models.leaves
     print("out: "..camx.." "..camy)
   end
 
   local f_cache={}
-
+  local cc,ss=cos(angle),sin(angle)
   for i=#visleaves,1,-1 do
     local leaf=visleaves[i]
   --for i,leaf in ipairs(visleaves) do
@@ -326,6 +364,8 @@ function love.draw()
         for _,vi in ipairs(face.verts) do
           local v=models.verts[vi]
           local x,y,z=v[0]-camx,v[2]-zoom,v[1]-camy
+          -- rotation
+          x,z=cc*x-ss*z,ss*x+cc*z
           local w=128/z          
           add(poly,{x,y,z,x=hw+x*w,y=hh-y*w,w=w})        
         end
@@ -339,7 +379,7 @@ function love.draw()
           -- close poly
           add(ngon,ngon[1])
           add(ngon,ngon[2])
-          love.graphics.polygon("fill", ngon)
+          love.graphics.polygon("line", ngon)
         end
       end
     end
@@ -410,8 +450,54 @@ function unpack_map(bsp)
       add(faces, face)
     end, bsp.faces)
   
-    unpack_array(function(leaf)
-      local l={contents = leaf.contents}
+    local unpack_node_pvs
+    unpack_node_pvs=function(node, model, cache)
+      for i=0,1 do
+        local child_id = node.children[i]
+        if band(child_id,0x8000) ~= 0 then
+          child_id = bnot(child_id)
+          if child_id ~= 0 then
+            local leaf = bsp.leaves[child_id]
+            if leaf.visofs~=-1 and not cache[child_id] then
+              local numbytes = shr(model.visleafs+7,3)
+              -- print("leafs: {} / bytes: {} / offset: {} / {}".format(model.numleafs, numbytes, leaf.visofs, len(visdata)))
+              local vis = {}
+              local i = 0
+              local c_out = 0          
+              while c_out<numbytes do
+                local ii = bsp.visdata[leaf.visofs+i]
+                if ii ~= 0 then
+                  vis[shr(c_out,2)] = bor(vis[shr(c_out,2)] or 0, shl(ii, 8*(c_out%4)))              
+                  i = i + 1
+                  c_out = c_out + 1
+                  goto skip
+                end
+                -- skip 0
+                i = i + 1
+                -- number of bytes to skip
+                c = bsp.visdata[leaf.visofs+i]
+                i = i + 1
+                c_out = c_out + c
+  ::skip::
+              end
+              cache[child_id] = vis
+            end
+          end
+        else
+          unpack_node_pvs(bsp.nodes[child_id], model, cache)
+        end
+      end
+    end
+
+    -- attach vis data to 1st model
+    local main_model,vis_cache=bsp.models[0],{}    
+    unpack_node_pvs(bsp.nodes[main_model.headnode[0]], main_model, vis_cache)
+
+    unpack_array(function(leaf, i)
+      local l={
+        contents = leaf.contents,
+        pvs = vis_cache[i]
+      }
       for i=0,leaf.nummarksurfaces-1 do
         -- de-ref face
         add(l, faces[bsp.marksurfaces[leaf.firstmarksurface + i] + 1])
@@ -498,6 +584,7 @@ function unpack_map(bsp)
     local leaf_base=0
     models.verts=bsp.vertices
     models.planes=bsp.planes
+    models.leaves=leaves
     unpack_array(function(model)  
       add(models,{
         origin={0,0,0},
@@ -511,6 +598,6 @@ function unpack_map(bsp)
         leaf_end=leaf_base + model.visleafs + 1})
       leaf_base = leaf_base + model.visleafs
     end, bsp.models)
-  
-    return models,leaves
+
+    return models
   end
