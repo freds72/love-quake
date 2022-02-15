@@ -165,14 +165,10 @@ function love.load(args)
     hw = love.graphics.getWidth( )/2
     hh = love.graphics.getWidth( )/2
 
-    print("INFO - loading: "..args[1])
-    love.filesystem.setIdentity("bsp")
-
-    local f = love.filesystem.newFile(args[1]);
-    f:open("r")
+    print("INFO - game root: "..args[1])
+    local nfs = require( "nativefs" )
     -- dump to bytes
-    local data = love.filesystem.newFileData(f)
-    f:close()
+    local data = nfs.newFileData(args[1].."/maps/"..args[2])
 
     local mem = data:getFFIPointer()
     local header = ffi.cast('dheader_t*', mem)
