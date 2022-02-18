@@ -1,4 +1,6 @@
 local ffi=require 'ffi'
+local nfs = require( "nativefs" )
+
 ffi.cdef[[
 #pragma pack(1)
 
@@ -156,6 +158,50 @@ function read_all(cname, lump, mem)
     return res
 end
 
+function read_textures(lump, mem)
+  mem = mem + lump.fileofs
+  local textures = {}
+  local m = ffi.cast("dmiptexlump_t*", mem)
+  local n = m.nummiptex
+  print("reading #textures: "..n)
+  for i=0,n-1 do
+    local ofs = m.dataofs[i]
+    if ofs~=-1 then
+      local mt = ffi.cast("miptex_t*", mem + ofs)
+      print("texture: "..ffi.string(mt.name).." size: "..mt.width.."x"..mt.height)
+      local offsets={}
+      -- test(?)
+      local imgs={}
+      for j=0,3 do
+        offsets[j] = mem + ofs + mt.offsets[j]
+        print("offset: "..mt.offsets[j])
+
+        local data = ffi.cast("unsigned char*", offsets[j])
+      
+        local scale=shl(1,j)
+        local w,h=flr(mt.width/scale), flr(mt.height/scale)
+        local imagedata = love.image.newImageData(w,h)
+        local image     = love.graphics.newImage(imagedata,{linear=true, mipmaps=false})
+        image:setFilter('nearest','nearest')        
+        imagedata:mapPixel(
+          function(x, y, r, g, b, a)                   
+            local idx = data[x + y*w]/255
+            return idx,idx,idx,1 
+        end)
+        image:replacePixels(imagedata)
+        add(imgs, image)
+      end
+      add(textures, {
+        width = mt.width,
+        height = mt.height,
+        offsets = offsets,
+        imgs = imgs
+      })
+    end
+  end
+  return textures
+end
+
 -- game globals
 local plane_dot,plane_isfront,plane_get
 
@@ -166,7 +212,6 @@ function love.load(args)
     hh = love.graphics.getWidth( )/2
 
     print("INFO - game root: "..args[1])
-    local nfs = require( "nativefs" )
     -- dump to bytes
     local data = nfs.newFileData(args[1].."/maps/"..args[2])
 
@@ -184,25 +229,20 @@ function love.load(args)
         nodes = read_all("dnode_t", header.nodes, src),
         clipnodes = read_all("dclipnode_t", header.clipnodes, src),
         faces = read_all("dface_t", header.faces, src),
-        -- textures = texinfo_t.read_all(bsp_handle, header.textures)
-        -- miptex = read_miptex(bsp_handle, header.miptex)
+        texinfo = read_all("texinfo_t", header.texinfo, src),
+        textures = read_textures(header.textures, src),
         planes = read_all("dplane_t", header.planes, src),
         leaves = read_all("dleaf_t", header.leaves, src),
         edges = read_all("dedge_t", header.edges, src),
         marksurfaces = read_all("unsigned short", header.marksurfaces, src)[0],
         surfedges = read_all("int", header.surfedges, src)[0],
     }
-    --[[
-    for i=1,nmodels do
-        local off = mem + lump.fileofs
-        local model = ffi.cast(dmodel_t, off)
-        print("origin: "..model.origin[0].."/"..model.origin[1].."/"..model.origin[2])
-    end
-    ]]
 
     -- convert to flat array
     models=unpack_map(bsp)  
-    models.data=data  
+    models.data = data  
+    models.raw = bsp
+    models.src = src
 end
 
 function find_sub_sector(node,pos)
@@ -263,6 +303,7 @@ end
 
 zoom=1
 angle=0
+texture=1
 function love.wheelmoved(x, y)
   if love.mouse.isDown(1) then
     if y > 0 then
@@ -271,11 +312,16 @@ function love.wheelmoved(x, y)
       angle = angle - 0.1
     end
   else
-    if y > 0 then
-      zoom = zoom + 5
-    elseif y < 0 then
-      zoom = zoom - 5
+    if y>0 then
+      texture = min(texture + 1, #models.raw.textures)
+    else
+      texture = max(texture -1, 1)
     end
+    -- if y > 0 then
+    --   zoom = zoom + 5
+    -- elseif y < 0 then
+    --   zoom = zoom - 5
+    -- end
   end
 end
 
@@ -343,7 +389,6 @@ function love.draw()
     collect_bsp(models[1].bsp,pos)
   else
     visleaves=models.leaves
-    print("out: "..camx.." "..camy)
   end
 
   local f_cache={}
@@ -375,11 +420,16 @@ function love.draw()
           -- close poly
           add(ngon,ngon[1])
           add(ngon,ngon[2])
-          love.graphics.polygon("line", ngon)
+          love.graphics.polygon("fill", ngon)
         end
       end
     end
   end
+
+
+  love.graphics.draw(models.raw.textures[texture].imgs[1], 0 ,0,0,4,4)
+
+
 end
 
 
