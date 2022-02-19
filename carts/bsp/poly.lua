@@ -153,6 +153,7 @@ function push_lightmap(...)
 	_lightptr,_lightw,_lighth,_lightx,_lighty=unpack{...}
 end
 function push_baselight(style)
+	-- 255: pure black
 	_lbase=flr(style/4)
 end
 

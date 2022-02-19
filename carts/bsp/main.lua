@@ -54,7 +54,7 @@ function read_colormap(path)
   return colormap
 end
 
-love.window.setMode(480 * scale, 270 * scale, {resizable=true, vsync=true, minwidth=320, minheight=200})
+love.window.setMode(480 * scale, 270 * scale, {resizable=false, vsync=true, minwidth=480, minheight=270})
 
 function love.load(args)
   framebuffer = fb(480, 270)
