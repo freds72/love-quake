@@ -7,7 +7,7 @@ plane_dot,plane_isfront,plane_get=nil,nil,nil
 
 -- pico8 compat helpers
 local add=table.insert
-local flr=math.floor
+local flr,ceil=math.floor,math.ceil
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local sin,cos=math.sin,math.cos
@@ -93,7 +93,11 @@ ffi.cdef[[
     
     typedef struct texinfo_s
     {
-        float		vecs[2][4];		// [s/t][xyz offset]
+        // [s/t][xyz offset]
+        dvertex_t   s;
+        float       s_offset;
+        dvertex_t   t;
+        float       t_offset;
         int			miptex;
         int			flags;
     } texinfo_t;
@@ -192,16 +196,16 @@ local function unpack_map(bsp)
         return n[0]*v[0]+n[1]*v[1]+n[2]*v[2]>plane.dist
     end
     
+    local function v_dot(a,b)
+        return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
+    end
+    
     unpack_array(function(f,i)      
         -- side flag
         local face={
             side=(f.side~=0),
             plane=f.planenum            
         }
-        -- texture?
-        if f.texinfo~=-1 then
-            face.texinfo = bsp.texinfo[f.texinfo]
-        end
 
         local face_verts = {}
         for i=0,f.numedges-1 do
@@ -214,6 +218,43 @@ local function unpack_map(bsp)
                 add(face_verts, edge.v[1])
             end
         end
+        -- texture?
+        if f.texinfo~=-1 then
+            local tex = bsp.texinfo[f.texinfo]
+            face.texinfo = tex
+
+            face.baselight = f.styles[1]
+
+            -- light info?
+            if f.lightofs~=-1 then
+                local lightmap_scale = 16
+                local u_min=32000
+                local u_max=-32000
+                local v_min=32000
+                local v_max=-32000
+                for _,vi in pairs(face_verts) do
+                    local v=bsp.vertices[vi]
+                    local u=v_dot(v,tex.s) + tex.s_offset
+                    local v=v_dot(v,tex.t) + tex.t_offset
+                    u_min=min(u_min,u)
+                    v_min=min(v_min,v)
+                    u_max=max(u_max,u)
+                    v_max=max(v_max,v)
+                end
+                face.umin = u_min
+                face.vmin = v_min
+                u_min=flr(u_min / lightmap_scale)
+                v_min=flr(v_min / lightmap_scale)
+                u_max=ceil(u_max / lightmap_scale)
+                v_max=ceil(v_max / lightmap_scale)
+                
+                -- lightmap size
+                face.width = u_max-u_min+1
+                face.height = v_max-v_min+1 
+                face.lightofs = bsp.lightmaps[f.lightofs]
+            end
+        end
+
         -- !! 1-based array
         face.verts = face_verts
         face.cp=plane_dot(f.planenum, bsp.vertices[face_verts[1]])
@@ -435,7 +476,7 @@ function load_bsp(root_path, name)
         models = read_all("dmodel_t", header.models, ptr),
         vertices = read_all("dvertex_t", header.vertices, ptr)[0],
         visdata = read_all("unsigned char", header.visibility, ptr)[0],
-        -- lightmaps = read_bytes(bsp_handle, header.lightmaps)
+        lightmaps = read_all("unsigned char", header.lighting, ptr),
         nodes = read_all("dnode_t", header.nodes, ptr),
         clipnodes = read_all("dclipnode_t", header.clipnodes, ptr),
         faces = read_all("dface_t", header.faces, ptr),

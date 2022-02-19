@@ -33,14 +33,25 @@ function read_palette(path)
   -- dump to bytes
   local data = nfs.newFileData(path.."/gfx/palette_orig.lmp")
 
-  local mem = data:getFFIPointer()
-  local src = ffi.cast('color_t*', mem)
+  local src = ffi.cast('color_t*', data:getFFIPointer())
   for i=0,255 do
     -- swap colors
     local rgb = src[i]
     palette[i] = 0xff000000 + shl(rgb.b,16) + shl(rgb.g,8) + rgb.r
   end 
   return palette
+end
+
+function read_colormap(path)
+  local colormap = {}
+  -- dump to bytes
+  local data = nfs.newFileData(path.."/gfx/colormap.lmp")
+
+  local src = ffi.cast('uint8_t*', data:getFFIPointer())
+  for i=0,256*64-1 do
+    colormap[i] = src[i]
+  end 
+  return colormap
 end
 
 love.window.setMode(480 * scale, 270 * scale, {resizable=true, vsync=true, minwidth=320, minheight=200})
@@ -57,11 +68,13 @@ function love.load(args)
 
   -- set default palette
   _palette = read_palette(root_path)
+  _colormap = read_colormap(root_path)
 
   models = load_bsp(root_path, args[2])
 
   _cam = make_cam(models.textures)
 
+  grab_mouse()
 end
 
 function find_sub_sector(node,pos)
@@ -158,20 +171,26 @@ end
 local velocity,dangle,angle={0,0,0},{0,0,0},{0,0,0}
 local pos={0,0,0}
 
+function grab_mouse()
+    local state = not love.mouse.isGrabbed()   -- the opposite of whatever it currently is
+    love.mouse.setGrabbed(state)
+    local state = not love.mouse.isVisible()   -- the opposite of whatever it currently is
+    love.mouse.setVisible(state)     
+end
+
 function love.keypressed(key)
   if key == "tab" then
-     local state = not love.mouse.isGrabbed()   -- the opposite of whatever it currently is
-     love.mouse.setGrabbed(state)
+    grab_mouse()
   end
 end
 
 function love.update(dt)
-  --if love.mouse.isDown(1) then
+  if love.mouse.isGrabbed() then
       local mx, my = love.mouse.getPosition()
       camx = mx - 480/2
       camy = my - 270/2
       --diffx, diffy = mx,my
-  --end
+  end
 
   local keys={
     ["z"]={0,1,0},
@@ -194,7 +213,7 @@ function love.update(dt)
 
   local a,dx,dz=angle[3],acc[2],acc[1]
   local c,s=cos(a),sin(a)
-  velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,0})          
+  velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,0},2)          
   pos=v_add(pos,velocity)
   pos[3]=zoom
 
@@ -359,15 +378,15 @@ function make_cam(textures)
             f_cache[face]=true
             local outcode,clipcode,poly,uvs=0xffff,0,{},{}
             local texinfo = face.texinfo
-            local s,t=texinfo.vecs[0],texinfo.vecs[1]
+            local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
             for _,vi in ipairs(face.verts) do
               local v=models.verts[vi]
               local a=v_cache[v]
               outcode=band(outcode,a.outcode)
               clipcode=clipcode + band(a.outcode,2)
               -- compute uvs
-              a.u=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s[3]
-              a.v=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t[3]
+              a.u=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
+              a.v=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
               add(poly, a)
             end
             if outcode==0 then
@@ -377,8 +396,13 @@ function make_cam(textures)
               if #poly>2 then
                 local texture = textures[texinfo.miptex]
                 if texture then
+                  push_baselight(face.baselight)
                   push_texture(texture.mips[1],texture.width,texture.height)
-                  polytex(poly,#poly)
+                  if face.lightofs then
+                    push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
+                  end
+                  polytex(poly,#poly)    
+                  push_lightmap()     
                 else
                   polyfill(poly,#poly,0)
                 end

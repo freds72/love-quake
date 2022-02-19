@@ -148,11 +148,30 @@ local _texptr,_texw,_texh
 function push_texture(ptr,width,height)
 	_texptr,_texw,_texh=ptr,width,height
 end
+local _lightptr,_lightw,_lighth,_lightx,_lighty,_lbase
+function push_lightmap(...)
+	_lightptr,_lightw,_lighth,_lightx,_lighty=unpack{...}
+end
+function push_baselight(style)
+	_lbase=flr(style/4)
+end
 
-function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)		
+function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
 	for x=x0,x1 do
-		local s,t=flr(u/w)%_texw,flr(v/w)%_texh
-		_backbuffer[x+y0*480]=_palette[_texptr[s+t*_texw]]
+		local uw,vw=u/w,v/w
+		local shade=_lbase
+		if _lightptr then
+			local s,t=flr((uw - _lightx)/16),flr((vw - _lighty)/16)
+			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+			local light = _lightptr[s+t*_lightw]
+			shade = flr((0xff - light)/4)
+			-- _backbuffer[x+y0*480]=0xff000000 + 0x010101*light
+		end
+
+		local s,t=flr(uw)%_texw,flr(vw)%_texh
+		local coloridx=_texptr[s+t*_texw]
+		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
+
 		u=u+du
 		v=v+dv
 		w=w+dw
