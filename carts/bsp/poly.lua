@@ -1,6 +1,15 @@
+local poly={}
+
+-- p8
+local flr=math.floor
+local min,max=math.min,math.max
+local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
+
 local _spans={}
-function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
-	if(x1<0 or x0>127 or x1-x0<0) return
+local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
+	if x1<0 or x0>480 or x1-x0<0 then
+		return
+	end
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
@@ -42,9 +51,9 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			end
 			x0=s0
 			--assert(x1-x0>=0,"empty right seg")
-			u+=dx*du
-			v+=dx*dv
-			w+=dx*dw
+			u=u+dx*du
+			v=v+dx*dv
+			w=w+dx*dw
 			-- check remaining segment
 			old=n
 			goto continue
@@ -95,7 +104,7 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				if s1-x1-1>=0 then
 					-- "shrink" current span
 					span.x0=x1+1
-					span.w+=(x1+1-s0)*sdw
+					span.w=span.w+(x1+1-s0)*sdw
 				else
 					-- drop current span
 					n.next=span.next
@@ -115,9 +124,9 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			-- 
 			local dx=s1+1-x0
 			x0=s1+1
-			u+=dx*du
-			v+=dx*dv
-			w+=dx*dw
+			u=u+dx*du
+			v=v+dx*dv
+			w=w+dx*dw
 
 			--            nnnn
 			--     xxxxxxx	
@@ -135,18 +144,25 @@ function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	end
 end
 
-function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw,mem)		
+local _texptr,_texw,_texh
+function push_texture(ptr,width,height)
+	_texptr,_texw,_texh=ptr,width,height
+end
+
+function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)		
 	for x=x0,x1 do
-		local s,t=flr(tw*u/w)%tw,flr(th*v/w)%th
-		local r,g,b,a=textureData:getPixel(s,t)
-		mem[x+y0*wndW]=0xff000000+shl(flr(256*b),16)+shl(flr(256*g),8)+flr(256*r)
+		local s,t=flr(u/w)%_texw,flr(v/w)%_texh
+		_backbuffer[x+y0*480]=_palette[_texptr[s+t*_texw]]
 		u=u+du
 		v=v+dv
 		w=w+dw
 	end
 end
 
-function polyfill(p,np,c,mem)
+function polyfill(p,np,c)
+	-- convert to real color
+	c=_palette[c]
+
 	local miny,maxy,mini=math.huge,-math.huge
 	-- find extent
 	for i=1,np do
@@ -163,8 +179,8 @@ function polyfill(p,np,c,mem)
 	--data for left & right edges:
 	local lj,rj,ly,ry,lx,lw,ldx,ldw,rx,rw,rdx,rdw=mini,mini,miny,miny
 	--step through scanlines.
-	if maxy>=wndH then
-    maxy=wndH-1
+	if maxy>=270 then
+    maxy=270-1
   end
 	if miny<0 then
     miny=-1
@@ -207,8 +223,8 @@ function polyfill(p,np,c,mem)
 		end
   
 		--rectfill(a,y,min(lx\1-1,127),y,w*16)
-    	for x=max(flr(rx),0),min(flr(lx),wndW)-1 do
-    	  mem[x+y*wndW]=c
+    	for x=max(flr(rx),0),min(flr(lx),480)-1 do
+    	  _backbuffer[x+y*480]=c
     	end
 
 		lx=lx+ldx
@@ -218,7 +234,7 @@ function polyfill(p,np,c,mem)
 	end
 end
 
-function polytex(p,np,mem)
+function polytex(p,np)
 	local miny,maxy,mini=math.huge,-math.huge
 	-- find extent
 	for i=1,np do
@@ -235,8 +251,8 @@ function polytex(p,np,mem)
 	--data for left & right edges:
 	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldw,rx,ru,rv,rw,rdx,rdw=mini,mini,miny,miny
 	--step through scanlines.
-	if maxy>=wndH then
-    	maxy=wndH-1
+	if maxy>=270 then
+    	maxy=270-1
   	end
 	if miny<0 then
 	    miny=-1
@@ -298,11 +314,11 @@ function polytex(p,np,mem)
 			u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
 		end
 		local sa=flr(x0)-x0
-		if x1>wndW then
-			x1=wndW
+		if x1>480 then
+			x1=480
 		end
 
-		tline3d(flr(x0),y,flr(lx)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,mem)
+		tline3d(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
 
 		lx=lx+ldx
 		lu=lu+ldu
@@ -314,3 +330,4 @@ function polytex(p,np,mem)
 		rw=rw+rdw
 	end
 end
+return poly
