@@ -74,43 +74,135 @@ function find_sub_sector(node,pos)
   end
 end
 
+-- find if pos is within an empty space
+function is_empty(node,pos)
+  while node.contents==nil or node.contents>0 do
+    node=node[plane_isfront(node.plane,pos)]
+  end  
+  --return node.contents!=-1
+  return node.contents~=-2 or node.contents~=-1
+end
+
+-- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
+-- hull location
+-- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
+-- https://developer.valvesoftware.com/wiki/BSP
+-- ray/bsp intersection
+function hitscan(node,p0,p1,out)
+  -- is "solid" space (bsp)
+  if not node then
+    return true
+  end
+  local contents=node.contents
+  if contents then
+    -- is "solid" space (bsp)
+    if contents==-2 then
+      return true
+    end
+    -- in "empty" space
+    if contents<0 then
+      return
+    end
+  end
+
+  local dist,node_dist=plane_dot(node.plane,p0)
+  local otherdist=plane_dot(node.plane,p1)
+  local side,otherside=dist>node_dist,otherdist>node_dist
+  if side==otherside then
+    -- go down this side
+    return hitscan(node[side],p0,p1,out)
+  end
+  -- crossing a node
+  local t=dist-node_dist
+  if t<0 then
+    t=t-0x0.01
+  else
+    t=t+0x0.01
+  end  
+  -- cliping fraction
+  local frac=mid(t/(dist-otherdist),0,1)
+  local p10=v_lerp(p0,p1,frac)
+  --add(out,p10)
+  local hit,otherhit=hitscan(node[side],p0,p10,out),hitscan(node[otherside],p10,p1,out)  
+  if hit~=otherhit then
+    -- not already registered?
+    if not out.n then
+      -- check if in global empty space
+      -- note: nodes do not have spatial relationships!!
+      if is_empty(_model.clipnodes,p10) then
+        local scale=t<0 and -1 or 1
+        local nx,ny,nz=plane_get(node.plane)
+        out.n={scale*nx,scale*ny,scale*nz,node_dist}
+        out.t=frac
+      end
+    end
+  end
+  return hit or otherhit
+end
+
 mx,my=0,0
 diffx,diffy=0,0
 camx,camy=0,0
-function love.mousepressed(mx, my, b)
-  if b == 1 then
-      diffx = mx - camx
-      diffy = my - camy
-  end
-end
 
 zoom=1
 angle=0
 texture=1
 function love.wheelmoved(x, y)
-  if love.mouse.isDown(1) then
-    if y > 0 then
-      angle = angle + 0.1
-    elseif y < 0 then
-      angle = angle - 0.1
-    end
-  else
-    if y > 0 then
-      zoom = zoom + 5
-    elseif y < 0 then
-      zoom = zoom - 5
-    end
+  if y > 0 then
+    zoom = zoom + 5
+  elseif y < 0 then
+    zoom = zoom - 5
+  end
+end
+
+local velocity,dangle,angle={0,0,0},{0,0,0},{0,0,0}
+local pos={0,0,0}
+
+function love.keypressed(key)
+  if key == "tab" then
+     local state = not love.mouse.isGrabbed()   -- the opposite of whatever it currently is
+     love.mouse.setGrabbed(state)
   end
 end
 
 function love.update(dt)
-  if love.mouse.isDown(1) then
-      mx, my = love.mouse.getPosition()
-      camx = mx - diffx
-      camy = my - diffy
+  --if love.mouse.isDown(1) then
+      local mx, my = love.mouse.getPosition()
+      camx = mx - 480/2
+      camy = my - 270/2
+      --diffx, diffy = mx,my
+  --end
+
+  local keys={
+    ["z"]={0,1,0},
+    ["s"]={0,-1,0},
+    ["q"]={1,0,0},
+    ["d"]={-1,0,0}
+  }
+  local acc={0,0,0}
+  for k,move in pairs(keys) do
+    if love.keyboard.isDown(k) then
+      acc=v_add(acc, move)
+    end
   end
 
-  _cam:track({camx,camy,zoom}, make_m_from_euler(0,0,0))
+  v_scale(dangle,0.02)
+  v_scale(velocity,0.3)
+
+  dangle=v_add(dangle,{camy,0,camx})
+  angle=v_add(angle,dangle,1/4096)
+
+  local a,dx,dz=angle[3],acc[2],acc[1]
+  local c,s=cos(a),sin(a)
+  velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,0})          
+  pos=v_add(pos,velocity)
+  pos[3]=zoom
+
+  _cam:track(
+    v_add(pos,{0,0,32}), 
+    m_x_m(
+      make_m_from_euler(0,0,angle[3]),
+      make_m_from_euler(angle[1],0,0)))
 end
 
 local visframe,prev_leaf=0
