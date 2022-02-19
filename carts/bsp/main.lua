@@ -5,6 +5,7 @@ ffi.cdef[[
 #pragma pack(1)
 
 typedef float dvertex_t[3];
+typedef struct { unsigned char r,g,b; } color_t;
 
 typedef short dvertexshort_t[3];
 
@@ -158,7 +159,7 @@ function read_all(cname, lump, mem)
     return res
 end
 
-function read_textures(lump, mem)
+function read_textures(palette, lump, mem)
   mem = mem + lump.fileofs
   local textures = {}
   local m = ffi.cast("dmiptexlump_t*", mem)
@@ -184,9 +185,9 @@ function read_textures(lump, mem)
         local image     = love.graphics.newImage(imagedata,{linear=true, mipmaps=false})
         image:setFilter('nearest','nearest')        
         imagedata:mapPixel(
-          function(x, y, r, g, b, a)                   
-            local idx = data[x + y*w]/255
-            return idx,idx,idx,1 
+          function(x, y)     
+            local rgb=palette[data[x + y*w]]             
+            return rgb.r/255,rgb.g/255,rgb.b/255,1                         
         end)
         image:replacePixels(imagedata)
         add(imgs, image)
@@ -202,18 +203,34 @@ function read_textures(lump, mem)
   return textures
 end
 
+function read_palette(path)
+  local palette = {}
+  -- dump to bytes
+  local data = nfs.newFileData(path.."/gfx/palette_orig.lmp")
+
+  local mem = data:getFFIPointer()
+  local src = ffi.cast('color_t*', mem)
+  for i=0,255 do
+    palette[i] = src[i]
+  end 
+  return palette
+end
+
 -- game globals
 local plane_dot,plane_isfront,plane_get
-
 
 function love.load(args)
 
     hw = love.graphics.getWidth( )/2
     hh = love.graphics.getWidth( )/2
 
-    print("INFO - game root: "..args[1])
+    local root_path = args[1]
+    print("INFO - game root: "..root_path)
+
+    local palette = read_palette(root_path)
+
     -- dump to bytes
-    local data = nfs.newFileData(args[1].."/maps/"..args[2])
+    local data = nfs.newFileData(root_path.."/maps/"..args[2])
 
     local mem = data:getFFIPointer()
     local header = ffi.cast('dheader_t*', mem)
@@ -230,7 +247,7 @@ function love.load(args)
         clipnodes = read_all("dclipnode_t", header.clipnodes, src),
         faces = read_all("dface_t", header.faces, src),
         texinfo = read_all("texinfo_t", header.texinfo, src),
-        textures = read_textures(header.textures, src),
+        textures = read_textures(palette, header.textures, src),
         planes = read_all("dplane_t", header.planes, src),
         leaves = read_all("dleaf_t", header.leaves, src),
         edges = read_all("dedge_t", header.edges, src),
@@ -399,7 +416,7 @@ function love.draw()
     for j,face in ipairs(leaf) do
       if not f_cache[face] and plane_dot(face.plane,pos)>face.cp~=face.side then
         f_cache[face]=true
-        love.graphics.setColor( 0, i/#visleaves, j/#leaf)
+        -- love.graphics.setColor( 0, i/#visleaves, j/#leaf)
         local poly={}
         local vis=true
         for _,vi in ipairs(face.verts) do
