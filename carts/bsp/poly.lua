@@ -165,10 +165,14 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
 		if _lightptr then
-			local s,t=flr((uw - _lightx)/16),flr((vw - _lighty)/16)
+			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
+			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
+			local l0=lerp(_lightptr[s0+t0*_lightw],_lightptr[s1+t0*_lightw],s%1)
+			local l1=lerp(_lightptr[s0+t1*_lightw],_lightptr[s1+t1*_lightw],s%1)			
 			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-			local light = _lightptr[s+t*_lightw]
-			shade = flr((0xff - light)/4)
+			local light = lerp(l0,l1,t%1)
+		
+			shade = flr((0xff-light)/4)
 			--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256]]
 		end
 
