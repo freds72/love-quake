@@ -1,5 +1,6 @@
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
+local entities = require( "entities" )
 
 local model = {}
 -- module globals
@@ -469,8 +470,12 @@ function load_bsp(root_path, name)
 
     local header = ffi.cast('dheader_t*', mem)
     print("version:"..header.version)
-    
+
     local ptr = ffi.cast("unsigned char*",mem)
+
+    
+    local entities_lump = header.entities
+    local entities = ffi.string(ptr + entities_lump.fileofs, entities_lump.filelen)
 
     local bsp={
         models = read_all("dmodel_t", header.models, ptr),
@@ -489,7 +494,7 @@ function load_bsp(root_path, name)
         surfedges = read_all("int", header.surfedges, ptr)[0],
     }
 
-    return unpack_map(bsp)
+    return unpack_map(bsp),json_parse(entities)
 end
 
 return model

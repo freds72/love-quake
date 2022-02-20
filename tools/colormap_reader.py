@@ -142,7 +142,7 @@ class ColormapReader():
     
     hw_palette = palette.pal()
     colormap = {}
-    with stream.read("gfx/colormap.lmp") as lump:
+    with stream.read("gfx/colormap_p8.lmp") as lump:
       for color_index in range(16):
         colormap[color_index] = dotdict({
           'id': color_index,

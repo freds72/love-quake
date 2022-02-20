@@ -1,11 +1,14 @@
 local poly={}
 
 -- p8
-local flr=math.floor
+local abs,flr,ceil=math.abs,math.floor,math.ceil
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 
 local _spans={}
+function clear_spans()
+	_spans={}
+end
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
@@ -158,20 +161,20 @@ function push_baselight(style)
 end
 
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
+	local shade=_lbase
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
-		local shade=_lbase
 		if _lightptr then
 			local s,t=flr((uw - _lightx)/16),flr((vw - _lighty)/16)
 			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
 			local light = _lightptr[s+t*_lightw]
 			shade = flr((0xff - light)/4)
-			-- _backbuffer[x+y0*480]=0xff000000 + 0x010101*light
+			_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256]]
 		end
 
 		local s,t=flr(uw)%_texw,flr(vw)%_texh
 		local coloridx=_texptr[s+t*_texw]
-		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
+		-- _backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
 
 		u=u+du
 		v=v+dv
@@ -338,7 +341,7 @@ function polytex(p,np)
 			x1=480
 		end
 
-		tline3d(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
+		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
 
 		lx=lx+ldx
 		lu=lu+ldu

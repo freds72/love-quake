@@ -20,8 +20,22 @@ local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local sin,cos=math.sin,math.cos
 local scale=2
 
+-- game globals
+local velocity,dangle,angle,pos={0,0,0},{0,0,0},{0,0,0}
+
 function printh(...)
     print(...)
+end
+
+function split(inputstr, sep)
+  if sep == nil then
+          sep = "%s"
+  end
+  local t={}
+  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+    table.insert(t, str)
+  end
+  return t
 end
 
 function print_vector(v)
@@ -70,8 +84,24 @@ function love.load(args)
   _palette = read_palette(root_path)
   _colormap = read_colormap(root_path)
 
-  models = load_bsp(root_path, args[2])
+  models,entities = load_bsp(root_path, args[2])
 
+  -- find player pos
+  for _,kv in pairs(entities) do
+    for k,v in pairs(kv) do
+      if k=="classname" and v=="info_player_start" then
+        print("INFO - player start: "..kv["origin"])
+        pos=split(kv["origin"]," ")
+        -- conver to numbers
+        for k,v in pairs(pos) do
+          pos[k]=tonumber(v)          
+        end
+        break
+      end
+    end
+    if pos then break end
+  end
+  pos=pos or {0,0,0}
   _cam = make_cam(models.textures)
 
   grab_mouse()
@@ -158,7 +188,6 @@ diffx,diffy=0,0
 camx,camy=0,0
 
 zoom=1
-angle=0
 texture=1
 function love.wheelmoved(x, y)
   if y > 0 then
@@ -167,9 +196,6 @@ function love.wheelmoved(x, y)
     zoom = zoom - 5
   end
 end
-
-local velocity,dangle,angle={0,0,0},{0,0,0},{0,0,0}
-local pos={0,0,0}
 
 function grab_mouse()
     local state = not love.mouse.isGrabbed()   -- the opposite of whatever it currently is
@@ -218,7 +244,7 @@ function love.update(dt)
   pos[3]=zoom
 
   _cam:track(
-    v_add(pos,{0,0,32}), 
+    v_add(pos,{0,0,64}), 
     m_x_m(
       make_m_from_euler(0,0,angle[3]),
       make_m_from_euler(angle[1],0,0)))
@@ -232,6 +258,15 @@ function love.draw()
   -- refresh visible set
   local leaves = _cam:collect_leaves(models[1].bsp,models.leaves)
   _cam:draw_model(models[1],models.verts,leaves,1,#leaves)
+
+  --[[
+  for i=2,#models do
+    local m=models[i]
+    _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
+  end
+  ]]
+
+  clear_spans()
 
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
@@ -288,8 +323,8 @@ function make_cam(textures)
       end
     end  
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(not side)
     collect_leaf(side)
+    collect_leaf(not side)
   end
 
 	return {
@@ -379,7 +414,7 @@ function make_cam(textures)
             local outcode,clipcode,poly,uvs=0xffff,0,{},{}
             local texinfo = face.texinfo
             local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
-            for _,vi in ipairs(face.verts) do
+            for k,vi in pairs(face.verts) do
               local v=models.verts[vi]
               local a=v_cache[v]
               outcode=band(outcode,a.outcode)
@@ -387,7 +422,7 @@ function make_cam(textures)
               -- compute uvs
               a.u=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
               a.v=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
-              add(poly, a)
+              poly[k] = a
             end
             if outcode==0 then
               if clipcode>0 then
