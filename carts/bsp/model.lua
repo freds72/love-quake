@@ -494,7 +494,7 @@ function load_bsp(root_path, name)
         surfedges = read_all("int", header.surfedges, ptr)[0],
     }
 
-    return unpack_map(bsp),json_parse(entities)
+    return unpack_map(bsp),unpack_entities(entities)
 end
 
 return model

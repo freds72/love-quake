@@ -265,7 +265,7 @@ function love.draw()
     _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
   end
   ]]
-
+  
   clear_spans()
 
 	framebuffer.refresh()

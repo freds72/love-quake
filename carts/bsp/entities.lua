@@ -2,8 +2,8 @@ local entities={}
 
 local sub,add=string.sub,table.insert
 
--- json parser
--- from: https://gist.github.com/tylerneylon/59f4bcf316be525b30ab
+-- quake "object notation" parser
+-- loosely based of : https://gist.github.com/tylerneylon/59f4bcf316be525b30ab
 local function parse_str(str, pos, val)
     val=val or ''
     if pos>#str then
@@ -18,7 +18,7 @@ local function parse_str(str, pos, val)
 end
 
 -- public values and functions.
-function json_parse(str, pos, end_delim)
+function unpack_entities(str)
     pos=pos or 1
     if pos>#str then
         assert'reached unexpected end of input.'
@@ -46,7 +46,7 @@ function json_parse(str, pos, end_delim)
             end
             add(stack,key)
             if #stack==2 then
-                obj[stack[1]]=stack[2]
+                obj[stack[1]]=stack[2]      
                 stack={}
             end
         elseif first=="}" then

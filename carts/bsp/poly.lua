@@ -169,12 +169,12 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
 			local light = _lightptr[s+t*_lightw]
 			shade = flr((0xff - light)/4)
-			_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256]]
+			--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256]]
 		end
 
 		local s,t=flr(uw)%_texw,flr(vw)%_texh
 		local coloridx=_texptr[s+t*_texw]
-		-- _backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
+		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
 
 		u=u+du
 		v=v+dv
@@ -336,7 +336,8 @@ function polytex(p,np)
 		if x0<0 then
 			u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
 		end
-		local sa=flr(x0)-x0
+		--sub-pixel correction
+		local sa=1-x0%1
 		if x1>480 then
 			x1=480
 		end
