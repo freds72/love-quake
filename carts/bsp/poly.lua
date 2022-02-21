@@ -165,6 +165,7 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
 		if _lightptr then
+			-- todo: cache lightmaps when needed
 			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
 			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
 			local l0=lerp(_lightptr[s0+t0*_lightw],_lightptr[s1+t0*_lightw],s%1)

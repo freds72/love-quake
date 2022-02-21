@@ -191,17 +191,16 @@ zoom=1
 texture=1
 function love.wheelmoved(x, y)
   if y > 0 then
-    zoom = zoom + 5
+    zoom = 5
   elseif y < 0 then
-    zoom = zoom - 5
+    zoom = -5
   end
 end
 
 function grab_mouse()
-    local state = not love.mouse.isGrabbed()   -- the opposite of whatever it currently is
-    love.mouse.setGrabbed(state)
-    local state = not love.mouse.isVisible()   -- the opposite of whatever it currently is
-    love.mouse.setVisible(state)     
+  love.mouse.setGrabbed(true)
+  love.mouse.setRelativeMode( true )
+  love.mouse.setVisible(false)
 end
 
 function love.keypressed(key)
@@ -210,14 +209,12 @@ function love.keypressed(key)
   end
 end
 
-function love.update(dt)
-  if love.mouse.isGrabbed() then
-      local mx, my = love.mouse.getPosition()
-      camx = mx - 480/2
-      camy = my - 270/2
-      --diffx, diffy = mx,my
-  end
+function love.mousemoved( x, y, dx, dy, istouch )
+  camx = dx*8
+  camy = dy*8
+end
 
+function love.update(dt)
   local keys={
     ["z"]={0,1,0},
     ["s"]={0,-1,0},
@@ -231,23 +228,26 @@ function love.update(dt)
     end
   end
 
-  v_scale(dangle,0.02)
-  v_scale(velocity,0.3)
+  zoom=zoom * 0.2
+  v_scale(dangle,0.2)
+  v_scale(velocity,0.7)
 
   dangle=v_add(dangle,{camy,0,camx})
-  angle=v_add(angle,dangle,1/4096)
+  angle=v_add(angle,dangle,1/1024)
 
   local a,dx,dz=angle[3],acc[2],acc[1]
   local c,s=cos(a),sin(a)
-  velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,0},2)          
+  velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,zoom})          
   pos=v_add(pos,velocity)
-  pos[3]=zoom
 
   _cam:track(
-    v_add(pos,{0,0,64}), 
+    v_add(pos,{0,0,32}), 
     m_x_m(
       make_m_from_euler(0,0,angle[3]),
       make_m_from_euler(angle[1],0,0)))
+
+  -- kill mouse
+  camx,camy=0,0
 end
 
 local visframe,prev_leaf=0
@@ -265,7 +265,7 @@ function love.draw()
     _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
   end
   ]]
-  
+
   clear_spans()
 
 	framebuffer.refresh()
