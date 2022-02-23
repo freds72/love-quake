@@ -4,7 +4,7 @@ local entities = require( "entities" )
 
 local model = {}
 -- module globals
-plane_dot,plane_isfront,plane_get=nil,nil,nil
+plane_dot,plane_dot1,plane_isfront,plane_get=nil,nil,nil,nil
 
 -- pico8 compat helpers
 local add=table.insert
@@ -178,7 +178,8 @@ local function unpack_map(bsp)
     
     -- planes
     plane_get=function(pi)
-        return planes[pi]
+        local n=planes[pi].normal
+        return n[0],n[1],n[2]
     end
     plane_dot=function(pi,v)
         local plane=planes[pi]
@@ -187,6 +188,14 @@ local function unpack_map(bsp)
         return n[t]*v[t],plane.dist
         end
         return n[0]*v[0]+n[1]*v[1]+n[2]*v[2],plane.dist
+    end
+    plane_dot1=function(pi,v)
+        local plane=planes[pi]
+        local t,n=plane.type,plane.normal
+        if t<3 then                 
+        return n[t]*v[t+1],plane.dist
+        end
+        return n[0]*v[1]+n[1]*v[2]+n[2]*v[3],plane.dist
     end
     plane_isfront=function(pi,v)
         local plane=planes[pi]

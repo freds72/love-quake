@@ -147,9 +147,10 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	end
 end
 
-local _texptr,_texw,_texh
-function push_texture(ptr,width,height)
-	_texptr,_texw,_texh=ptr,width,height
+local _texptr,_texw,_texh,_texscale
+function push_texture(ptr,width,height,mip)
+	_texscale=shl(1,mip)
+	_texptr,_texw,_texh=ptr[mip+1],width/_texscale,height/_texscale
 end
 local _lightptr,_lightw,_lighth,_lightx,_lighty,_lbase
 function push_lightmap(...)
@@ -174,10 +175,17 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 			local light = lerp(l0,l1,t%1)
 		
 			shade = flr((0xff-light)/4)
-			--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256]]
+			--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256] ]
+
+			--[[
+			local s,t=flr((uw - _lightx)/16),flr((vw - _lighty)/16)
+			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+			local light = _lightptr[s+t*_lightw]
+			shade = flr((0xff - light)/4)			
+			]]
 		end
 
-		local s,t=flr(uw)%_texw,flr(vw)%_texh
+		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh
 		local coloridx=_texptr[s+t*_texw]
 		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
 

@@ -1,6 +1,9 @@
 local math3d={}
 
+local abs,flr,sqrt=math.abs,math.floor,math.sqrt
 local cos,sin=math.cos,math.sin
+local min,max=math.min,math.max
+
 -- maths & cam
 function lerp(a,b,t)
 	return a*(1-t)+b*t

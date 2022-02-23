@@ -14,10 +14,15 @@ ffi.cdef[[
 
 -- pico8 compat helpers
 local add=table.insert
-local flr=math.floor
+local abs,flr=math.abs,math.floor
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local sin,cos=math.sin,math.cos
+local min, max = math.min, math.max
+local function mid(x, a, b)
+  return max(a, min(b, x))
+end
+
 local scale=2
 
 -- game globals
@@ -86,6 +91,9 @@ function love.load(args)
 
   models,entities = load_bsp(root_path, args[2])
 
+  -- main geometry
+  _level = models[1]
+
   -- find player pos
   for _,kv in pairs(entities) do
     for k,v in pairs(kv) do
@@ -102,9 +110,15 @@ function love.load(args)
     if pos then break end
   end
   pos=pos or {0,0,0}
+  _plyr=make_player(pos,0)
   _cam = make_cam(models.textures)
-
+  
   grab_mouse()
+
+  _font = love.graphics.newFont("fonts/cour.ttf", 16)
+
+  love.profiler = require('profile') 
+  -- love.profiler.start()
 end
 
 function find_sub_sector(node,pos)
@@ -119,11 +133,12 @@ end
 
 -- find if pos is within an empty space
 function is_empty(node,pos)
+  local pos={[0]=pos[1],pos[2],pos[3]}
   while node.contents==nil or node.contents>0 do
     node=node[plane_isfront(node.plane,pos)]
   end  
-  --return node.contents!=-1
-  return node.contents~=-2 or node.contents~=-1
+  return node.contents~=-1
+  --return node.contents~=-2 or node.contents~=-1
 end
 
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
@@ -148,8 +163,8 @@ function hitscan(node,p0,p1,out)
     end
   end
 
-  local dist,node_dist=plane_dot(node.plane,p0)
-  local otherdist=plane_dot(node.plane,p1)
+  local dist,node_dist=plane_dot1(node.plane,p0)
+  local otherdist=plane_dot1(node.plane,p1)
   local side,otherside=dist>node_dist,otherdist>node_dist
   if side==otherside then
     -- go down this side
@@ -158,9 +173,9 @@ function hitscan(node,p0,p1,out)
   -- crossing a node
   local t=dist-node_dist
   if t<0 then
-    t=t-0x0.01
+    t=t-0.001
   else
-    t=t+0x0.01
+    t=t+0.001
   end  
   -- cliping fraction
   local frac=mid(t/(dist-otherdist),0,1)
@@ -172,7 +187,7 @@ function hitscan(node,p0,p1,out)
     if not out.n then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
-      if is_empty(_model.clipnodes,p10) then
+      if is_empty(_level.clipnodes,p10) then
         local scale=t<0 and -1 or 1
         local nx,ny,nz=plane_get(node.plane)
         out.n={scale*nx,scale*ny,scale*nz,node_dist}
@@ -214,40 +229,20 @@ function love.mousemoved( x, y, dx, dy, istouch )
   camy = dy*8
 end
 
+love.frame = 0
 function love.update(dt)
-  local keys={
-    ["z"]={0,1,0},
-    ["s"]={0,-1,0},
-    ["q"]={1,0,0},
-    ["d"]={-1,0,0}
-  }
-  local acc={0,0,0}
-  for k,move in pairs(keys) do
-    if love.keyboard.isDown(k) then
-      acc=v_add(acc, move)
-    end
-  end
 
-  zoom=zoom * 0.2
-  v_scale(dangle,0.2)
-  v_scale(velocity,0.7)
-
-  dangle=v_add(dangle,{camy,0,camx})
-  angle=v_add(angle,dangle,1/1024)
-
-  local a,dx,dz=angle[3],acc[2],acc[1]
-  local c,s=cos(a),sin(a)
-  velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,zoom})          
-  pos=v_add(pos,velocity)
-
-  _cam:track(
-    v_add(pos,{0,0,32}), 
-    m_x_m(
-      make_m_from_euler(0,0,angle[3]),
-      make_m_from_euler(angle[1],0,0)))
+  _plyr:update()  
+  _cam:track(v_add(_plyr.pos,{0,0,32}),_plyr.m,_plyr.angle)
 
   -- kill mouse
   camx,camy=0,0
+
+  love.frame = love.frame + 1
+  if love.frame%2 == 0 then
+    love.report = love.profiler.report(20)
+    love.profiler.reset()
+  end
 end
 
 local visframe,prev_leaf=0
@@ -256,8 +251,8 @@ function love.draw()
   framebuffer.fill(0)
 
   -- refresh visible set
-  local leaves = _cam:collect_leaves(models[1].bsp,models.leaves)
-  _cam:draw_model(models[1],models.verts,leaves,1,#leaves)
+  local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
+  _cam:draw_model(_level,models.verts,leaves,1,#leaves)
 
   --[[
   for i=2,#models do
@@ -271,13 +266,15 @@ function love.draw()
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
 
+  love.graphics.setFont(_font)
+  love.graphics.print(love.report or ("Please wait...("..love.frame..")"))
+
   love.graphics.print("FPS: " .. love.timer.getFPS(), 1, 1 )
 
     --[[
   love.graphics.setColor( 1,1,1)
   love.graphics.draw(models.raw.textures[texture].imgs[1], 0 ,0,0,4,4)
   ]]
-
 end
 
 -- camera
@@ -413,7 +410,7 @@ function make_cam(textures)
             f_cache[face]=true
             local outcode,clipcode,poly,uvs=0xffff,0,{},{}
             local texinfo = face.texinfo
-            local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
+            local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
             for k,vi in pairs(face.verts) do
               local v=models.verts[vi]
               local a=v_cache[v]
@@ -422,6 +419,9 @@ function make_cam(textures)
               -- compute uvs
               a.u=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
               a.v=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
+              if a.w>maxw then
+                maxw = a.w
+              end
               poly[k] = a
             end
             if outcode==0 then
@@ -431,8 +431,9 @@ function make_cam(textures)
               if #poly>2 then
                 local texture = textures[texinfo.miptex]
                 if texture then
-                  push_baselight(face.baselight)
-                  push_texture(texture.mips[1],texture.width,texture.height)
+                  push_baselight(face.baselight) 
+                  local mip=min(max(flr(6*maxw),0),3)
+                  push_texture(texture.mips,texture.width,texture.height,3-mip)
                   if face.lightofs then
                     push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
                   end
@@ -448,4 +449,106 @@ function make_cam(textures)
       end    
     end  
   }
+end
+
+function make_player(pos,a)
+  local angle,dangle,velocity={0,0,a},{0,0,0},{0,0,0}
+  local fire_ttl=0
+  local on_ground=false
+
+  -- start above floor
+  pos=v_add(pos,{0,0,1})
+  return {
+    pos=pos,
+    m=make_m_from_euler(unpack(angle)),
+    update=function(self)
+      -- damping      
+      angle[2]=angle[2]*0.8
+      v_scale(dangle,0.6)
+      velocity[1]=velocity[1]*0.7
+      velocity[2]=velocity[2]*0.7
+      velocity[3]=velocity[3]*0.9
+
+      -- move
+      local keys={
+        ["z"]={0,1,0},
+        ["s"]={0,-1,0},
+        ["q"]={1,0,0},
+        ["d"]={-1,0,0},
+        ["space"]={0,0,8}
+      }
+
+      local acc={0,0,0}
+      for k,move in pairs(keys) do
+        if love.keyboard.isDown(k) then
+          acc=v_add(acc, move)
+        end
+      end
+
+      dangle=v_add(dangle,{camy,acc[1]*2,camx})
+      angle=v_add(angle,dangle,1/1024)
+    
+      local a,dx,dz=angle[3],acc[2],acc[1]
+      local c,s=cos(a),sin(a)
+      velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,(on_ground and acc[3] or 0)-0.5})          
+            
+      -- check next position
+      local vn,vl=v_normz(velocity)      
+      if vl>0.1 then
+        on_ground=false
+        local next_pos=v_add(self.pos,velocity)
+        local vel2d=v_normz({vn[1],vn[2],0})
+        local model=_level
+        local stairs=nil--not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
+        -- check current to target pos
+        for i=1,3 do
+          local hits,hitmodel={t=32000}
+          --for k,model in pairs(_bsps) do
+            local tmphits={}                      
+            -- convert into model's space (mostly zero except moving brushes)
+            if hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+              hits=tmphits
+              hitmodel=model
+            end
+          --end          
+          if hits.n then
+            -- todo: trigger action?
+            local fix=v_dot(hits.n,velocity)
+            -- separating?
+            if fix<0 then
+              velocity=v_add(velocity,hits.n,-fix)
+              -- floor?
+              if hits.n[3]>0.7 then
+                on_ground=true
+              end
+              -- wall hit
+              if abs(hits.n[3])<0.01 then
+                -- can we clear an edge?
+                if stairs then
+                  stairs=nil
+                  -- move up
+                  velocity=v_add(velocity,{0,0,8})
+                end
+              end
+            end
+            next_pos=v_add(self.pos,velocity)
+          else
+            goto clear
+          end
+        end
+        -- cornered?
+        velocity={0,0,0}
+::clear::
+      else
+        velocity={0,0,0}
+      end
+
+      self.pos=v_add(self.pos,velocity)
+      self.m=m_x_m(
+          m_x_m(
+            make_m_from_euler(0,0,angle[3]),
+            make_m_from_euler(angle[1],0,0)),
+            make_m_from_euler(0,angle[2],0))
+    end
+  } 
 end
