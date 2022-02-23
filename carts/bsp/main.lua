@@ -91,6 +91,20 @@ function love.load(args)
 
   models,entities = load_bsp(root_path, args[2])
 
+  local doors={
+    ["func_wall"]=true,
+    ["func_door"]=true,
+    ["func_door_secret"]=true,
+    ["func_button"]=true,     
+  }
+  for _,kv in pairs(entities) do
+    if doors[kv.classname] then
+      -- model id
+      local id=tonumber(string.sub(kv.model,2))
+      models[id+1].solid=true
+    end
+  end
+
   -- main geometry
   _level = models[1]
 
@@ -254,12 +268,12 @@ function love.draw()
   local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
   _cam:draw_model(_level,models.verts,leaves,1,#leaves)
 
-  --[[
   for i=2,#models do
     local m=models[i]
-    _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
+    if m.solid then
+      _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
+    end
   end
-  ]]
 
   clear_spans()
 
@@ -499,7 +513,7 @@ function make_player(pos,a)
         local next_pos=v_add(self.pos,velocity)
         local vel2d=v_normz({vn[1],vn[2],0})
         local model=_level
-        local stairs=nil--not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
+        local stairs=not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
         -- check current to target pos
         for i=1,3 do
           local hits,hitmodel={t=32000}
@@ -527,7 +541,7 @@ function make_player(pos,a)
                 if stairs then
                   stairs=nil
                   -- move up
-                  velocity=v_add(velocity,{0,0,8})
+                  velocity=v_add(velocity,{0,0,4})
                 end
               end
             end

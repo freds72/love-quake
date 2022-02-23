@@ -416,7 +416,6 @@ local function unpack_map(bsp)
             0,0,1,0,
             0,0,0,1
         },
-        solid=true,
         faces=faces,
         -- root node (for display)
         bsp=nodes[model.headnode[0]+1],
@@ -428,7 +427,7 @@ local function unpack_map(bsp)
     end, bsp.models)
 
     return models
-    end
+end
 
 local function unpack_textures(lump, mem)
     mem = mem + lump.fileofs
