@@ -70,7 +70,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			local dx,sdw=x0-s0+1,span.dw
 			local sw=span.w+dx*sdw		
 			
-			if sw<w or (sw==w and dw>sdw) then
+			if sw-w<-0.00001 or (abs(sw-w)<0.00001 and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
 				-- insert (left) clipped existing span as a "new" span
 				if dx>0 then
@@ -158,37 +158,50 @@ function push_lightmap(...)
 end
 function push_baselight(style)
 	-- 255: pure black
-	_lbase=flr(style/4)
+	_lbase=style
 end
 
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
-	local shade=_lbase
+	local shade=63-flr(min(63, _lbase[1] * 63))
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
 		if _lightptr then
-			-- todo: cache lightmaps when needed
-			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
-			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
-			local l0=lerp(_lightptr[s0+t0*_lightw],_lightptr[s1+t0*_lightw],s%1)
-			local l1=lerp(_lightptr[s0+t1*_lightw],_lightptr[s1+t1*_lightw],s%1)			
-			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-			local light = lerp(l0,l1,t%1)
-		
-			shade = flr((0xff-light)/4)
-			--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256] ]
+			shade=0
+			for i=0,3 do
+				local scale = _lbase[i+1]
+				if scale>0 then
+					local ofs=i*_lighth*_lightw							
+					-- todo: cache lightmaps when needed
+					local s,t=(uw - _lightx)/16,(vw - _lighty)/16
+					local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
+					local l0=lerp(_lightptr[ofs+s0+t0*_lightw],_lightptr[ofs+s1+t0*_lightw],s%1)
+					local l1=lerp(_lightptr[ofs+s0+t1*_lightw],_lightptr[ofs+s1+t1*_lightw],s%1)			
+					--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+					local light = lerp(l0,l1,t%1)
+				
+					-- light is additive
+					shade = shade + (scale*light)/4
+					--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256] ]
 
-			--[[
-			local s,t=flr((uw - _lightx)/16),flr((vw - _lighty)/16)
-			--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-			local light = _lightptr[s+t*_lightw]
-			shade = flr((0xff - light)/4)			
-			]]
+					--[[
+					local s,t=flr((uw - _lightx)/16),flr((vw - _lighty)/16)
+					--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+					local light = _lightptr[s+t*_lightw]
+					shade = flr((0xff - light)/4)			
+					]]
+				end
+			end
+			shade = flr(63 - min(63, shade))
 		end
 
 		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh
 		local coloridx=_texptr[s+t*_texw]
-		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
-
+		--if (x+y0)%2==0 then
+			_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
+		--else
+		--	_backbuffer[x+y0*480]=_palette[_colormap[_texscale*8+15]]
+		--end
+		
 		u=u+du
 		v=v+dv
 		w=w+dw

@@ -7,7 +7,7 @@ local model = {}
 plane_dot,plane_dot1,plane_isfront,plane_get=nil,nil,nil,nil
 
 -- pico8 compat helpers
-local add=table.insert
+local sub,add=string.sub,table.insert
 local flr,ceil=math.floor,math.ceil
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
@@ -233,7 +233,11 @@ local function unpack_map(bsp)
             local tex = bsp.texinfo[f.texinfo]
             face.texinfo = tex
 
-            face.baselight = f.styles[1]
+            local lightstyles={}
+            for i=0,3 do
+                add(lightstyles, f.styles[i])
+            end
+            face.lightstyles = lightstyles
 
             -- light info?
             if f.lightofs~=-1 then
@@ -435,35 +439,57 @@ local function unpack_textures(lump, mem)
     local m = ffi.cast("dmiptexlump_t*", mem)
     local n = m.nummiptex
     print("reading #textures: "..n)
+    local sequences={}
     for i=0,n-1 do
         local ofs = m.dataofs[i]
         if ofs~=-1 then
-        local mt = ffi.cast("miptex_t*", mem + ofs)
-        print("texture: "..ffi.string(mt.name).." size: "..mt.width.."x"..mt.height)
-        -- store pointers to image data (e.g. color indices)
-        local imgs={}
-        for j=0,3 do
-            add(imgs,ffi.cast("unsigned char*", mem + ofs + mt.offsets[j]))
-            --[[
-            local scale=shl(1,j)
-            local w,h=flr(mt.width/scale), flr(mt.height/scale)
-            local imagedata = love.image.newImageData(w,h)
-            local image     = love.graphics.newImage(imagedata,{linear=true, mipmaps=false})
-            image:setFilter('nearest','nearest')        
-            local ptr = ffi.cast('uint32_t*', imagedata:getFFIPointer()) 
-            for k=0,w*h-1 do
-                local rgb=palette[data[k] ]
-                ptr[k]=0xff000000+shl(rgb.b,16)+shl(rgb.g,8)+rgb.r
+            local mt = ffi.cast("miptex_t*", mem + ofs)
+            local texname=ffi.string(mt.name)
+            print("texture: "..texname.." size: "..mt.width.."x"..mt.height)
+            -- store pointers to image data (e.g. color indices)
+            local imgs={}
+            for j=0,3 do
+                add(imgs,ffi.cast("unsigned char*", mem + ofs + mt.offsets[j]))
+                --[[
+                local scale=shl(1,j)
+                local w,h=flr(mt.width/scale), flr(mt.height/scale)
+                local imagedata = love.image.newImageData(w,h)
+                local image     = love.graphics.newImage(imagedata,{linear=true, mipmaps=false})
+                image:setFilter('nearest','nearest')        
+                local ptr = ffi.cast('uint32_t*', imagedata:getFFIPointer()) 
+                for k=0,w*h-1 do
+                    local rgb=palette[data[k] ]
+                    ptr[k]=0xff000000+shl(rgb.b,16)+shl(rgb.g,8)+rgb.r
+                end
+                image:replacePixels(imagedata)
+                add(imgs, image)
+                ]]
             end
-            image:replacePixels(imagedata)
-            add(imgs, image)
-            ]]
-        end
-        textures[i] = {
-            width = mt.width,
-            height = mt.height,
-            mips = imgs
-        }
+            local sky=sub(texname,0,3)=="sky"
+            local texinfo = {
+                width = mt.width,
+                height = mt.height,
+                mips = imgs,
+                sky=sky,
+                bright = sub(texname,0,1)=="*" or sky
+            }
+            -- part of a sequence?
+            if sub(texname,0,1)=="+" then
+                local seqid=tonumber(sub(texname,1,2),16)
+                local seqname=sub(texname,3)
+                print("INFO - texture sequence: "..seqname.." @"..seqid)
+                local seq=sequences[seqname] or {main={},alt={}}
+                if seqid>0x9 then
+                    seq.alt[seqid] = texinfo
+                else
+                    seq.main[seqid] = texinfo
+                end
+                sequences[seqname] = seq
+
+                texinfo.sequence = seq
+            end
+
+            textures[i] = texinfo
         end
     end
     return textures

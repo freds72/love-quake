@@ -13,7 +13,7 @@ ffi.cdef[[
 ]]    
 
 -- pico8 compat helpers
-local add=table.insert
+local sub,add,ord=string.sub,table.insert,string.byte
 local abs,flr=math.abs,math.floor
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
@@ -100,8 +100,7 @@ function love.load(args)
   for _,kv in pairs(entities) do
     if doors[kv.classname] then
       -- model id
-      local id=tonumber(string.sub(kv.model,2))
-      models[id+1].solid=true
+      models[kv.model+1].solid=true
     end
   end
 
@@ -112,12 +111,8 @@ function love.load(args)
   for _,kv in pairs(entities) do
     for k,v in pairs(kv) do
       if k=="classname" and v=="info_player_start" then
-        print("INFO - player start: "..kv["origin"])
-        pos=split(kv["origin"]," ")
-        -- conver to numbers
-        for k,v in pairs(pos) do
-          pos[k]=tonumber(v)          
-        end
+        pos=kv.origin
+        print("INFO - found player start")
         break
       end
     end
@@ -291,6 +286,34 @@ function love.draw()
   ]]
 end
 
+local light_styles={  
+  -- 0 normal
+  [0] = "m",
+  -- 1 FLICKER (first variety)
+  [1] = "mmnmmommommnonmmonqnmmo",
+  -- 2 SLOW STRONG PULSE
+  [2] = "abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba",
+  -- 3 CANDLE (first variety)
+  [3] = "mmmmmaaaaammmmmaaaaaabcdefgabcdefg",
+  -- 4 FAST STROBE
+  [4] = "mamamamamama",
+  -- 5 GENTLE PULSE 1
+  [5] = "jklmnopqrstuvwxyzyxwvutsrqponmlkj",
+  -- 6 FLICKER (second variety)
+  [6] = "nmonqnmomnmomomno",
+  -- 7 CANDLE (second variety)
+  [7] = "mmmaaaabcdefgmmmmaaaammmaamm",
+  -- 8 CANDLE (third variety)
+  [8] = "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa",
+  -- 9 SLOW STROBE (fourth variety)
+  [9] = "aaaaaaaazzzzzzzz",
+  -- 10 FLUORESCENT FLICKER
+  [10] = "mmamammmmammamamaaamammma",
+  -- 11 SLOW PULSE NOT FADE TO BLACK
+  [11] = "abcdefghijklmnopqrrqponmlkjihgfedcba"
+}
+
+
 -- camera
 function make_cam(textures)
   local up={0,1,0}
@@ -310,9 +333,9 @@ function make_cam(textures)
       if (d1>0)~=side then
         local nv=v_lerp(v0,v1,d0/(d0-d1),uvs)
         -- project against near plane
-        nv.x=hw+(nv[1]*33.75)
-        nv.y=hh-(nv[2]*33.75)
-        nv.w=33.75
+        nv.x=hw+(270*nv[1]/8)
+        nv.y=hh-(270*nv[2]/8)
+        nv.w=1/8
         res[#res+1]=nv
       end
       v0=v1
@@ -404,8 +427,8 @@ function make_cam(textures)
           elseif ay<-az then code = code + 32 end
           -- save world space coords for clipping
           -- to screen space
-          local w=270/az
-          local a={ax,ay,az,x=480/2+ax*w,y=270/2-ay*w,w=w,outcode=code}
+          local w=1/az
+          local a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code}
           self[v]=a          
           return a
         end
@@ -443,14 +466,34 @@ function make_cam(textures)
                 poly = z_poly_clip(poly,#poly,true)
               end
               if #poly>2 then
-                local texture = textures[texinfo.miptex]
+                local texture = textures[texinfo.miptex]                
                 if texture then
-                  push_baselight(face.baselight) 
-                  local mip=min(max(flr(6*maxw),0),3)
-                  push_texture(texture.mips,texture.width,texture.height,3-mip)
-                  if face.lightofs then
-                    push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
+                  -- animated?
+                  if texture.sequence then
+                    -- texture animation id are between 0-9 (lua counts between 0-8)
+                    local frame = flr(love.frame/15) % (#texture.sequence.main+1)
+                    texture = texture.sequence.main[frame]
                   end
+                  local mip=3-mid(flr(2048*maxw),0,3)
+                  push_texture(texture.mips,texture.width,texture.height,mip)
+                  if texture.bright then
+                    push_baselight({0.5,0.5,0.5,0.5})
+                  else
+                    local styles={0,0,0,0}
+                    for i,style in pairs(face.lightstyles) do
+                      local lightstyle=light_styles[style]  
+                      if lightstyle then
+                        local frame = flr(love.frame/15) % #lightstyle
+                        --print("light style @"..lightstyle.."["..frame.."]")
+                        styles[i] = 1 - (ord(sub(lightstyle,frame,frame+1))-ord("a")) / 26
+                      end
+                    end
+                    push_baselight(styles)
+                  end
+                  if face.lightofs then
+                      push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
+                  end                  
+                  
                   polytex(poly,#poly)    
                   push_lightmap()     
                 else
@@ -509,7 +552,7 @@ function make_player(pos,a)
       -- check next position
       local vn,vl=v_normz(velocity)      
       if vl>0.1 then
-        on_ground=false
+        on_ground=true
         local next_pos=v_add(self.pos,velocity)
         local vel2d=v_normz({vn[1],vn[2],0})
         local model=_level

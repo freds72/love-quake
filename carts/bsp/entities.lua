@@ -17,6 +17,23 @@ local function parse_str(str, pos, val)
     return parse_str(str,pos+1,val..c)
 end
 
+local value_factory={
+    angle=tonumber,
+    wait=tonumber,
+    delay=tonumber,
+    model=function(value)
+        return tonumber(sub(value,2))
+    end,
+    origin=function(value)
+        local coords=split(value," ")
+        -- conver to numbers
+        for k,v in pairs(coords) do
+            coords[k]=tonumber(v)          
+        end
+        return coords
+    end
+}
+
 -- public values and functions.
 function unpack_entities(str)
     pos=pos or 1
@@ -46,7 +63,10 @@ function unpack_entities(str)
             end
             add(stack,key)
             if #stack==2 then
-                obj[stack[1]]=stack[2]      
+                local k,v=stack[1],stack[2]      
+                -- convert values to lua objects/numbers          
+                local fn=value_factory[k]
+                obj[k]=fn and fn(v) or v
                 stack={}
             end
         elseif first=="}" then
