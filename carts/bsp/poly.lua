@@ -4,6 +4,9 @@ local poly={}
 local abs,flr,ceil=math.abs,math.floor,math.ceil
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
+local function mid(x, a, b)
+	return max(a, min(b, x))
+  end
 
 local _spans={}
 function clear_spans()
@@ -161,23 +164,28 @@ function push_baselight(style)
 	_lbase=style
 end
 
+local _gamma = 8
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
-	local shade=63-flr(min(63, _lbase[1] * 63))
+	local shade=63-flr(mid(_lbase[1] * 63 - _gamma,0,63))
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
 		if _lightptr then
 			shade=0
+			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
+			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
+			local s0t0,s0t1,s1t0,s1t1=s0+t0*_lightw,s0+t1*_lightw,s1+t0*_lightw,s1+t1*_lightw
+			s=s%1
+			t=t%1
 			for i=0,3 do
 				local scale = _lbase[i+1]
 				if scale>0 then
 					local ofs=i*_lighth*_lightw							
 					-- todo: cache lightmaps when needed
-					local s,t=(uw - _lightx)/16,(vw - _lighty)/16
-					local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
-					local l0=lerp(_lightptr[ofs+s0+t0*_lightw],_lightptr[ofs+s1+t0*_lightw],s%1)
-					local l1=lerp(_lightptr[ofs+s0+t1*_lightw],_lightptr[ofs+s1+t1*_lightw],s%1)			
 					--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-					local light = lerp(l0,l1,t%1)
+					local light = lerp(
+						lerp(_lightptr[ofs + s0t0],_lightptr[ofs + s1t0],s),
+						lerp(_lightptr[ofs + s0t1],_lightptr[ofs + s1t1],s),
+						t)
 				
 					-- light is additive
 					shade = shade + (scale*light)/4
@@ -191,7 +199,7 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 					]]
 				end
 			end
-			shade = flr(63 - min(63, shade))
+			shade = 63 - flr(mid(shade + _gamma,0,63))
 		end
 
 		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh

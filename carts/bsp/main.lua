@@ -312,7 +312,13 @@ local light_styles={
   -- 11 SLOW PULSE NOT FADE TO BLACK
   [11] = "abcdefghijklmnopqrrqponmlkjihgfedcba"
 }
-
+for k,lightstyle in pairs(light_styles) do
+  local style={}
+  for frame=0,#lightstyle-1 do
+    add(style,1 - (ord(sub(lightstyle,frame,frame+1))-ord("a")) / 26)    
+  end
+  light_styles[k] = style
+end
 
 -- camera
 function make_cam(textures)
@@ -485,7 +491,7 @@ function make_cam(textures)
                       if lightstyle then
                         local frame = flr(love.frame/15) % #lightstyle
                         --print("light style @"..lightstyle.."["..frame.."]")
-                        styles[i] = 1 - (ord(sub(lightstyle,frame,frame+1))-ord("a")) / 26
+                        styles[i] = lightstyle[frame + 1]
                       end
                     end
                     push_baselight(styles)
