@@ -164,7 +164,7 @@ function push_baselight(style)
 	_lbase=style
 end
 
-local _gamma = 8
+local _gamma = 0
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
 	local shade=63-flr(mid(_lbase[1] * 63 - _gamma,0,63))
 	for x=x0,x1 do
@@ -182,12 +182,12 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 					local ofs=i*_lighth*_lightw							
 					-- todo: cache lightmaps when needed
 					--print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-					local light = lerp(
-						lerp(_lightptr[ofs + s0t0],_lightptr[ofs + s1t0],s),
-						lerp(_lightptr[ofs + s0t1],_lightptr[ofs + s1t1],s),
-						t)
+					local a=_lightptr[ofs + s0t0] * (1-s) + _lightptr[ofs + s1t0] * s
+					local b=_lightptr[ofs + s0t1] * (1-s) + _lightptr[ofs + s1t1] * s
+					local light = a*(1-t) + b*t
 				
 					-- light is additive
+					-- rebase 0-255 to 0-63
 					shade = shade + (scale*light)/4
 					--_backbuffer[x+y0*480]=_palette[_colormap[15 +  shade*256] ]
 

@@ -445,7 +445,7 @@ local function unpack_textures(lump, mem)
         if ofs~=-1 then
             local mt = ffi.cast("miptex_t*", mem + ofs)
             local texname=ffi.string(mt.name)
-            print("texture: "..texname.." size: "..mt.width.."x"..mt.height)
+            -- print("texture: "..texname.." size: "..mt.width.."x"..mt.height)
             -- store pointers to image data (e.g. color indices)
             local imgs={}
             for j=0,3 do
@@ -477,7 +477,7 @@ local function unpack_textures(lump, mem)
             if sub(texname,0,1)=="+" then
                 local seqid=tonumber(sub(texname,1,2),16)
                 local seqname=sub(texname,3)
-                print("INFO - texture sequence: "..seqname.." @"..seqid)
+                -- print("INFO - texture sequence: "..seqname.." @"..seqid)
                 local seq=sequences[seqname] or {main={},alt={}}
                 if seqid>0x9 then
                     seq.alt[seqid] = texinfo

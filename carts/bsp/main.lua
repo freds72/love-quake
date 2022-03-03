@@ -6,7 +6,7 @@ local model = require( "model" )
 local fb = require 'fblove_strip'
 local poly = require( "poly" )
 local math3d = require( "math3d")
-
+local progs = require("progs/main")
 ffi.cdef[[
     #pragma pack(1)
     typedef struct { unsigned char r,g,b; } color_t;
@@ -73,6 +73,15 @@ function read_colormap(path)
   return colormap
 end
 
+local light_styles={}
+function lightstyle(_, id, lightstyle)
+    local style,base={},ord("a")
+    for frame=0,#lightstyle-1 do
+      add(style,1 - (ord(sub(lightstyle,frame,frame+1)) - base) / 26)    
+    end
+    light_styles[id] = style
+end
+
 love.window.setMode(480 * scale, 270 * scale, {resizable=false, vsync=true, minwidth=480, minheight=270})
 
 function love.load(args)
@@ -90,17 +99,33 @@ function love.load(args)
   _colormap = read_colormap(root_path)
 
   models,entities = load_bsp(root_path, args[2])
+  -- "virtual machine" to host game logic
+  _vm = progs({
+    lightstyle=lightstyle,
+    objerror=function(self,msg)
+      -- todo: set context (if applicable)
+      print("ERROR - "..tostring(msg))
+    end,
+    setmodel=function(self,ent,id)
+      if not id then
+        return
+      end
+      local m = models[id + 1]
+      if not m then
+        print("ERROR - invalid model id: "..id)
+      end
+      ent.model = m      
+    end
+  })
 
-  local doors={
-    ["func_wall"]=true,
-    ["func_door"]=true,
-    ["func_door_secret"]=true,
-    ["func_button"]=true,     
-  }
-  for _,kv in pairs(entities) do
-    if doors[kv.classname] then
-      -- model id
-      models[kv.model+1].solid=true
+  -- bind entities and engine
+  _entities = {}
+  for i=1,#entities do    
+    -- order matters: worldspawn is always first
+    local ent = _vm:bind(entities[i])
+    if ent then
+      -- valid entity?
+      add(_entities, ent)
     end
   end
 
@@ -120,6 +145,14 @@ function love.load(args)
   end
   pos=pos or {0,0,0}
   _plyr=make_player(pos,0)
+
+  -- todo:
+  --[[ 
+    _player = {
+      ...
+    }
+    _vm:call("player_init",_player)
+  ]]
   _cam = make_cam(models.textures)
   
   grab_mouse()
@@ -248,10 +281,10 @@ function love.update(dt)
   camx,camy=0,0
 
   love.frame = love.frame + 1
-  if love.frame%2 == 0 then
-    love.report = love.profiler.report(20)
-    love.profiler.reset()
-  end
+  --if love.frame%2 == 0 then
+  --  love.report = love.profiler.report(20)
+  --  love.profiler.reset()
+  --end
 end
 
 local visframe,prev_leaf=0
@@ -263,9 +296,9 @@ function love.draw()
   local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
   _cam:draw_model(_level,models.verts,leaves,1,#leaves)
 
-  for i=2,#models do
-    local m=models[i]
-    if m.solid then
+  for _,ent in pairs(_entities) do
+    local m = ent.model
+    if m then
       _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
     end
   end
@@ -275,8 +308,8 @@ function love.draw()
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
 
-  love.graphics.setFont(_font)
-  love.graphics.print(love.report or ("Please wait...("..love.frame..")"))
+  -- love.graphics.setFont(_font)
+  -- love.graphics.print(love.report or ("Please wait...("..love.frame..")"))
 
   love.graphics.print("FPS: " .. love.timer.getFPS(), 1, 1 )
 
@@ -284,40 +317,6 @@ function love.draw()
   love.graphics.setColor( 1,1,1)
   love.graphics.draw(models.raw.textures[texture].imgs[1], 0 ,0,0,4,4)
   ]]
-end
-
-local light_styles={  
-  -- 0 normal
-  [0] = "m",
-  -- 1 FLICKER (first variety)
-  [1] = "mmnmmommommnonmmonqnmmo",
-  -- 2 SLOW STRONG PULSE
-  [2] = "abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba",
-  -- 3 CANDLE (first variety)
-  [3] = "mmmmmaaaaammmmmaaaaaabcdefgabcdefg",
-  -- 4 FAST STROBE
-  [4] = "mamamamamama",
-  -- 5 GENTLE PULSE 1
-  [5] = "jklmnopqrstuvwxyzyxwvutsrqponmlkj",
-  -- 6 FLICKER (second variety)
-  [6] = "nmonqnmomnmomomno",
-  -- 7 CANDLE (second variety)
-  [7] = "mmmaaaabcdefgmmmmaaaammmaamm",
-  -- 8 CANDLE (third variety)
-  [8] = "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa",
-  -- 9 SLOW STROBE (fourth variety)
-  [9] = "aaaaaaaazzzzzzzz",
-  -- 10 FLUORESCENT FLICKER
-  [10] = "mmamammmmammamamaaamammma",
-  -- 11 SLOW PULSE NOT FADE TO BLACK
-  [11] = "abcdefghijklmnopqrrqponmlkjihgfedcba"
-}
-for k,lightstyle in pairs(light_styles) do
-  local style={}
-  for frame=0,#lightstyle-1 do
-    add(style,1 - (ord(sub(lightstyle,frame,frame+1))-ord("a")) / 26)    
-  end
-  light_styles[k] = style
 end
 
 -- camera
@@ -566,16 +565,22 @@ function make_player(pos,a)
         -- check current to target pos
         for i=1,3 do
           local hits,hitmodel={t=32000}
-          --for k,model in pairs(_bsps) do
-            local tmphits={}                      
-            -- convert into model's space (mostly zero except moving brushes)
-            if hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
-              hits=tmphits
-              hitmodel=model
+          for k,ent in pairs(_entities) do
+            if ent.model and (ent.SOLID or ent.SOLID_TRIGGER) then
+              local tmphits={}                      
+              -- convert into model's space (mostly zero except moving brushes)
+              if hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+                hits=tmphits
+                hitent=ent
+              end
             end
-          --end          
+          end          
           if hits.n then
             -- todo: trigger action?
+            if hitent.touch then
+              hitent.touch()
+            end
+            
             local fix=v_dot(hits.n,velocity)
             -- separating?
             if fix<0 then
