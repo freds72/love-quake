@@ -47,7 +47,7 @@ local world=function(progs)
             name = self.message,
             worldtype=self.worldtype
         }
-        self.SOLID = true
+        self.SOLID_BSP = true
         progs:setmodel(self, 0)
     end
 end

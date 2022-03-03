@@ -3,7 +3,8 @@ local main=function(context)
     -- game modules
     local modules={
         "world",
-        "triggers"
+        "triggers",
+        "buttons"
     }
 
     -- global functions

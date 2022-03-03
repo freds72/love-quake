@@ -115,6 +115,12 @@ function love.load(args)
         print("ERROR - invalid model id: "..id)
       end
       ent.model = m      
+    end,
+    time=function()
+      return love.frame / 60
+    end,
+    print=function(_,msg)
+      -- todo: 
     end
   })
 
@@ -179,8 +185,8 @@ function is_empty(node,pos)
   while node.contents==nil or node.contents>0 do
     node=node[plane_isfront(node.plane,pos)]
   end  
-  return node.contents~=-1
-  --return node.contents~=-2 or node.contents~=-1
+  --return node.contents~=-1
+  return node.contents~=-2 or node.contents~=-1
 end
 
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
@@ -273,6 +279,7 @@ end
 
 love.frame = 0
 function love.update(dt)
+  love.frame = love.frame + 1
 
   _plyr:update()  
   _cam:track(v_add(_plyr.pos,{0,0,32}),_plyr.m,_plyr.angle)
@@ -280,7 +287,6 @@ function love.update(dt)
   -- kill mouse
   camx,camy=0,0
 
-  love.frame = love.frame + 1
   --if love.frame%2 == 0 then
   --  love.report = love.profiler.report(20)
   --  love.profiler.reset()
@@ -298,7 +304,7 @@ function love.draw()
 
   for _,ent in pairs(_entities) do
     local m = ent.model
-    if m then
+    if m and not ent.DRAW_NOT then
       _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
     end
   end
@@ -560,47 +566,64 @@ function make_player(pos,a)
         on_ground=true
         local next_pos=v_add(self.pos,velocity)
         local vel2d=v_normz({vn[1],vn[2],0})
-        local model=_level
-        local stairs=not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
+        local stairs=false--not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
+        -- avoid touching the same non-solid multiple times (ex: triggers)
+        local triggers = {}
         -- check current to target pos
-        for i=1,3 do
+        for i=1,5 do
           local hits,hitmodel={t=32000}
+          -- entities touched (but not blocking)
           for k,ent in pairs(_entities) do
-            if ent.model and (ent.SOLID or ent.SOLID_TRIGGER) then
-              local tmphits={}                      
-              -- convert into model's space (mostly zero except moving brushes)
-              if hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
-                hits=tmphits
-                hitent=ent
+            if not triggers[ent] then
+              -- avoid infinite check
+              if ent.SOLID_TRIGGER then
+                triggers[ent] = true
+              end
+
+              local model = ent.model
+              if model and not ent.SOLID_NOT then
+                local tmphits={} 
+                -- convert into model's space (mostly zero except moving brushes)
+                if hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+                  hits=tmphits
+                  hitent=ent
+                end
               end
             end
           end          
-          if hits.n then
-            -- todo: trigger action?
-            if hitent.touch then
-              hitent.touch()
-            end
-            
+          if hits.n then            
             local fix=v_dot(hits.n,velocity)
-            -- separating?
+            -- not separating?
             if fix<0 then
-              velocity=v_add(velocity,hits.n,-fix)
-              -- floor?
-              if hits.n[3]>0.7 then
-                on_ground=true
+              -- todo: trigger action?
+              if hitent.touch then
+                -- todo: replace by actual "other" entity
+                hitent.touch({classname="player"})
               end
-              -- wall hit
-              if abs(hits.n[3])<0.01 then
-                -- can we clear an edge?
-                if stairs then
-                  stairs=nil
-                  -- move up
-                  velocity=v_add(velocity,{0,0,4})
+              -- if solid, correct course
+              if not hitent.SOLID_TRIGGER then
+                vl = vl - fix
+                velocity=v_add(velocity,hits.n,-fix)
+                -- floor?
+                if hits.n[3]>0.7 then
+                  on_ground=true
+                end
+                -- wall hit
+                if abs(hits.n[3])<0.01 then
+                  -- can we clear an edge?
+                  if stairs then
+                    stairs=nil
+                    -- move up
+                    velocity=v_add(velocity,{0,0,4})
+                  end
                 end
               end
             end
             next_pos=v_add(self.pos,velocity)
           else
+            goto clear
+          end
+          if vl<0 then
             goto clear
           end
         end
