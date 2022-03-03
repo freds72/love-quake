@@ -416,7 +416,7 @@ function make_player(pos,a)
     update=function(self)
       -- damping      
       angle[3]*=0.8
-      v_scale(dangle,0.6)
+      dangle = v_scale(dangle,0.6)
       velocity[1]*=0.7
       velocity[2]*=0.9
       velocity[3]*=0.7

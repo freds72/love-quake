@@ -23,9 +23,10 @@ function v_dot(a,b)
 end
 
 function v_scale(v,scale)
-	v[1]=v[1]*scale
-	v[2]=v[2]*scale
-	v[3]=v[3]*scale
+	return {
+		v[1]*scale,
+		v[2]*scale,
+		v[3]*scale}
 end
 function v_add(v,dv,scale)
 	scale=scale or 1
@@ -76,17 +77,17 @@ function m_x_v(m,v)
 end
 
 function make_m_from_euler(x,y,z)
-		local a,b = cos(x),-sin(x)
-		local c,d = cos(y),-sin(y)
-		local e,f = cos(z),-sin(z)
+	local a,b = cos(x),-sin(x)
+	local c,d = cos(y),-sin(y)
+	local e,f = cos(z),-sin(z)
   
-    -- yxz order
-  local ce,cf,de,df=c*e,c*f,d*e,d*f
-	 return {
-	  ce+df*b,a*f,cf*b-de,0,
-	  de*b-cf,a*e,df+ce*b,0,
-	  a*d,-b,a*c,0,
-	  0,0,0,1}
+    -- zyx order
+	local ae,af,be,bf = a * e, a * f, b * e, b * f
+	return {
+		c * e, c * f, - d ,0,
+		be * d - af, bf * d + ae,  b * c, 0,
+		ae * d + bf, af * d - be, a * c, 0,
+		0,0,0,1}
 end
 
 function make_m_look_at(up,fwd)
@@ -104,10 +105,10 @@ end
 function m_right(m)
 	return {m[1],m[2],m[3]}
 end
-function m_up(m)
+function m_fwd(m)
 	return {m[5],m[6],m[7]}
 end
-function m_fwd(m)
+function m_up(m)
 	return {m[9],m[10],m[11]}
 end
 function m_set_pos(m,v)
@@ -146,6 +147,10 @@ function make_m_from_v_angle(up,angle)
 		fwd[1],fwd[2],fwd[3],0,
 		0,0,0,1
 	}
+end
+
+function v_tostring(v)
+	return "("..v[1].." "..v[2].." "..v[3]..")"
 end
 
 return math3d

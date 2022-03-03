@@ -412,21 +412,17 @@ local function unpack_map(bsp)
     models.leaves=leaves
     models.textures=bsp.textures
     unpack_array(function(model)  
+        local mins,maxs=model.mins,model.maxs
         add(models,{
-        origin={0,0,0},
-        m={
-            1,0,0,0,
-            0,1,0,0,
-            0,0,1,0,
-            0,0,0,1
-        },
-        faces=faces,
-        -- root node (for display)
-        bsp=nodes[model.headnode[0]+1],
-        -- 32 unit clip nodes
-        clipnodes=clipnodes[model.headnode[1]+1],
-        leaf_start=leaf_base + 2,
-        leaf_end=leaf_base + model.visleafs + 1})
+            faces=faces,
+            mins={mins[0],mins[1],mins[2]},
+            maxs={maxs[0],maxs[1],maxs[2]},
+            -- root node (for display)
+            bsp=nodes[model.headnode[0]+1],
+            -- 32 unit clip nodes
+            clipnodes=clipnodes[model.headnode[1]+1],
+            leaf_start=leaf_base + 2,
+            leaf_end=leaf_base + model.visleafs + 1})
         leaf_base = leaf_base + model.visleafs
     end, bsp.models)
 

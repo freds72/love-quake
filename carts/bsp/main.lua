@@ -107,6 +107,19 @@ function love.load(args)
       print("ERROR - "..tostring(msg))
     end,
     setmodel=function(self,ent,id)
+      -- set origin if not already done
+      if not ent.origin then
+        ent.origin = {0,0,0}
+        ent.mins={0,0,0}
+        ent.maxs={0,0,0}
+        ent.size={0,0,0}
+        ent.m={
+          1,0,0,0,
+          0,1,0,0,
+          0,0,1,0,
+          0,0,0,1
+        }
+      end
       if not id then
         return
       end
@@ -114,7 +127,14 @@ function love.load(args)
       if not m then
         print("ERROR - invalid model id: "..id)
       end
-      ent.model = m      
+      ent.model = m   
+      if not ent.origin then
+        ent.origin = {0,0,0}
+      end
+      -- bounding box
+      ent.size = v_add(m.maxs,m.mins,-1)
+      ent.mins = v_clone(m.mins)
+      ent.maxs = v_clone(m.maxs)
     end,
     time=function()
       return love.frame / 60
@@ -300,12 +320,14 @@ function love.draw()
 
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
-  _cam:draw_model(_level,models.verts,leaves,1,#leaves)
+  -- world entity
+  _cam:draw_model(_entities[1],models.verts,leaves,1,#leaves)
 
-  for _,ent in pairs(_entities) do
+  for i=2,#_entities do
+    local ent=_entities[i]
     local m = ent.model
     if m and not ent.DRAW_NOT then
-      _cam:draw_model(m,models.verts,models.leaves,m.leaf_start,m.leaf_end)
+      _cam:draw_model(ent,models.verts,models.leaves,m.leaf_start,m.leaf_end)
     end
   end
 
@@ -423,7 +445,7 @@ function make_cam(textures)
       collect_bsp(root,pos)
       return visleaves
     end,  
-    draw_model=function(self,model,verts,leaves,lstart,lend)
+    draw_model=function(self,ent,verts,leaves,lstart,lend)
       local v_cache_class={
         __index=function(self,v)
           local m,code,x,y,z=self.m,0,v[0],v[1],v[2]
@@ -447,7 +469,7 @@ function make_cam(textures)
 
       local m=self.m
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
-      local v_cache=setmetatable({m=m_x_m(m,model.m)},v_cache_class)
+      local v_cache=setmetatable({m=m_x_m(m,ent.m)},v_cache_class)
       local cam_pos={[0]=self.pos[1],self.pos[2],self.pos[3]}
       local f_cache={}
 
@@ -460,7 +482,7 @@ function make_cam(textures)
             local texinfo = face.texinfo
             local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
             for k,vi in pairs(face.verts) do
-              local v=models.verts[vi]
+              local v=verts[vi]
               local a=v_cache[v]
               outcode=band(outcode,a.outcode)
               clipcode=clipcode + band(a.outcode,2)
@@ -532,7 +554,7 @@ function make_player(pos,a)
     update=function(self)
       -- damping      
       angle[2]=angle[2]*0.8
-      v_scale(dangle,0.6)
+      dangle = v_scale(dangle,0.6)
       velocity[1]=velocity[1]*0.7
       velocity[2]=velocity[2]*0.7
       velocity[3]=velocity[3]*0.9
@@ -573,7 +595,8 @@ function make_player(pos,a)
         for i=1,5 do
           local hits,hitmodel={t=32000}
           -- entities touched (but not blocking)
-          for k,ent in pairs(_entities) do
+          for k=1,#_entities do
+            local ent = _entities[k]
             if not triggers[ent] then
               -- avoid infinite check
               if ent.SOLID_TRIGGER then
@@ -584,7 +607,7 @@ function make_player(pos,a)
               if model and not ent.SOLID_NOT then
                 local tmphits={} 
                 -- convert into model's space (mostly zero except moving brushes)
-                if hitscan(model.clipnodes,v_add(self.pos,model.origin,-1),v_add(next_pos,model.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+                if hitscan(model.clipnodes,v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
                   hits=tmphits
                   hitent=ent
                 end
@@ -602,7 +625,7 @@ function make_player(pos,a)
               end
               -- if solid, correct course
               if not hitent.SOLID_TRIGGER then
-                vl = vl - fix
+                vl = vl + fix
                 velocity=v_add(velocity,hits.n,-fix)
                 -- floor?
                 if hits.n[3]>0.7 then
@@ -621,9 +644,6 @@ function make_player(pos,a)
             end
             next_pos=v_add(self.pos,velocity)
           else
-            goto clear
-          end
-          if vl<0 then
             goto clear
           end
         end
