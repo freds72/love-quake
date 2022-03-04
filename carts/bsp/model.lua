@@ -484,7 +484,6 @@ local function unpack_textures(lump, mem)
 
                 texinfo.sequence = seq
             end
-
             textures[i] = texinfo
         end
     end

@@ -46,7 +46,7 @@ local doors=function(progs)
             abs(v_dot(self.movedir,self.size)) - self.lip)
 
         local linked_doors={}
-        
+
         -- remote triggered doors don't need to be linked
         if not self.targetname then
             self.nextthink = progs:time() + 0.1
@@ -62,7 +62,6 @@ local doors=function(progs)
                         mins[1]<=0 and mins[2]<=0 and mins[3]<=0 and
                         maxs[1]<=0 and maxs[2]<=0 and maxs[3]<=0 then
                         -- overlap
-                        print("found linked door")
                         door.owner = self
                         add(linked_doors, door)
                     end                

@@ -534,7 +534,7 @@ function make_cam(textures)
                   -- animated?
                   if texture.sequence then
                     -- texture animation id are between 0-9 (lua counts between 0-8)
-                    local frames = ent.sequence==1 and texture.sequence.main or texture.sequence.alt
+                    local frames = ent.sequence==2 and texture.sequence.alt or texture.sequence.main
                     local frame = flr(love.frame/15) % (#frames+1)
                     texture = frames[frame]
                   end
