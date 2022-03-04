@@ -476,7 +476,7 @@ local function unpack_textures(lump, mem)
                 -- print("INFO - texture sequence: "..seqname.." @"..seqid)
                 local seq=sequences[seqname] or {main={},alt={}}
                 if seqid>0x9 then
-                    seq.alt[seqid] = texinfo
+                    seq.alt[seqid-0xa] = texinfo
                 else
                     seq.main[seqid] = texinfo
                 end

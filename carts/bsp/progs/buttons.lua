@@ -6,6 +6,7 @@ local buttons=function(progs)
 
     -- internal helpers
     local function init_button(self)
+        self.sequence = 1
         self.SOLID_BSP = true
         self.MOVETYPE_PUSH = true;
         -- set size and link into world
@@ -46,20 +47,31 @@ local buttons=function(progs)
                 return
             end
             state = 2
-            -- todo: move
-            print("button : moving")
+            self.sequence = 2
+            -- trigger action (if any)
+            if self.target then
+                local targets = progs:find(self,"targetname", self.target)
+                for i=1,#targets do
+                    local target = targets[i]
+                    if target.use then
+                        target.use(other)
+                    end
+                end
+            end
+            -- move            
             calc_move(self, self.pos2, self.speed, function()
                 -- wait
-                print("button : wait")
                 state = 3
-                self.nextthink = progs:time() + self.wait
-                -- going reverse
-                self.think = function()
-                    print("button : going back")
-                    calc_move(self, self.pos1, self.speed, function()
-                        print("button : reset")
-                        state = 1
-                    end)
+                -- prepare for re-trigger
+                if self.wait > 0 then
+                    self.nextthink = progs:time() + self.wait
+                    -- going reverse
+                    self.think = function()
+                        calc_move(self, self.pos1, self.speed, function()
+                            state = 1
+                            self.sequence = 1
+                        end)
+                    end
                 end
             end)
         end

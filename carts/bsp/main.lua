@@ -99,6 +99,7 @@ function love.load(args)
   _colormap = read_colormap(root_path)
 
   models,entities = load_bsp(root_path, args[2])
+  _entities = {}
   -- "virtual machine" to host game logic
   _vm = progs({
     lightstyle=lightstyle,
@@ -141,11 +142,20 @@ function love.load(args)
     end,
     print=function(_,msg)
       -- todo: 
+    end,
+    find=function(_,ent,property,classname)
+      local matches={}
+      for i=1,#_entities do
+        local other=_entities[i]
+        if ent~=other and other[property]==classname then
+          add(matches, other)
+        end
+      end
+      return matches
     end
   })
 
   -- bind entities and engine
-  _entities = {}
   for i=1,#entities do    
     -- order matters: worldspawn is always first
     local ent = _vm:bind(entities[i])
@@ -524,8 +534,9 @@ function make_cam(textures)
                   -- animated?
                   if texture.sequence then
                     -- texture animation id are between 0-9 (lua counts between 0-8)
-                    local frame = flr(love.frame/15) % (#texture.sequence.main+1)
-                    texture = texture.sequence.main[frame]
+                    local frames = ent.sequence==1 and texture.sequence.main or texture.sequence.alt
+                    local frame = flr(love.frame/15) % (#frames+1)
+                    texture = frames[frame]
                   end
                   local mip=3-mid(flr(2048*maxw),0,3)
                   push_texture(texture.mips,texture.width,texture.height,mip)
