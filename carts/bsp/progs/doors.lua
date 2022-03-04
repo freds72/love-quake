@@ -1,11 +1,12 @@
-local buttons=function(progs)
+local doors=function(progs)
     local subs = require("progs/subs")(progs)
     local maths = require("math3d")
     -- p8 compat
     local abs=math.abs
 
     -- internal helpers
-    local function init_button(self)
+    local function init(self)
+        self.classname = "door"
         self.SOLID_BSP = true
         self.MOVETYPE_PUSH = true;
         -- set size and link into world
@@ -13,19 +14,21 @@ local buttons=function(progs)
     end
 
     -- classname bindings
-    -- help: https://www.moddb.com/tutorials/quake-c-touch
-    progs.func_button=function(self)
+    progs.func_door=function(self)
         -- init entity
-        init_button(self)
+        init(self)
         -- default values
         if not self.speed then
-		    self.speed = 40
+		    self.speed = 100
         end
 	    if not self.wait then
-		    self.wait = 1
+		    self.wait = 3
         end
 	    if not self.lip then
-		    self.lip = 4
+		    self.lip = 8
+        end
+	    if not self.dmg then
+		    self.dmg = 2
         end
 
         set_move_dir(self)
@@ -46,23 +49,8 @@ local buttons=function(progs)
                 return
             end
             state = 2
-            -- todo: move
-            print("button : moving")
-            calc_move(self, self.pos2, self.speed, function()
-                -- wait
-                print("button : wait")
-                state = 3
-                self.nextthink = progs:time() + self.wait
-                -- going reverse
-                self.think = function()
-                    print("button : going back")
-                    calc_move(self, self.pos1, self.speed, function()
-                        print("button : reset")
-                        state = 1
-                    end)
-                end
-            end)
+            calc_move(self, self.pos2, self.speed)
         end
     end
 end
-return buttons
+return doors

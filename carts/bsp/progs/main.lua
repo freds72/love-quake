@@ -4,7 +4,8 @@ local main=function(context)
     local modules={
         "world",
         "triggers",
-        "buttons"
+        "buttons",
+        "doors"
     }
 
     -- global functions

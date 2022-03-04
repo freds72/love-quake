@@ -299,13 +299,32 @@ end
 
 love.frame = 0
 function love.update(dt)
-  love.frame = love.frame + 1
+  -- any thinking to do?
+  for i=1,#_entities do
+    local ent = _entities[i]
+    -- any velocity?
+    if ent.velocity then
+      -- todo: physics...
+      -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
+      ent.origin = v_add(ent.origin, ent.velocity, 1/60)
+    end
+
+    if ent.nextthink and ent.nextthink<love.frame/60 and ent.think then
+      ent.nextthink = nil
+      ent:think()
+    end
+
+    -- todo: force origin changes via function
+    m_set_pos(ent.m, ent.origin)
+  end
 
   _plyr:update()  
   _cam:track(v_add(_plyr.pos,{0,0,32}),_plyr.m,_plyr.angle)
 
   -- kill mouse
   camx,camy=0,0
+
+  love.frame = love.frame + 1
 
   --if love.frame%2 == 0 then
   --  love.report = love.profiler.report(20)
@@ -470,7 +489,8 @@ function make_cam(textures)
       local m=self.m
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
       local v_cache=setmetatable({m=m_x_m(m,ent.m)},v_cache_class)
-      local cam_pos={[0]=self.pos[1],self.pos[2],self.pos[3]}
+      local cam_pos=v_add(self.pos,ent.origin,-1)
+      cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
       local f_cache={}
 
       for i=lstart,lend do
@@ -565,7 +585,7 @@ function make_player(pos,a)
         ["s"]={0,-1,0},
         ["q"]={1,0,0},
         ["d"]={-1,0,0},
-        ["space"]={0,0,8}
+        ["space"]={0,0,2}
       }
 
       local acc={0,0,0}
