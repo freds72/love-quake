@@ -21,6 +21,7 @@ local value_factory={
     angle=tonumber,
     wait=tonumber,
     delay=tonumber,
+    spawnflags = tonumber,
     model=function(value)
         return tonumber(sub(value,2))
     end,
