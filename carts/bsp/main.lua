@@ -43,6 +43,15 @@ function split(inputstr, sep)
   return t
 end
 
+function format(str, ...)
+  local args={...}
+  -- force conversion to string
+  for k,v in pairs(args) do
+    args[k]=tostring(v)
+  end
+  return string.format(str,unpack(args))
+end
+
 function print_vector(v)
   printh(v[0].." "..v[1].." "..v[2])
 end
@@ -153,12 +162,14 @@ function love.load(args)
       return love.frame / 60
     end,
     print=function(self,msg,...)
-      local args={...}
-      -- todo: render on screen
-      -- todo: message formatting
-      -- todo: de-dups
-      print("MESSAGE - "..tostring(msg))
-      _msg = msg
+      local txt = format(msg,...)
+      -- avoid repeating messages
+      if txt==_msg then
+        return
+      end
+      print("MESSAGE - "..tostring(txt))
+      _msg = txt
+      -- keep 3s on screen
       _msg_ttl = love.frame + 3*60
     end,
     -- find all entities with a property matching the given value
@@ -401,15 +412,11 @@ function love.draw()
 
   _font.print("fps:" .. love.timer.getFPS(), 2, 2 )
 
+  -- any on screen message?
   if _msg then
-    local w = _font.size(_msg)
-    _font.print(_msg, 480 - w/2, 96)
+    local w,h = _font.size(_msg)
+    _font.print(_msg, 480 - w/2, 270/2 - h/2)
   end
-
-  --[[
-  love.graphics.setColor(1,1,1)
-  love.graphics.draw(_font_bitmap, 0,0,0,2,2)
-  ]]
 end
 
 -- camera

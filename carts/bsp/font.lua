@@ -106,9 +106,9 @@ typedef struct
                             alt = not alt
                         else
                             local quad=(alt and alt_char_index or char_index)[ch]
-                            if quad then                                                            
-                                love.graphics.draw(image, quad, transform:reset():translate(sx,sy):scale(2,2))
-                            end
+                            -- display placeholder for unknown chars
+                            quad = quad or alt_char_index["?"]
+                            love.graphics.draw(image, quad, transform:reset():translate(sx,sy):scale(2,2))
                             sx = sx + 8 * scale
                         end
                     end

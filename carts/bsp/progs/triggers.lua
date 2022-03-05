@@ -104,12 +104,12 @@ local triggers=function(progs)
     progs.trigger_counter=function(self)
         -- init entity        
         init_trigger(self)
-        local msg = self.message or "%0 more to go"
+        local msg = self.message or "%s more to go"
         local msg_on = band(self.spawnflags or 0,1)==0
         local count = self.count or 2
         self.use = function()
             count = count - 1
-            if msg_on then
+            if msg_on and count>0 then
                 progs:print(msg,count)
             end
             if count==0 then
