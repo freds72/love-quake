@@ -49,6 +49,7 @@ local doors=function(progs)
 
         -- remote triggered doors don't need to be linked
         if not self.targetname then
+            -- wait until everything has already been set
             self.nextthink = progs:time() + 0.1
             self.think=function()
                 if self.owner then
@@ -96,6 +97,11 @@ local doors=function(progs)
         self.touch=function(other)
             if self.targetname then
                 -- not triggered by touch
+
+                -- any "supporting" message?
+                if self.message then
+                    progs:print(self.message)
+                end
                 return                
             end
 

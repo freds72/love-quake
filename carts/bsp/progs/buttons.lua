@@ -49,15 +49,8 @@ local buttons=function(progs)
             state = 2
             self.sequence = 2
             -- trigger action (if any)
-            if self.target then
-                local targets = progs:find(self,"targetname", self.target)
-                for i=1,#targets do
-                    local target = targets[i]
-                    if target.use then
-                        target.use(other)
-                    end
-                end
-            end
+            use_targets(self)
+            
             -- move            
             calc_move(self, self.pos2, self.speed, function()
                 -- wait

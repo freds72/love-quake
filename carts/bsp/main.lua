@@ -108,8 +108,7 @@ function love.load(args)
       print("ERROR - "..tostring(msg))
     end,
     setmodel=function(self,ent,id)
-      -- set origin if not already done
-      if not ent.origin then
+      if not id then
         ent.origin = {0,0,0}
         ent.mins={0,0,0}
         ent.maxs={0,0,0}
@@ -120,8 +119,7 @@ function love.load(args)
           0,0,1,0,
           0,0,0,1
         }
-      end
-      if not id then
+        ent.model = nil
         return
       end
       local m = models[id + 1]
@@ -132,6 +130,12 @@ function love.load(args)
       if not ent.origin then
         ent.origin = {0,0,0}
       end
+      ent.m={
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        0,0,0,1
+      }
       -- bounding box
       ent.size = v_add(m.maxs,m.mins,-1)
       ent.mins = v_clone(m.mins)
@@ -140,8 +144,11 @@ function love.load(args)
     time=function()
       return love.frame / 60
     end,
-    print=function(_,msg)
-      -- todo: 
+    print=function(_,msg,...)
+      local args={...}
+      -- todo: render on screen
+      -- todo: message formatting
+      print("MESSAGE - "..tostring(msg))
     end,
     find=function(_,ent,property,classname)
       local matches={}
@@ -325,7 +332,10 @@ function love.update(dt)
     end
 
     -- todo: force origin changes via function
-    m_set_pos(ent.m, ent.origin)
+    if ent.m then
+      -- not a physic entity
+      m_set_pos(ent.m, ent.origin)
+    end
   end
 
   _plyr:update()  

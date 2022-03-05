@@ -59,6 +59,19 @@ local subs=function(progs)
             print(k..":"..tostring(v))
         end
     end
+
+    -- find all targets from the given entity and "use" them
+    function use_targets(self)
+        if self.target then
+            local targets = progs:find(self,"targetname", self.target)
+            for i=1,#targets do
+                local target = targets[i]
+                if target.use then
+                    target.use(other)
+                end
+            end
+        end    
+    end
 end
 
 return subs

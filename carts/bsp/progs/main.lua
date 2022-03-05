@@ -5,7 +5,8 @@ local main=function(context)
         "world",
         "triggers",
         "buttons",
-        "doors"
+        "doors",
+        "lights"
     }
 
     -- global functions
