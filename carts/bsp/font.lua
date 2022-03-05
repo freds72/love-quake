@@ -43,7 +43,7 @@ typedef struct
         "\100\101\102\103\104\105\106\107\108\109\110\111\112\113\114\115",
         "\116\117\118\119\120\121\122\123\124\125\126\127\128\129\130\131",
         -- chars
-        " \"#$%&\'()*+,-./",
+        " !\"#$%&\'()*+,-./",
         "0123456789:;(=)?",
         "@ABCDEFGHIJKLMNO",
         "PQRSTUVWXYZ[\\]^_",
@@ -74,6 +74,8 @@ typedef struct
     local scale = 2                
 
     local flr=math.floor
+    local transform = love.math.newTransform( )
+
     for i=0,#entries do
         local entry = entries[i]
         if ffi.string(entry.name)=="CONCHARS" then
@@ -93,8 +95,6 @@ typedef struct
                 -- print text using bitmap font
                 print=function(s,x,y)
                     love.graphics.setColor(1,1,1)
-                    local transform = love.math.newTransform( )
-                    -- love.graphics.draw(_font_bitmap, 0,0,0,2,2)
                     local sx,sy=x,y
                     local alt=false
                     for i=1,#s do
@@ -106,7 +106,7 @@ typedef struct
                             alt = not alt
                         else
                             local quad=(alt and alt_char_index or char_index)[ch]
-                            if quad then                            
+                            if quad then                                                            
                                 love.graphics.draw(image, quad, transform:reset():translate(sx,sy):scale(2,2))
                             end
                             sx = sx + 8 * scale

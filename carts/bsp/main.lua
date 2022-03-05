@@ -362,6 +362,7 @@ function love.update(dt)
   -- kill msg?
   if _msg_ttl<love.frame then
     _msg = nil
+    _msg_ttl = -1
   end
 
   love.frame = love.frame + 1
@@ -404,7 +405,7 @@ function love.draw()
     local w = _font.size(_msg)
     _font.print(_msg, 480 - w/2, 96)
   end
-  
+
   --[[
   love.graphics.setColor(1,1,1)
   love.graphics.draw(_font_bitmap, 0,0,0,2,2)
