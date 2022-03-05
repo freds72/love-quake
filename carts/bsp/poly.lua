@@ -166,7 +166,7 @@ end
 
 local _gamma = 0
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
-	local shade=63-flr(mid(_lbase[1] * 63 - _gamma,0,63))
+	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
 		if _lightptr then
@@ -199,8 +199,10 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 					]]
 				end
 			end
-			shade = 63 - flr(mid(shade + _gamma,0,63))
+			shade = 63 - flr(mid(shade,0,63))
 		end
+		-- todo: fix gamma
+		shade = mid(shade-_gamma,0,63)
 
 		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh
 		local coloridx=_texptr[s+t*_texw]

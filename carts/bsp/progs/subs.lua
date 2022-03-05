@@ -1,8 +1,11 @@
 local subs=function(progs)
     local math3d=require("math3d")
+    -- p8 compat
+    local ceil,flr=math.ceil,math.floor
+    local rnd = math.random
 
     function set_move_dir(self)
-        local angle = self.angle
+        local angle = self.angle or 180
         if angle == -1 then
             -- up
             self.movedir = {0,0,1}
@@ -61,13 +64,20 @@ local subs=function(progs)
     end
 
     -- find all targets from the given entity and "use" them
-    function use_targets(self)
+    -- optional random flag to pick only target
+    function use_targets(self,other,random)
         if self.target then
-            local targets = progs:find(self,"targetname", self.target)
-            for i=1,#targets do
-                local target = targets[i]
-                if target.use then
-                    target.use(other)
+            local targets = progs:find(self,"targetname", self.target, "use")
+            if random then            
+                if #targets==0 then
+                    return
+                end
+                local i = flr(rnd(1,#targets))
+                print("picking entity: "..i.."/"..#targets)
+                targets[i].use(other)
+            else
+                for i=1,#targets do
+                    targets[i].use(other)
                 end
             end
         end    

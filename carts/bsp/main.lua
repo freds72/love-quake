@@ -73,14 +73,7 @@ function read_colormap(path)
   return colormap
 end
 
-local light_styles={}
-function lightstyle(_, id, lightstyle)
-    local style,base={},ord("a")
-    for frame=0,#lightstyle-1 do
-      add(style,1 - (ord(sub(lightstyle,frame,frame+1)) - base) / 26)    
-    end
-    light_styles[id] = style
-end
+local _light_styles={}
 
 love.window.setMode(480 * scale, 270 * scale, {resizable=false, vsync=true, minwidth=480, minheight=270})
 
@@ -98,11 +91,26 @@ function love.load(args)
   _palette = read_palette(root_path)
   _colormap = read_colormap(root_path)
 
+  _font = require("font")(root_path, _palette, _colormap)
+
   models,entities = load_bsp(root_path, args[2])
   _entities = {}
+  _msg = nil
+  _msg_ttl = -1
+
   -- "virtual machine" to host game logic
   _vm = progs({
-    lightstyle=lightstyle,
+    lightstyle=function(self, id, lightstyle)
+      local style,base={},ord("a")
+      for frame=0,#lightstyle-1 do
+        local ch = sub(lightstyle,frame,frame+1)
+        local scale = 1 - (ord(ch) - base) / 25
+        assert(scale>=0 and scale<=1, "ERROR - Light style: "..id.." invalid value: '"..ch.." @'..frame")
+
+        add(style,scale)
+      end
+      _light_styles[id] = style
+    end,
     objerror=function(self,msg)
       -- todo: set context (if applicable)
       print("ERROR - "..tostring(msg))
@@ -144,18 +152,25 @@ function love.load(args)
     time=function()
       return love.frame / 60
     end,
-    print=function(_,msg,...)
+    print=function(self,msg,...)
       local args={...}
       -- todo: render on screen
       -- todo: message formatting
+      -- todo: de-dups
       print("MESSAGE - "..tostring(msg))
+      _msg = msg
+      _msg_ttl = love.frame + 3*60
     end,
-    find=function(_,ent,property,classname)
+    -- find all entities with a property matching the given value
+    -- if filter is given, only returns entities with an additional "filter" field
+    find=function(_,ent,property,value,filter)
       local matches={}
       for i=1,#_entities do
         local other=_entities[i]
-        if ent~=other and other[property]==classname then
-          add(matches, other)
+        if ent~=other and other[property]==value then
+          if not filter or other[filter] then
+            add(matches, other)
+          end
         end
       end
       return matches
@@ -200,7 +215,7 @@ function love.load(args)
   
   grab_mouse()
 
-  _font = love.graphics.newFont("fonts/cour.ttf", 16)
+  _profiler_font = love.graphics.newFont("fonts/cour.ttf", 16)
 
   love.profiler = require('profile') 
   -- love.profiler.start()
@@ -344,6 +359,11 @@ function love.update(dt)
   -- kill mouse
   camx,camy=0,0
 
+  -- kill msg?
+  if _msg_ttl<love.frame then
+    _msg = nil
+  end
+
   love.frame = love.frame + 1
 
   --if love.frame%2 == 0 then
@@ -378,11 +398,16 @@ function love.draw()
   -- love.graphics.setFont(_font)
   -- love.graphics.print(love.report or ("Please wait...("..love.frame..")"))
 
-  love.graphics.print("FPS: " .. love.timer.getFPS(), 1, 1 )
+  _font.print("fps:" .. love.timer.getFPS(), 2, 2 )
 
-    --[[
-  love.graphics.setColor( 1,1,1)
-  love.graphics.draw(models.raw.textures[texture].imgs[1], 0 ,0,0,4,4)
+  if _msg then
+    local w = _font.size(_msg)
+    _font.print(_msg, 480 - w/2, 96)
+  end
+  
+  --[[
+  love.graphics.setColor(1,1,1)
+  love.graphics.draw(_font_bitmap, 0,0,0,2,2)
   ]]
 end
 
@@ -555,7 +580,7 @@ function make_cam(textures)
                   else
                     local styles={0,0,0,0}
                     for i,style in pairs(face.lightstyles) do
-                      local lightstyle=light_styles[style]  
+                      local lightstyle=_light_styles[style]  
                       if lightstyle then
                         local frame = flr(love.frame/15) % #lightstyle
                         --print("light style @"..lightstyle.."["..frame.."]")

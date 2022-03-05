@@ -17,14 +17,45 @@ local triggers=function(progs)
     progs.trigger_teleport=function(self)
         -- init entity
         init_trigger(self)
+
+        local enabled = not self.targetname
+
         if not self.target then
             progs:objerror("no target")
         end
+
         self.touch=function(other)
-            print("touched by: "..other.classname)
+            if not enabled then
+                return
+            end
+            local player_only = band(self.spawnflags or 0,1)==1
+            if player_only and other.classname~="player" then
+                return
+            end
+            -- pick a (random) target destination
+            use_targets(self, other, true)
         end
+
         self.use=function(other)
-            print("touched by: "..other.classname)
+            enabled = true
+        end
+    end
+
+    progs.info_teleport_destination=function(self)
+        -- init entity
+        self.SOLID_NOT = true
+        self.MOVETYPE_NONE = true;
+        self.DRAW_NOT = true
+        -- set size and link into world
+        progs:setmodel(self, self.model)   
+        set_move_dir(self)
+
+        self.use=function(other)
+            local origin=v_scale(v_add(self.mins,self.maxs),0.5)
+            other.origin = origin
+            m_set_pos(other.m, origin)
+            -- todo: set angle + velocity
+
         end
     end
 
