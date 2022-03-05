@@ -2,6 +2,9 @@ local triggers=function(progs)
 
     local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 
+    local SPAWNFLAG_NOMESSAGE = 1
+    local SPAWNFLAG_NOTOUCH = 1
+
     -- internal helpers
     local function init_trigger(self)
         self.SOLID_TRIGGER = true
@@ -104,19 +107,45 @@ local triggers=function(progs)
     progs.trigger_counter=function(self)
         -- init entity        
         init_trigger(self)
-        local msg = self.message or "%s more to go"
-        local msg_on = band(self.spawnflags or 0,1)==0
+        local msg = self.message or "%s more to go..."
+        local msg_on = band(self.spawnflags or 0,SPAWNFLAG_NOMESSAGE)==0
         local count = self.count or 2
         self.use = function()
             count = count - 1
-            if msg_on and count>0 then
-                progs:print(msg,count)
+            if msg_on then
+                if count>0 then
+                    progs:print(msg,count)
+                else
+                    progs:print("Sequence completed!")
+                end
             end
             if count==0 then
                 -- kill counter
                 self.use = nil
                 use_targets(self)
             end
+        end
+    end
+
+    progs.trigger_secret=function(self)
+        init_trigger(self)
+        progs.total_secrets = progs.total_secrets + 1
+        self.wait = -1
+        local msg = self.message or "You found a secret area!"
+
+        local function use_secret(other)
+            if other.classname ~= "player" then
+			    return
+            end
+            self.use = nil
+            self.touch = nil
+		    progs.found_secrets = progs.found_secrets + 1
+            progs:print(msg)
+            use_targets(self, other)
+        end
+        self.use = use_secret
+        if band(self.spawnflags or 0,SPAWNFLAG_NOTOUCH)==0 then
+            self.touch = use_secret
         end
     end
 

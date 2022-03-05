@@ -109,6 +109,8 @@ function love.load(args)
 
   -- "virtual machine" to host game logic
   _vm = progs({
+    total_secrets = 0,
+    found_secrets = 0,
     lightstyle=function(self, id, lightstyle)
       local style,base={},ord("a")
       for frame=0,#lightstyle-1 do
