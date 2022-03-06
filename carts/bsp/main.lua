@@ -391,6 +391,8 @@ function love.draw()
   -- cls
   framebuffer.fill(0)
 
+  push_viewmatrix(_cam.m)
+  
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
   -- world entity
@@ -603,7 +605,7 @@ function make_cam(textures)
                       push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
                   end                  
                   
-                  polytex(poly,#poly)    
+                  polytex(poly,#poly,texture.sky)    
                   push_lightmap()     
                 else
                   polyfill(poly,#poly,0)

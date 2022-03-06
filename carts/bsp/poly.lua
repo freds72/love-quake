@@ -163,6 +163,9 @@ function push_baselight(style)
 	-- 255: pure black
 	_lbase=style
 end
+function push_viewmatrix(m)
+	_viewmatrix=m
+end
 
 local _gamma = 0
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
@@ -215,6 +218,34 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 		u=u+du
 		v=v+dv
 		w=w+dw
+	end
+end
+
+function mode7(x0,y0,x1)	
+	-- sky normal in camera space
+	local n=m_x_n(_viewmatrix,{0,0,-1})
+	local n0=m_x_v(_viewmatrix,{0,0,2048-_viewmatrix[14]})
+	local d=v_dot(n,n0)
+	local htw,offsetx,offsety=_texw/2,love.frame,love.frame/3
+	local texscale = _texscale * 16
+	for x=x0,x1 do
+		local e={-(x-480/2)/270,-1,(y0-270/2)/270}
+		local ne=v_dot(n,e)
+		if ne~=0 then
+			-- simili fisheye
+			-- ne=ne*ne
+			-- project point back into world space
+			local p=m_inv_x_v(_viewmatrix,v_scale(e,d/ne))
+			-- front 
+			local s,t=flr((p[1]+offsetx)/texscale)%htw,flr((p[2]+offsety)/texscale)%_texh
+			local coloridx=_colormap[_texptr[s+t*_texw]]
+			if coloridx==0 then
+				-- background
+				local s,t=flr((p[1]+offsetx/2)/texscale)%htw + htw,flr((p[2]+offsety/2)/texscale)%_texh
+				coloridx=_colormap[_texptr[s+t*_texw]]
+			end
+			_backbuffer[x+y0*480]=_palette[coloridx]
+		end
 	end
 end
 
@@ -293,7 +324,9 @@ function polyfill(p,np,c)
 	end
 end
 
-function polytex(p,np)
+function polytex(p,np,sky)
+	local tline=sky and mode7 or tline3d
+
 	local miny,maxy,mini=math.huge,-math.huge
 	-- find extent
 	for i=1,np do
@@ -378,7 +411,7 @@ function polytex(p,np)
 			x1=480
 		end
 
-		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
+		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
 
 		lx=lx+ldx
 		lu=lu+ldu

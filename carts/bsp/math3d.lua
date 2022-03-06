@@ -73,7 +73,12 @@ end
 -- matrix vector multiply
 function m_x_v(m,v)
 	local x,y,z=v[1],v[2],v[3]
-	return {m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]}
+	return {m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]}	
+end
+-- vector matrix multiply
+function m_x_n(m,v)
+	local x,y,z=v[1],v[2],v[3]
+	return {m[1]*x+m[5]*y+m[9]*z,m[2]*x+m[6]*y+m[10]*z,m[3]*x+m[7]*y+m[11]*z}
 end
 
 function make_m_from_euler(x,y,z)
@@ -136,6 +141,11 @@ function m_inv_x_v(m,v)
 	local x,y,z=v[1]-m[13],v[2]-m[14],v[3]-m[15]
 	return {m[1]*x+m[2]*y+m[3]*z,m[5]*x+m[6]*y+m[7]*z,m[9]*x+m[10]*y+m[11]*z}
 end
+function m_inv_x_n(m,v)
+	local x,y,z=v[1],v[2],v[3]
+	return {m[1]*x+m[2]*y+m[3]*z,m[5]*x+m[6]*y+m[7]*z,m[9]*x+m[10]*y+m[11]*z}
+end
+
 
 function make_m_from_v_angle(up,angle)
 	local fwd={-sin(angle),0,cos(angle)}
