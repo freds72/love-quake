@@ -391,8 +391,9 @@ function love.draw()
   -- cls
   framebuffer.fill(0)
 
+  push_param("t", love.frame / 60)
   push_viewmatrix(_cam.m)
-  
+
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
   -- world entity
@@ -492,7 +493,7 @@ function make_cam(textures)
       local pos={[0]=self.pos[1],self.pos[2],self.pos[3]}
       local current_leaf=find_sub_sector(root,pos)
       
-      if not current_leaf then
+      if not current_leaf or not current_leaf.pvs then
         -- debug
         return leaves
       end
@@ -577,7 +578,7 @@ function make_cam(textures)
               end
               if #poly>2 then
                 local texture = textures[texinfo.miptex]                
-                if texture then
+                if texture then                  
                   -- animated?
                   if texture.sequence then
                     -- texture animation id are between 0-9 (lua counts between 0-8)
@@ -586,7 +587,7 @@ function make_cam(textures)
                     texture = frames[frame]
                   end
                   local mip=3-mid(flr(2048*maxw),0,3)
-                  push_texture(texture.mips,texture.width,texture.height,mip)
+                  push_texture(texture,mip)
                   if texture.bright then
                     push_baselight({0.5,0.5,0.5,0.5})
                   else

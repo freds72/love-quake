@@ -462,12 +462,14 @@ local function unpack_textures(lump, mem)
                 ]]
             end
             local sky=sub(texname,0,3)=="sky"
+            local swirl=sub(texname,1,1)=="*"
             local texinfo = {
                 width = mt.width,
                 height = mt.height,
                 mips = imgs,
                 sky=sky,
-                bright = sub(texname,0,1)=="*" or sky
+                swirl=swirl,
+                bright = swirl or sky
             }
             -- part of a sequence?
             if sub(texname,0,1)=="+" then

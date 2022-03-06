@@ -1,7 +1,10 @@
 local poly={}
+local ffi=require 'ffi'
 
 -- p8
 local abs,flr,ceil=math.abs,math.floor,math.ceil
+local add=table.insert
+local cos,sin=math.cos,math.sin
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local function mid(x, a, b)
@@ -151,10 +154,52 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 end
 
 local _texptr,_texw,_texh,_texscale
-function push_texture(ptr,width,height,mip)
-	_texscale=shl(1,mip)
-	_texptr,_texw,_texh=ptr[mip+1],width/_texscale,height/_texscale
+local _texture_cache={}
+local _params={}
+function push_param(name,value)
+	_params[name] = value
 end
+function push_texture(texture,mip)	
+	_texscale=shl(1,mip)
+	_texw,_texh=texture.width/_texscale,texture.height/_texscale
+	-- dynamic texture?
+	if texture.swirl then
+		local cache = _texture_cache[texture]
+		if not cache then
+			-- create entry
+			local mips={}
+			for i=0,3 do
+				local scale = shl(1,2*i)
+				add(mips,ffi.new("unsigned char[?]",texture.width*texture.height/scale))
+			end
+			print("INFO - create texture cache at mip: "..mip)
+			cache={
+				mips=mips
+			}
+			_texture_cache[texture] = cache
+		end
+		_texptr=cache.mips[mip+1]
+		local t=_params.t
+		-- refresh image?
+		if cache.frame~=t then
+			-- copy texture
+			cache.frame=t
+			local closeness, intensity, speed=1,0.5,9
+
+			-- see: https://fdossena.com/?p=quakeFluids/i.md
+			local src=texture.mips[mip+1]
+			for u=0,_texw-1 do
+				for v=0,_texh-1 do
+					local s,t=(u/closeness+intensity*sin(t*speed+v/closeness))%_texw,(v/closeness+intensity*sin(t*speed+u/closeness))%_texh
+					_texptr[u + v*_texw] = src[flr(s) + flr(t)*_texw]
+				end
+			end
+		end
+	else
+		_texptr=texture.mips[mip+1]
+	end
+end
+
 local _lightptr,_lightw,_lighth,_lightx,_lighty,_lbase
 function push_lightmap(...)
 	_lightptr,_lightw,_lighth,_lightx,_lighty=unpack{...}
@@ -226,7 +271,7 @@ function mode7(x0,y0,x1)
 	local n=m_x_n(_viewmatrix,{0,0,-1})
 	local n0=m_x_v(_viewmatrix,{0,0,2048-_viewmatrix[14]})
 	local d=v_dot(n,n0)
-	local htw,offsetx,offsety=_texw/2,love.frame,love.frame/3
+	local htw,offsetx,offsety=_texw/2,_params.t*32,_params.t*24
 	local texscale = _texscale * 16
 	for x=x0,x1 do
 		local e={-(x-480/2)/270,-1,(y0-270/2)/270}
