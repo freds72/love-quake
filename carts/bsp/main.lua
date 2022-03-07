@@ -4,7 +4,7 @@ local model = require( "model" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
 local fb = require 'fblove_strip'
-local poly = require( "poly" )
+local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs/main")
 ffi.cdef[[
@@ -390,7 +390,8 @@ local visframe,prev_leaf=0
 function love.draw()
   -- cls
   framebuffer.fill(0)
-
+  
+  start_frame(_backbuffer)
   push_param("t", love.frame / 60)
   push_viewmatrix(_cam.m)
 
@@ -407,7 +408,7 @@ function love.draw()
     end
   end
 
-  clear_spans()
+  end_frame()
 
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
@@ -415,6 +416,7 @@ function love.draw()
   -- love.graphics.setFont(_font)
   -- love.graphics.print(love.report or ("Please wait...("..love.frame..")"))
 
+  -- note: text is written using Love2d api - mush be done after direct buffer draw
   _font.print("fps:" .. love.timer.getFPS(), 2, 2 )
 
   -- any on screen message?

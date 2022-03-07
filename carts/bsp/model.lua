@@ -1,8 +1,8 @@
+local model = {}
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
 local entities = require( "entities" )
 
-local model = {}
 -- module globals
 plane_dot,plane_dot1,plane_isfront,plane_get=nil,nil,nil,nil
 

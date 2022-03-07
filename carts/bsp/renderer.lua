@@ -1,4 +1,4 @@
-local poly={}
+local renderer={}
 local ffi=require 'ffi'
 
 -- p8
@@ -11,8 +11,12 @@ local function mid(x, a, b)
 	return max(a, min(b, x))
   end
 
+local _backbuffer
+function start_frame(buf)
+	_backbuffer = buf
+end
 local _spans={}
-function clear_spans()
+function end_frame()
 	_spans={}
 end
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
@@ -169,10 +173,10 @@ function push_texture(texture,mip)
 			-- create entry
 			local mips={}
 			for i=0,3 do
-				local scale = shl(1,2*i)
-				add(mips,ffi.new("unsigned char[?]",texture.width*texture.height/scale))
+				local scale = shl(1,i)
+				local w,h=texture.width/scale,texture.height/scale
+				add(mips,ffi.new("unsigned char[?]",w*h))
 			end
-			print("INFO - create texture cache at mip: "..mip)
 			cache={
 				mips=mips
 			}
@@ -468,4 +472,4 @@ function polytex(p,np,sky)
 		rw=rw+rdw
 	end
 end
-return poly
+return renderer
