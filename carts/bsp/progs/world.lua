@@ -50,7 +50,7 @@ local world=function(progs)
 		-- force origin
 		self.origin = {0,0,0}	
         self.SOLID_BSP = true
-        progs:setmodel(self, 0)
+        progs:setmodel(self, "*0")
     end
 end
 return world

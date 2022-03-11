@@ -171,11 +171,11 @@ function push_texture(texture,mip)
 		local cache = _texture_cache[texture]
 		if not cache then
 			-- create entry
-			local mips={}
+			local mips,w,h={},texture.width,texture.height
 			for i=0,3 do
-				local scale = shl(1,i)
-				local w,h=texture.width/scale,texture.height/scale
 				add(mips,ffi.new("unsigned char[?]",w*h))
+				w=w/2
+				h=h/2
 			end
 			cache={
 				mips=mips
@@ -194,8 +194,8 @@ function push_texture(texture,mip)
 			local src=texture.mips[mip+1]
 			for u=0,_texw-1 do
 				for v=0,_texh-1 do
-					local s,t=(u/closeness+intensity*sin(t*speed+v/closeness))%_texw,(v/closeness+intensity*sin(t*speed+u/closeness))%_texh
-					_texptr[u + v*_texw] = src[flr(s) + flr(t)*_texw]
+					local s,t=flr(u/closeness+intensity*sin(t*speed+v/closeness))%_texw,flr(v/closeness+intensity*sin(t*speed+u/closeness))%_texh
+					_texptr[u + v*_texw] = src[s + t*_texw]
 				end
 			end
 		end

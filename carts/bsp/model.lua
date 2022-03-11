@@ -2,9 +2,13 @@ local model = {}
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
 local entities = require( "entities" )
+local logging = require("logging")
 
 -- module globals
 plane_dot,plane_dot1,plane_isfront,plane_get=nil,nil,nil,nil
+
+-- caches
+local _model_cache,_planes={},{}
 
 -- pico8 compat helpers
 local sub,add=string.sub,table.insert
@@ -160,6 +164,39 @@ local function read_all(cname, lump, mem)
     return res
 end
 
+-- planes functions
+plane_get=function(pi)
+    local n=_planes[pi].normal
+    return n[0],n[1],n[2]
+end
+plane_dot=function(pi,v)
+    local plane=_planes[pi]
+    if not plane then
+        print("error: "..pi.."/"..#_planes)
+    end
+    local t,n=plane.type,plane.normal
+    if t<3 then                 
+    return n[t]*v[t],plane.dist
+    end
+    return n[0]*v[0]+n[1]*v[1]+n[2]*v[2],plane.dist
+end
+plane_dot1=function(pi,v)
+    local plane=_planes[pi]
+    local t,n=plane.type,plane.normal
+    if t<3 then                 
+    return n[t]*v[t+1],plane.dist
+    end
+    return n[0]*v[1]+n[1]*v[2]+n[2]*v[3],plane.dist
+end
+plane_isfront=function(pi,v)
+    local plane=_planes[pi]
+    local t,n=plane.type,plane.normal
+    if t<3 then    
+    return n[t]*v[t]>plane.dist
+    end
+    return n[0]*v[0]+n[1]*v[1]+n[2]*v[2]>plane.dist
+end
+
 local function unpack_array(fn,array)
     for i=0,#array do
         fn(array[i],i)
@@ -174,37 +211,13 @@ local function unpack_vert(v,dst)
 end
 
 local function unpack_map(bsp)
-    local verts,planes,faces,leaves,nodes,models,uvs,clipnodes={},bsp.planes,{},{},{},{},{},{}
-    
-    -- planes
-    plane_get=function(pi)
-        local n=planes[pi].normal
-        return n[0],n[1],n[2]
-    end
-    plane_dot=function(pi,v)
-        local plane=planes[pi]
-        local t,n=plane.type,plane.normal
-        if t<3 then                 
-        return n[t]*v[t],plane.dist
-        end
-        return n[0]*v[0]+n[1]*v[1]+n[2]*v[2],plane.dist
-    end
-    plane_dot1=function(pi,v)
-        local plane=planes[pi]
-        local t,n=plane.type,plane.normal
-        if t<3 then                 
-        return n[t]*v[t+1],plane.dist
-        end
-        return n[0]*v[1]+n[1]*v[2]+n[2]*v[3],plane.dist
-    end
-    plane_isfront=function(pi,v)
-        local plane=planes[pi]
-        local t,n=plane.type,plane.normal
-        if t<3 then    
-        return n[t]*v[t]>plane.dist
-        end
-        return n[0]*v[0]+n[1]*v[1]+n[2]*v[2]>plane.dist
-    end
+    local plane_offset = #_planes + 1
+
+    local verts,faces,leaves,nodes,models,uvs,clipnodes={},{},{},{},{},{},{}
+    -- register planes in global array
+    unpack_array(function(plane)
+        add(_planes,plane)
+    end, bsp.planes)
     
     local function v_dot(a,b)
         return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
@@ -214,7 +227,7 @@ local function unpack_map(bsp)
         -- side flag
         local face={
             side=(f.side~=0),
-            plane=f.planenum            
+            plane=f.planenum + plane_offset       
         }
 
         local face_verts = {}
@@ -271,7 +284,7 @@ local function unpack_map(bsp)
 
         -- !! 1-based array
         face.verts = face_verts
-        face.cp=plane_dot(f.planenum, bsp.vertices[face_verts[1]])
+        face.cp=plane_dot(face.plane, bsp.vertices[face_verts[1]])
         add(faces, face)
     end, bsp.faces)
     
@@ -332,7 +345,7 @@ local function unpack_map(bsp)
 
     unpack_array(function(node)
         local n={
-        plane=node.planenum
+        plane=node.planenum + plane_offset
         }
         local flags = 0
         for i=0,1 do
@@ -387,7 +400,7 @@ local function unpack_map(bsp)
     -- unpack "clipnodes" (collision hulls)
     unpack_array(function(node)
         local clipnode={
-        plane=node.planenum
+        plane=node.planenum + plane_offset
         }
         local flags = 0
         for i=0,1 do
@@ -434,7 +447,6 @@ local function unpack_textures(lump, mem)
     local textures = {}
     local m = ffi.cast("dmiptexlump_t*", mem)
     local n = m.nummiptex
-    print("reading #textures: "..n)
     local sequences={}
     for i=0,n-1 do
         local ofs = m.dataofs[i]
@@ -492,18 +504,13 @@ local function unpack_textures(lump, mem)
     return textures
 end
 
--- handle to bsp raw memory
-local _data
-function load_bsp(root_path, name)
-    _data = nfs.newFileData(root_path.."/maps/"..name)
-
-    local mem = _data:getFFIPointer()
+local function load_bsp(data)
+    local mem = data:getFFIPointer()
 
     local header = ffi.cast('dheader_t*', mem)
-    print("version:"..header.version)
+    logging.debug("BSP version: "..header.version)
 
     local ptr = ffi.cast("unsigned char*",mem)
-
     
     local entities_lump = header.entities
     local entities = ffi.string(ptr + entities_lump.fileofs, entities_lump.filelen)
@@ -523,9 +530,35 @@ function load_bsp(root_path, name)
         edges = read_all("dedge_t", header.edges, ptr),
         marksurfaces = read_all("unsigned short", header.marksurfaces, ptr)[0],
         surfedges = read_all("int", header.surfedges, ptr)[0],
-    }
+    }    
+    return unpack_map(bsp), unpack_entities(entities)
+end
 
-    return unpack_map(bsp),unpack_entities(entities)
+-- handle to bsp raw memory
+function load_model(root_path, name)
+    local model = _model_cache[name]
+    if not model then               
+        local filename = root_path.."/"..name
+        local data,err = nfs.newFileData(filename)
+
+        -- bsp? or mdl?
+        if sub(name,#name-3)==".bsp" then
+            logging.info("Loading BSP file: "..filename)
+            local m,e = load_bsp(data)
+            model = {
+                -- keep ffi data alive
+                _ffi_ = data,
+                model = m,
+                entities = e
+            }
+        else
+            assert(false, "ERROR - unsupported model file: "..name)
+        end
+
+        -- register in cache
+        _model_cache[name] = model
+    end
+    return model
 end
 
 return model

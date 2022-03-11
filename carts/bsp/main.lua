@@ -7,6 +7,8 @@ local fb = require 'fblove_strip'
 local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs/main")
+local logging = require("logging")
+
 ffi.cdef[[
     #pragma pack(1)
     typedef struct { unsigned char r,g,b; } color_t;
@@ -102,7 +104,9 @@ function love.load(args)
 
   _font = require("font")(root_path, _palette, _colormap)
 
-  models,entities = load_bsp(root_path, args[2])
+  local precache_models = {}
+  local world = load_model(root_path, "maps/"..args[2])
+  _world_model = world.model
   _entities = {}
   _msg = nil
   _msg_ttl = -1
@@ -126,6 +130,11 @@ function love.load(args)
       -- todo: set context (if applicable)
       print("ERROR - "..tostring(msg))
     end,
+    precache_model=function(self,id)
+      if not precache_models[id] then
+        precache_models[id] = load_model(root_path, id)
+      end
+    end,
     setmodel=function(self,ent,id)
       if not id then
         ent.origin = {0,0,0}
@@ -141,9 +150,20 @@ function love.load(args)
         ent.model = nil
         return
       end
-      local m = models[id + 1]
+      -- reference to world sub-models?
+      local m
+      if sub(id,1,1)=="*" then
+        m = _world_model[tonumber(sub(id,2)) + 1]
+        -- bind to model "owner"
+        ent.resources = world.model
+      else        
+        local cached_model = precache_models[id]
+        m = cached_model.model[1]
+        ent.resources = cached_model.model
+      end
+
       if not m then
-        print("ERROR - invalid model id: "..id)
+        logging.critical("Invalid model id: "..id)
       end
       ent.model = m   
       if not ent.origin then
@@ -191,9 +211,9 @@ function love.load(args)
   })
 
   -- bind entities and engine
-  for i=1,#entities do    
+  for i=1,#world.entities do    
     -- order matters: worldspawn is always first
-    local ent = _vm:bind(entities[i])
+    local ent = _vm:bind(world.entities[i])
     if ent then
       -- valid entity?
       add(_entities, ent)
@@ -201,14 +221,14 @@ function love.load(args)
   end
 
   -- main geometry
-  _level = models[1]
+  _level = world.model[1]
 
   -- find player pos
-  for _,kv in pairs(entities) do
+  for _,kv in pairs(world.entities) do
     for k,v in pairs(kv) do
       if k=="classname" and v=="info_player_start" then
         pos=kv.origin
-        print("INFO - found player start")
+        logging.debug("Found player start")
         break
       end
     end
@@ -224,11 +244,11 @@ function love.load(args)
     }
     _vm:call("player_init",_player)
   ]]
-  _cam = make_cam(models.textures)
+  _cam = make_cam()
   
   grab_mouse()
 
-  _profiler_font = love.graphics.newFont("fonts/cour.ttf", 16)
+  -- _profiler_font = love.graphics.newFont("fonts/cour.ttf", 16)
 
   love.profiler = require('profile') 
   -- love.profiler.start()
@@ -396,15 +416,16 @@ function love.draw()
   push_viewmatrix(_cam.m)
 
   -- refresh visible set
-  local leaves = _cam:collect_leaves(_level.bsp,models.leaves)
+  local leaves = _cam:collect_leaves(_level.bsp,_world_model.leaves)
   -- world entity
-  _cam:draw_model(_entities[1],models.verts,leaves,1,#leaves)
+  _cam:draw_model(_entities[1],_world_model.textures,_world_model.verts,leaves,1,#leaves)
 
   for i=2,#_entities do
     local ent=_entities[i]
     local m = ent.model
     if m and not ent.DRAW_NOT then
-      _cam:draw_model(ent,models.verts,models.leaves,m.leaf_start,m.leaf_end)
+      local res = ent.resources
+      _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
     end
   end
 
@@ -427,7 +448,7 @@ function love.draw()
 end
 
 -- camera
-function make_cam(textures)
+function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
@@ -524,7 +545,7 @@ function make_cam(textures)
       collect_bsp(root,pos)
       return visleaves
     end,  
-    draw_model=function(self,ent,verts,leaves,lstart,lend)
+    draw_model=function(self,ent,textures,verts,leaves,lstart,lend)
       local v_cache_class={
         __index=function(self,v)
           local m,code,x,y,z=self.m,0,v[0],v[1],v[2]

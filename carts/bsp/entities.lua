@@ -22,9 +22,6 @@ local value_factory={
     wait=tonumber,
     delay=tonumber,
     spawnflags = tonumber,
-    model=function(value)
-        return tonumber(sub(value,2))
-    end,
     origin=function(value)
         local coords=split(value," ")
         -- conver to numbers
