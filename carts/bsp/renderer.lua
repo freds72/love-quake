@@ -273,11 +273,12 @@ end
 function mode7(x0,y0,x1)	
 	-- sky normal in camera space
 	local n=m_x_n(_viewmatrix,{0,0,-1})
-	local n0=m_x_v(_viewmatrix,{0,0,2048-_viewmatrix[14]})
+	local n0=m_x_v(_viewmatrix,{0,0,2048+_params.z})
 	local d=v_dot(n,n0)
 	local htw,offsetx,offsety=_texw/2,_params.t*32,_params.t*24
 	local texscale = _texscale * 16
 	for x=x0,x1 do
+		-- intersection with sky plane
 		local e={-(x-480/2)/270,-1,(y0-270/2)/270}
 		local ne=v_dot(n,e)
 		if ne~=0 then

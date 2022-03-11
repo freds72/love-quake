@@ -413,7 +413,9 @@ function love.draw()
   
   start_frame(_backbuffer)
   push_param("t", love.frame / 60)
+  push_param("z", _cam.pos[3])
   push_viewmatrix(_cam.m)
+  
 
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.bsp,_world_model.leaves)
