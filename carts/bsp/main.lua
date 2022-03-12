@@ -104,7 +104,7 @@ function love.load(args)
 
   _font = require("font")(root_path, _palette, _colormap)
 
-  _flame = load_model(root_path, "progs/flame.mdl")  
+  _flame = load_model(root_path, "progs/soldier.mdl")  
 
   local precache_models = {}
   local world = load_model(root_path, "maps/"..args[2])
@@ -432,13 +432,8 @@ function love.draw()
     end
   end
 
-  local o = {464,728,64 + 12}
-  local m={
-    1,0,0,0,
-    0,1,0,0,
-    0,0,1,0,
-    0,0,0,1
-  }
+  local o = {464,728,64 + 24}
+  local m=make_m_from_euler(0,0,love.frame/60)
   m_set_pos(m,o)
 
   _cam:draw_aliasmodel({
@@ -693,9 +688,15 @@ function make_cam()
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
       local v_cache,cam_pos=setmetatable({m=m_x_m(m,ent.m)},v_cache_class),v_add(self.pos,ent.origin,-1)
 
-      local pose = model.poses[1]
+      local pose = model.poses[flr(love.frame / 60)%#model.poses + 1]
       local skin = model.skins[1]
-      local frame = pose.frames[flr(love.frame / 15)%#pose.frames + 1]
+      local frame
+      if pose.type==0 then
+        -- single pose model
+        frame = pose
+      else
+        frame = pose.frames[flr(love.frame / 15)%#pose.frames + 1]
+      end
       local uvs = model.uvs
       local faces = model.faces
       for i=1,#faces,4 do    
@@ -718,12 +719,17 @@ function make_cam()
           poly[k] = a
         end
         if outcode==0 then
-          if clipcode>0 then
-            poly = z_poly_clip(poly,#poly,true)
-          end
-          if #poly>2 then
-            push_texture(skin,0)
-            polytex(poly,#poly)    
+          -- ccw?
+          local ax,ay=poly[2].x-poly[1].x,poly[2].y-poly[1].y
+          local bx,by=poly[2].x-poly[3].x,poly[2].y-poly[3].y
+          if ax*by - ay*bx<0 then
+            if clipcode>0 then
+              poly = z_poly_clip(poly,#poly,true)
+            end
+            if #poly>2 then
+              push_texture(skin,0)
+              polytex(poly,#poly)    
+            end
           end
         end
       end

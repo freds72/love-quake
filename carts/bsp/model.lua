@@ -707,6 +707,7 @@ local function load_aliasmodel(data)
     ptr = ptr + ffi.sizeof("mdl_t")
     
     local skinsize = header.skinheight * header.skinwidth
+    logging.debug("#skin: "..header.numskins)
     for i=0,header.numskins-1 do
         local skintype = ffi.cast('daliasskintype_t*', ptr).type
         ptr = ptr + ffi.sizeof("daliasskintype_t")
@@ -746,18 +747,18 @@ local function load_aliasmodel(data)
 
     -- poses
     logging.debug("MDL poses: "..header.numframes)
-    for i=0,header.numframes-1 do
-        local frametype = ffi.cast('daliasframetype_t*', ptr)[0]
+    for i=1,header.numframes do
+        local frametype = ffi.cast('daliasframetype_t*', ptr).type
         ptr = ptr + ffi.sizeof("daliasframetype_t")
-        local frame={
+        local pose={
             type = frametype
         }
         if frametype==0 then
-            ptr = load_aliasframe(ptr, scale, origin, header.numverts, frame)
+            ptr = load_aliasframe(ptr, scale, origin, header.numverts, pose)
         else
-            ptr = load_framegroup(ptr, scale, origin, header.numverts, frame)
+            ptr = load_framegroup(ptr, scale, origin, header.numverts, pose)
         end
-        add(mod.poses, frame)
+        add(mod.poses, pose)
     end
     return mod
 end
