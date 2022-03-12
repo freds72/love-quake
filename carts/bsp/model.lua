@@ -20,7 +20,7 @@ local sin,cos=math.sin,math.cos
 ffi.cdef[[
     #pragma pack(1)
     
-    typedef float dvertex_t[3];
+    typedef float vec3_t[3];
     typedef struct { unsigned char r,g,b; } color_t;
     
     typedef short dvertexshort_t[3];
@@ -52,7 +52,7 @@ ffi.cdef[[
     
     typedef struct
     {
-        dvertex_t	mins, maxs;
+        vec3_t	mins, maxs;
         float		origin[3];
         int			headnode[4];
         int			visleafs;		// not including the solid leaf 0
@@ -75,7 +75,7 @@ ffi.cdef[[
     
     typedef struct
     {
-        dvertex_t	normal;
+        vec3_t	normal;
         float	dist;
         int		type;		// PLANE_X - PLANE_ANYZ ?remove? trivial to regenerate
     } dplane_t;
@@ -99,9 +99,9 @@ ffi.cdef[[
     typedef struct texinfo_s
     {
         // [s/t][xyz offset]
-        dvertex_t   s;
+        vec3_t   s;
         float       s_offset;
-        dvertex_t   t;
+        vec3_t   t;
         float       t_offset;
         int			miptex;
         int			flags;
@@ -148,7 +148,86 @@ ffi.cdef[[
     
         unsigned char		  ambient_level[NUM_AMBIENTS];
     } dleaf_t;
-    ]]
+
+    // alias models (eg. non geometry)
+    // must match definition in spritegn.h
+    typedef enum {ST_SYNC=0, ST_RAND } synctype_t;
+
+    typedef enum { ALIAS_SINGLE=0, ALIAS_GROUP } aliasframetype_t;
+
+    typedef enum { ALIAS_SKIN_SINGLE=0, ALIAS_SKIN_GROUP } aliasskintype_t;
+
+    typedef struct {
+        int			ident;
+        int			version;
+        vec3_t		scale;
+        vec3_t		scale_origin;
+        float		boundingradius;
+        vec3_t		eyeposition;
+        int			numskins;
+        int			skinwidth;
+        int			skinheight;
+        int			numverts;
+        int			numtris;
+        int			numframes;
+        synctype_t	synctype;
+        int			flags;
+        float		size;
+    } mdl_t;
+
+    // TODO: could be shorts
+
+    typedef struct {
+        int		onseam;
+        int		s;
+        int		t;
+    } stvert_t;
+
+    typedef struct dtriangle_s {
+        int					facesfront;
+        int					vertindex[3];
+    } dtriangle_t;
+
+    // This mirrors trivert_t in trilib.h, is present so Quake knows how to
+    // load this data
+
+    typedef struct {
+        unsigned char	v[3];
+        unsigned char   lightnormalindex;
+    } trivertx_t;
+
+    typedef struct {
+        trivertx_t	bboxmin;	// lightnormal isn't used
+        trivertx_t	bboxmax;	// lightnormal isn't used
+        char		name[16];	// frame name from grabbing
+    } daliasframe_t;
+
+    typedef struct {
+        int			numframes;
+        trivertx_t	bboxmin;	// lightnormal isn't used
+        trivertx_t	bboxmax;	// lightnormal isn't used
+    } daliasgroup_t;
+
+    typedef struct {
+        int			numskins;
+    } daliasskingroup_t;
+
+    typedef struct {
+        float	interval;
+    } daliasinterval_t;
+
+    typedef struct {
+        float	interval;
+    } daliasskininterval_t;
+
+    typedef struct {
+        aliasframetype_t	type;
+    } daliasframetype_t;
+
+    typedef struct {
+        aliasskintype_t	type;
+    } daliasskintype_t;    
+]]
 
 -- reads the given struct name from the byte array
 local function read_all(cname, lump, mem)
@@ -508,7 +587,7 @@ local function load_bsp(data)
     local mem = data:getFFIPointer()
 
     local header = ffi.cast('dheader_t*', mem)
-    logging.debug("BSP version: "..header.version)
+    assert(header.version==29, "Unsupported BSP file version: "..header.version)
 
     local ptr = ffi.cast("unsigned char*",mem)
     
@@ -517,7 +596,7 @@ local function load_bsp(data)
 
     local bsp={
         models = read_all("dmodel_t", header.models, ptr),
-        vertices = read_all("dvertex_t", header.vertices, ptr)[0],
+        vertices = read_all("vec3_t", header.vertices, ptr)[0],
         visdata = read_all("unsigned char", header.visibility, ptr)[0],
         lightmaps = read_all("unsigned char", header.lighting, ptr),
         nodes = read_all("dnode_t", header.nodes, ptr),
@@ -534,6 +613,148 @@ local function load_bsp(data)
     return unpack_map(bsp), unpack_entities(entities)
 end
 
+local function load_aliasframe(ptr, numverts, frame)
+    -- shared frame information
+    local aliasframe = ffi.cast('daliasframe_t*', ptr)
+
+    local name = aliasframe.name
+    if not name then 
+        name="default" 
+    else
+        name = ffi.string(name)
+    end
+    logging.debug("Loading frame: "..name)
+
+    frame.verts = {}
+    frame.normals = {}        
+    frame.name = name
+    frame.mins = {
+        aliasframe.bboxmin.v[0],
+        aliasframe.bboxmin.v[1],
+        aliasframe.bboxmin.v[2]}
+    frame.maxs = {
+            aliasframe.bboxmax.v[0],
+            aliasframe.bboxmax.v[1],
+            aliasframe.bboxmax.v[2]}
+
+    ptr = ptr + ffi.sizeof("daliasframe_t")
+
+    --    
+    for i=1,numverts do
+        local tri = ffi.cast('trivertx_t*', ptr)
+        add(frame.normals,tri.lightnormalindex)
+        add(frame.verts,{tri.v[0],tri.v[1],tri.v[2]})
+        print(v_tostring(frame.verts[i]))
+        ptr = ptr + ffi.sizeof("trivertx_t")        
+    end
+
+    return ptr
+end
+
+local function load_framegroup(ptr, numverts, frame)
+    local group = ffi.cast('daliasgroup_t*', ptr)
+    ptr = ptr + ffi.sizeof("daliasgroup_t")     
+
+    frame.mins = {
+            group.bboxmin.v[0],
+            group.bboxmin.v[1],
+            group.bboxmin.v[2]}
+    frame.maxs={
+            group.bboxmax.v[0],
+            group.bboxmax.v[1],
+            group.bboxmax.v[2]}
+    
+    logging.debug("MDL group - #frames: "..group.numframes)
+
+    local intervals={}
+    for i=1,group.numframes do
+        local t = ffi.cast('daliasinterval_t*', ptr).interval
+        add(intervals, t)
+        ptr = ptr + ffi.sizeof("daliasinterval_t")
+    end
+    frame.intervals = intervals
+    local frames={}
+    for i=1,group.numframes do
+        local frame = {}
+        ptr = load_aliasframe(ptr, numverts, frame)
+        add(frames, frame)
+    end
+    frame.frames = frames
+    return ptr
+end
+
+local function load_aliasmodel(data)
+    local mem = data:getFFIPointer()
+
+    local header = ffi.cast('mdl_t*', mem)
+    assert(header.version==6, "Unsupported MDL file version: "..header.version)
+
+    local mod={
+        flags = header.flags,
+        width = header.skinwidth,
+        height = header.skinheight,
+        skins = {},
+        uvs = {},
+        faces = {},
+        frames = {}
+    }
+    
+    local ptr = ffi.cast("unsigned char*",mem)
+    -- skip header
+    ptr = ptr + ffi.sizeof("mdl_t")
+    
+    local skinsize = header.skinheight * header.skinwidth
+    for i=0,header.numskins-1 do
+        local skintype = ffi.cast('daliasskintype_t*', ptr).type
+        print("skin type:"..tostring(skintype))
+        ptr = ptr + ffi.sizeof("daliasskintype_t")
+        if skintype == 0 then            
+            add(mod.skins, ptr)
+        else
+            logging.critical("not supported - skin type: "..skintype)
+        end
+        ptr = ptr + skinsize
+    end
+
+    -- uv coords
+    for i=0,header.numverts-1 do
+        local vert = ffi.cast('stvert_t*', ptr)
+        add(mod.uvs,{
+            onseam=vert.onseam==1,
+            u=vert.s / header.skinwidth,
+            v=vert.t / header.skinheight
+        })
+        ptr = ptr + ffi.sizeof("stvert_t")
+    end
+
+    -- tris
+    for i=0,header.numtris-1 do
+        local tri = ffi.cast('dtriangle_t*', ptr)
+        add(mod.faces,tri.facesfront==1)
+        add(mod.faces,tri.vertindex[0])
+        add(mod.faces,tri.vertindex[1])
+        add(mod.faces,tri.vertindex[2])
+        ptr = ptr + ffi.sizeof("dtriangle_t")
+    end
+
+    -- frames
+    logging.debug("MDL frames: "..header.numframes)
+    for i=0,header.numframes-1 do
+        local frametype = ffi.cast('daliasframetype_t*', ptr)[0]
+        ptr = ptr + ffi.sizeof("daliasframetype_t")
+        local frame={
+            type = frametype
+        }
+        if frametype==0 then
+            ptr = load_aliasframe(ptr, header.numverts, frame)
+        else
+            ptr = load_framegroup(ptr, header.numverts, frame)
+        end
+        add(mod.frames, frame)
+    end
+    return mod
+end
+
 -- handle to bsp raw memory
 function load_model(root_path, name)
     local model = _model_cache[name]
@@ -542,7 +763,8 @@ function load_model(root_path, name)
         local data,err = nfs.newFileData(filename)
 
         -- bsp? or mdl?
-        if sub(name,#name-3)==".bsp" then
+        local extension = sub(name,#name-3)
+        if extension==".bsp" then
             logging.info("Loading BSP file: "..filename)
             local m,e = load_bsp(data)
             model = {
@@ -550,6 +772,13 @@ function load_model(root_path, name)
                 _ffi_ = data,
                 model = m,
                 entities = e
+            }
+        elseif extension==".mdl" then
+            logging.info("Loading MDL file: "..filename)
+            local alias = load_aliasmodel(data)
+            model = {
+                _ffi_ = data,
+                alias = alias            
             }
         else
             assert(false, "ERROR - unsupported model file: "..name)

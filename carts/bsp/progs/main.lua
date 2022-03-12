@@ -30,7 +30,7 @@ local main=function(context)
             -- find extension point
             local fn = env[ent.classname]
             if fn then
-                print("INFO - binding: "..ent.classname)
+                -- print("INFO - binding: "..ent.classname)
                 fn(ent)
                 return ent
             end

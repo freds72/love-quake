@@ -104,6 +104,8 @@ function love.load(args)
 
   _font = require("font")(root_path, _palette, _colormap)
 
+  _flame = load_model(root_path, "progs/flame.mdl")  
+
   local precache_models = {}
   local world = load_model(root_path, "maps/"..args[2])
   _world_model = world.model
@@ -433,6 +435,14 @@ function love.draw()
 
   end_frame()
 
+  --
+  local model = _flame.alias
+  local texptr = model.skins[1]
+  for i=0,model.width-1 do
+    for j=0,model.height-1 do
+      _backbuffer[i + j*480] = _palette[_colormap[texptr[i+j*model.width]]]
+    end
+  end
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
 
