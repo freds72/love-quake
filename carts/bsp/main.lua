@@ -417,7 +417,6 @@ function love.draw()
   push_param("t", love.frame / 60)
   push_param("z", _cam.pos[3])
   push_viewmatrix(_cam.m)
-  
 
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.bsp,_world_model.leaves)
@@ -433,16 +432,32 @@ function love.draw()
     end
   end
 
+  local o = {464,728,64 + 12}
+  local m={
+    1,0,0,0,
+    0,1,0,0,
+    0,0,1,0,
+    0,0,0,1
+  }
+  m_set_pos(m,o)
+
+  _cam:draw_aliasmodel({
+    origin = o,
+    m = m}, 
+    _flame.alias)
+
   end_frame()
 
   --
-  local model = _flame.alias
-  local texptr = model.skins[1]
-  for i=0,model.width-1 do
-    for j=0,model.height-1 do
-      _backbuffer[i + j*480] = _palette[_colormap[texptr[i+j*model.width]]]
-    end
-  end
+  -- local model = _flame.alias
+  -- local skin = model.skins[1]
+  -- local mip = skin.mips[1]
+  -- for i=0,skin.width-1 do
+  --   for j=0,skin.height-1 do
+  --     _backbuffer[i + j*480] = _palette[_colormap[mip[i+j*skin.width]]]
+  --   end
+  -- end
+
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
 
@@ -651,6 +666,67 @@ function make_cam()
           end
         end
       end    
+    end,
+    draw_aliasmodel=function(self,ent,model)      
+      local v_cache_class={
+        __index=function(self,v)
+          local m,code,x,y,z=self.m,0,v[1],v[2],v[3]
+          local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
+
+          -- znear=8
+          if az<8 then code=2 end
+          --if az>2048 then code|=1 end
+          if ax>az then code = code + 4
+          elseif ax<-az then code = code + 8 end
+          if ay>az then code = code + 16
+          elseif ay<-az then code = code + 32 end
+          -- save world space coords for clipping
+          -- to screen space
+          local w=1/az
+          local a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code}
+          self[v]=a          
+          return a
+        end
+      }
+
+      local m=self.m
+      --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
+      local v_cache,cam_pos=setmetatable({m=m_x_m(m,ent.m)},v_cache_class),v_add(self.pos,ent.origin,-1)
+
+      local pose = model.poses[1]
+      local skin = model.skins[1]
+      local frame = pose.frames[flr(love.frame / 15)%#pose.frames + 1]
+      local uvs = model.uvs
+      local faces = model.faces
+      for i=1,#faces,4 do    
+        -- positions are in the frame
+        local verts = frame.verts
+        -- vertex index are "constants" (eg. from model)
+        local front=faces[i]
+        local outcode,clipcode,poly=0xffff,0,{}
+        for k,vi in pairs({faces[i+1],faces[i+2],faces[i+3]}) do
+          local a=v_cache[verts[vi]]
+          outcode=band(outcode,a.outcode)
+          clipcode=clipcode + band(a.outcode,2)                    
+          -- compute uvs
+          local uv,u_offset = uvs[vi],0
+          if uv.onseam and not front then
+            u_offset = skin.width / 2
+          end
+          a.u = uv.u + u_offset
+          a.v = uv.v
+          poly[k] = a
+        end
+        if outcode==0 then
+          if clipcode>0 then
+            poly = z_poly_clip(poly,#poly,true)
+          end
+          if #poly>2 then
+            push_texture(skin,0)
+            polytex(poly,#poly)    
+          end
+        end
+      end
     end  
   }
 end

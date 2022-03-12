@@ -613,7 +613,7 @@ local function load_bsp(data)
     return unpack_map(bsp), unpack_entities(entities)
 end
 
-local function load_aliasframe(ptr, numverts, frame)
+local function load_aliasframe(ptr, scale, origin, numverts, frame)
     -- shared frame information
     local aliasframe = ffi.cast('daliasframe_t*', ptr)
 
@@ -633,9 +633,9 @@ local function load_aliasframe(ptr, numverts, frame)
         aliasframe.bboxmin.v[1],
         aliasframe.bboxmin.v[2]}
     frame.maxs = {
-            aliasframe.bboxmax.v[0],
-            aliasframe.bboxmax.v[1],
-            aliasframe.bboxmax.v[2]}
+        aliasframe.bboxmax.v[0],
+        aliasframe.bboxmax.v[1],
+        aliasframe.bboxmax.v[2]}
 
     ptr = ptr + ffi.sizeof("daliasframe_t")
 
@@ -643,23 +643,25 @@ local function load_aliasframe(ptr, numverts, frame)
     for i=1,numverts do
         local tri = ffi.cast('trivertx_t*', ptr)
         add(frame.normals,tri.lightnormalindex)
-        add(frame.verts,{tri.v[0],tri.v[1],tri.v[2]})
-        print(v_tostring(frame.verts[i]))
+        add(frame.verts,v_add({
+            scale[1]*tri.v[0],
+            scale[2]*tri.v[1],
+            scale[3]*tri.v[2]},origin))
         ptr = ptr + ffi.sizeof("trivertx_t")        
     end
 
     return ptr
 end
 
-local function load_framegroup(ptr, numverts, frame)
+local function load_framegroup(ptr, scale, origin, numverts, pose)
     local group = ffi.cast('daliasgroup_t*', ptr)
     ptr = ptr + ffi.sizeof("daliasgroup_t")     
 
-    frame.mins = {
+    pose.mins = {
             group.bboxmin.v[0],
             group.bboxmin.v[1],
             group.bboxmin.v[2]}
-    frame.maxs={
+            pose.maxs={
             group.bboxmax.v[0],
             group.bboxmax.v[1],
             group.bboxmax.v[2]}
@@ -672,14 +674,15 @@ local function load_framegroup(ptr, numverts, frame)
         add(intervals, t)
         ptr = ptr + ffi.sizeof("daliasinterval_t")
     end
-    frame.intervals = intervals
     local frames={}
     for i=1,group.numframes do
-        local frame = {}
-        ptr = load_aliasframe(ptr, numverts, frame)
+        local frame = {
+            interval = intervals[i]
+        }
+        ptr = load_aliasframe(ptr, scale, origin, numverts, frame)
         add(frames, frame)
     end
-    frame.frames = frames
+    pose.frames = frames
     return ptr
 end
 
@@ -691,13 +694,13 @@ local function load_aliasmodel(data)
 
     local mod={
         flags = header.flags,
-        width = header.skinwidth,
-        height = header.skinheight,
         skins = {},
         uvs = {},
         faces = {},
-        frames = {}
+        poses = {}
     }
+    local scale = {header.scale[0],header.scale[1],header.scale[2]}
+    local origin = {header.scale_origin[0],header.scale_origin[1],header.scale_origin[2]}
     
     local ptr = ffi.cast("unsigned char*",mem)
     -- skip header
@@ -706,10 +709,14 @@ local function load_aliasmodel(data)
     local skinsize = header.skinheight * header.skinwidth
     for i=0,header.numskins-1 do
         local skintype = ffi.cast('daliasskintype_t*', ptr).type
-        print("skin type:"..tostring(skintype))
         ptr = ptr + ffi.sizeof("daliasskintype_t")
         if skintype == 0 then            
-            add(mod.skins, ptr)
+            add(mod.skins, {
+                width = header.skinwidth,
+                height = header.skinheight,
+                -- single mips
+                mips = {ptr}
+            })
         else
             logging.critical("not supported - skin type: "..skintype)
         end
@@ -720,9 +727,9 @@ local function load_aliasmodel(data)
     for i=0,header.numverts-1 do
         local vert = ffi.cast('stvert_t*', ptr)
         add(mod.uvs,{
-            onseam=vert.onseam==1,
-            u=vert.s / header.skinwidth,
-            v=vert.t / header.skinheight
+            onseam=vert.onseam==0x20,
+            u=vert.s,
+            v=vert.t
         })
         ptr = ptr + ffi.sizeof("stvert_t")
     end
@@ -731,14 +738,14 @@ local function load_aliasmodel(data)
     for i=0,header.numtris-1 do
         local tri = ffi.cast('dtriangle_t*', ptr)
         add(mod.faces,tri.facesfront==1)
-        add(mod.faces,tri.vertindex[0])
-        add(mod.faces,tri.vertindex[1])
-        add(mod.faces,tri.vertindex[2])
+        add(mod.faces,tri.vertindex[0]+1)
+        add(mod.faces,tri.vertindex[1]+1)
+        add(mod.faces,tri.vertindex[2]+1)
         ptr = ptr + ffi.sizeof("dtriangle_t")
     end
 
-    -- frames
-    logging.debug("MDL frames: "..header.numframes)
+    -- poses
+    logging.debug("MDL poses: "..header.numframes)
     for i=0,header.numframes-1 do
         local frametype = ffi.cast('daliasframetype_t*', ptr)[0]
         ptr = ptr + ffi.sizeof("daliasframetype_t")
@@ -746,11 +753,11 @@ local function load_aliasmodel(data)
             type = frametype
         }
         if frametype==0 then
-            ptr = load_aliasframe(ptr, header.numverts, frame)
+            ptr = load_aliasframe(ptr, scale, origin, header.numverts, frame)
         else
-            ptr = load_framegroup(ptr, header.numverts, frame)
+            ptr = load_framegroup(ptr, scale, origin, header.numverts, frame)
         end
-        add(mod.frames, frame)
+        add(mod.poses, frame)
     end
     return mod
 end
