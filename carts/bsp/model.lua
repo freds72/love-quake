@@ -623,14 +623,15 @@ local function load_aliasframe(ptr, scale, origin, numverts, frames)
     local frame={
         verts = {},
         normals = {},
-        mins = {
-            aliasframe.bboxmin.v[0],
-            aliasframe.bboxmin.v[1],
-            aliasframe.bboxmin.v[2]},
-        maxs = {
-            aliasframe.bboxmax.v[0],
-            aliasframe.bboxmax.v[1],
-            aliasframe.bboxmax.v[2]}}
+        mins = v_add({
+            scale[1]*aliasframe.bboxmin.v[0],
+            scale[2]*aliasframe.bboxmin.v[1],
+            scale[3]*aliasframe.bboxmin.v[2]},origin),
+        maxs = v_add({
+            scale[1]*aliasframe.bboxmax.v[0],
+            scale[2]*aliasframe.bboxmax.v[1],
+            scale[3]*aliasframe.bboxmax.v[2]},origin)
+    }
     -- register by name
     if frames[name] then
         logging.critical("Duplicate frame name: "..name)
