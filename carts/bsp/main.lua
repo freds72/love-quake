@@ -104,7 +104,7 @@ function love.load(args)
 
   _font = require("font")(root_path, _palette, _colormap)
 
-  _flame = load_model(root_path, "progs/soldier.mdl")  
+  _flame = load_model(root_path, "progs/b_g_key.mdl")  
 
   local precache_models = {}
   local world = load_model(root_path, "maps/"..args[2])
@@ -160,8 +160,13 @@ function love.load(args)
         ent.resources = world.model
       else        
         local cached_model = precache_models[id]
-        m = cached_model.model[1]
-        ent.resources = cached_model.model
+        if cached_model.alias then
+          m = cached_model.alias
+        else
+          m = cached_model.model[1]        
+          -- todo: revisit (single big array?)
+          ent.resources = cached_model.model
+        end
       end
 
       if not m then
@@ -178,9 +183,18 @@ function love.load(args)
         0,0,0,1
       }
       -- bounding box
-      ent.size = v_add(m.maxs,m.mins,-1)
-      ent.mins = v_clone(m.mins)
-      ent.maxs = v_clone(m.maxs)
+      if ent.frame then
+        -- animated model?
+        local frame = m.frames[ent.frame]
+        assert(frame,"Invalid frame id: "..ent.frame)
+        ent.size = v_add(frame.maxs,frame.mins,-1)
+        ent.mins = v_clone(frame.mins)
+        ent.maxs = v_clone(frame.maxs)
+      else
+        ent.size = v_add(m.maxs,m.mins,-1)
+        ent.mins = v_clone(m.mins)
+        ent.maxs = v_clone(m.maxs)
+      end
     end,
     time=function()
       return love.frame / 60
@@ -410,6 +424,7 @@ end
 
 local visframe,prev_leaf=0
 function love.draw()
+  love.graphics.setColor(1,1,1)
   -- cls
   framebuffer.fill(0)
   
@@ -427,19 +442,19 @@ function love.draw()
     local ent=_entities[i]
     local m = ent.model
     if m and not ent.DRAW_NOT then
-      local res = ent.resources
-      _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
+      -- BSP?
+      if m.leaf_start then
+        local res = ent.resources
+        _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
+      else
+        _cam:draw_aliasmodel(
+          ent, 
+          m,
+          ent.skin,
+          ent.frame)        
+      end
     end
   end
-
-  local o = {464,728,64 + 24}
-  local m=make_m_from_euler(0,0,love.frame/60)
-  m_set_pos(m,o)
-
-  _cam:draw_aliasmodel({
-    origin = o,
-    m = m}, 
-    _flame.alias)
 
   end_frame()
 
@@ -455,6 +470,11 @@ function love.draw()
 
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
+
+  -- love.graphics.setColor(0,1,0)
+  -- for k,n in pairs(_normz) do
+  --   love.graphics.line( 2 * n.n0.x, 2 * n.n0.y, 2 * n.n1.x, 2 * n.n1.y)
+  -- end
 
   -- love.graphics.setFont(_font)
   -- love.graphics.print(love.report or ("Please wait...("..love.frame..")"))
@@ -473,6 +493,171 @@ end
 function make_cam()
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
+  -- pre-computed normals for alias models
+  local _normals={
+	{-0.525731, 0.000000, 0.850651}, 
+	{-0.442863, 0.238856, 0.864188}, 
+	{-0.295242, 0.000000, 0.955423}, 
+	{-0.309017, 0.500000, 0.809017}, 
+	{-0.162460, 0.262866, 0.951056}, 
+	{0.000000, 0.000000, 1.000000}, 
+	{0.000000, 0.850651, 0.525731}, 
+	{-0.147621, 0.716567, 0.681718}, 
+	{0.147621, 0.716567, 0.681718}, 
+	{0.000000, 0.525731, 0.850651}, 
+	{0.309017, 0.500000, 0.809017}, 
+	{0.525731, 0.000000, 0.850651}, 
+	{0.295242, 0.000000, 0.955423}, 
+	{0.442863, 0.238856, 0.864188}, 
+	{0.162460, 0.262866, 0.951056}, 
+	{-0.681718, 0.147621, 0.716567}, 
+	{-0.809017, 0.309017, 0.500000}, 
+	{-0.587785, 0.425325, 0.688191}, 
+	{-0.850651, 0.525731, 0.000000}, 
+	{-0.864188, 0.442863, 0.238856}, 
+	{-0.716567, 0.681718, 0.147621}, 
+	{-0.688191, 0.587785, 0.425325}, 
+	{-0.500000, 0.809017, 0.309017}, 
+	{-0.238856, 0.864188, 0.442863}, 
+	{-0.425325, 0.688191, 0.587785}, 
+	{-0.716567, 0.681718, -0.147621}, 
+	{-0.500000, 0.809017, -0.309017}, 
+	{-0.525731, 0.850651, 0.000000}, 
+	{0.000000, 0.850651, -0.525731}, 
+	{-0.238856, 0.864188, -0.442863}, 
+	{0.000000, 0.955423, -0.295242}, 
+	{-0.262866, 0.951056, -0.162460}, 
+	{0.000000, 1.000000, 0.000000}, 
+	{0.000000, 0.955423, 0.295242}, 
+	{-0.262866, 0.951056, 0.162460}, 
+	{0.238856, 0.864188, 0.442863}, 
+	{0.262866, 0.951056, 0.162460}, 
+	{0.500000, 0.809017, 0.309017}, 
+	{0.238856, 0.864188, -0.442863}, 
+	{0.262866, 0.951056, -0.162460}, 
+	{0.500000, 0.809017, -0.309017}, 
+	{0.850651, 0.525731, 0.000000}, 
+	{0.716567, 0.681718, 0.147621}, 
+	{0.716567, 0.681718, -0.147621}, 
+	{0.525731, 0.850651, 0.000000}, 
+	{0.425325, 0.688191, 0.587785}, 
+	{0.864188, 0.442863, 0.238856}, 
+	{0.688191, 0.587785, 0.425325}, 
+	{0.809017, 0.309017, 0.500000}, 
+	{0.681718, 0.147621, 0.716567}, 
+	{0.587785, 0.425325, 0.688191}, 
+	{0.955423, 0.295242, 0.000000}, 
+	{1.000000, 0.000000, 0.000000}, 
+	{0.951056, 0.162460, 0.262866}, 
+	{0.850651, -0.525731, 0.000000}, 
+	{0.955423, -0.295242, 0.000000}, 
+	{0.864188, -0.442863, 0.238856}, 
+	{0.951056, -0.162460, 0.262866}, 
+	{0.809017, -0.309017, 0.500000}, 
+	{0.681718, -0.147621, 0.716567}, 
+	{0.850651, 0.000000, 0.525731}, 
+	{0.864188, 0.442863, -0.238856}, 
+	{0.809017, 0.309017, -0.500000}, 
+	{0.951056, 0.162460, -0.262866}, 
+	{0.525731, 0.000000, -0.850651}, 
+	{0.681718, 0.147621, -0.716567}, 
+	{0.681718, -0.147621, -0.716567}, 
+	{0.850651, 0.000000, -0.525731}, 
+	{0.809017, -0.309017, -0.500000}, 
+	{0.864188, -0.442863, -0.238856}, 
+	{0.951056, -0.162460, -0.262866}, 
+	{0.147621, 0.716567, -0.681718}, 
+	{0.309017, 0.500000, -0.809017}, 
+	{0.425325, 0.688191, -0.587785}, 
+	{0.442863, 0.238856, -0.864188}, 
+	{0.587785, 0.425325, -0.688191}, 
+	{0.688191, 0.587785, -0.425325}, 
+	{-0.147621, 0.716567, -0.681718}, 
+	{-0.309017, 0.500000, -0.809017}, 
+	{0.000000, 0.525731, -0.850651}, 
+	{-0.525731, 0.000000, -0.850651}, 
+	{-0.442863, 0.238856, -0.864188}, 
+	{-0.295242, 0.000000, -0.955423}, 
+	{-0.162460, 0.262866, -0.951056}, 
+	{0.000000, 0.000000, -1.000000}, 
+	{0.295242, 0.000000, -0.955423}, 
+	{0.162460, 0.262866, -0.951056}, 
+	{-0.442863, -0.238856, -0.864188}, 
+	{-0.309017, -0.500000, -0.809017}, 
+	{-0.162460, -0.262866, -0.951056}, 
+	{0.000000, -0.850651, -0.525731}, 
+	{-0.147621, -0.716567, -0.681718}, 
+	{0.147621, -0.716567, -0.681718}, 
+	{0.000000, -0.525731, -0.850651}, 
+	{0.309017, -0.500000, -0.809017}, 
+	{0.442863, -0.238856, -0.864188}, 
+	{0.162460, -0.262866, -0.951056}, 
+	{0.238856, -0.864188, -0.442863}, 
+	{0.500000, -0.809017, -0.309017}, 
+	{0.425325, -0.688191, -0.587785}, 
+	{0.716567, -0.681718, -0.147621}, 
+	{0.688191, -0.587785, -0.425325}, 
+	{0.587785, -0.425325, -0.688191}, 
+	{0.000000, -0.955423, -0.295242}, 
+	{0.000000, -1.000000, 0.000000}, 
+	{0.262866, -0.951056, -0.162460}, 
+	{0.000000, -0.850651, 0.525731}, 
+	{0.000000, -0.955423, 0.295242}, 
+	{0.238856, -0.864188, 0.442863}, 
+	{0.262866, -0.951056, 0.162460}, 
+	{0.500000, -0.809017, 0.309017}, 
+	{0.716567, -0.681718, 0.147621}, 
+	{0.525731, -0.850651, 0.000000}, 
+	{-0.238856, -0.864188, -0.442863}, 
+	{-0.500000, -0.809017, -0.309017}, 
+	{-0.262866, -0.951056, -0.162460}, 
+	{-0.850651, -0.525731, 0.000000}, 
+	{-0.716567, -0.681718, -0.147621}, 
+	{-0.716567, -0.681718, 0.147621}, 
+	{-0.525731, -0.850651, 0.000000}, 
+	{-0.500000, -0.809017, 0.309017}, 
+	{-0.238856, -0.864188, 0.442863}, 
+	{-0.262866, -0.951056, 0.162460}, 
+	{-0.864188, -0.442863, 0.238856}, 
+	{-0.809017, -0.309017, 0.500000}, 
+	{-0.688191, -0.587785, 0.425325}, 
+	{-0.681718, -0.147621, 0.716567}, 
+	{-0.442863, -0.238856, 0.864188}, 
+	{-0.587785, -0.425325, 0.688191}, 
+	{-0.309017, -0.500000, 0.809017}, 
+	{-0.147621, -0.716567, 0.681718}, 
+	{-0.425325, -0.688191, 0.587785}, 
+	{-0.162460, -0.262866, 0.951056}, 
+	{0.442863, -0.238856, 0.864188}, 
+	{0.162460, -0.262866, 0.951056}, 
+	{0.309017, -0.500000, 0.809017}, 
+	{0.147621, -0.716567, 0.681718}, 
+	{0.000000, -0.525731, 0.850651}, 
+	{0.425325, -0.688191, 0.587785}, 
+	{0.587785, -0.425325, 0.688191}, 
+	{0.688191, -0.587785, 0.425325}, 
+	{-0.955423, 0.295242, 0.000000}, 
+	{-0.951056, 0.162460, 0.262866}, 
+	{-1.000000, 0.000000, 0.000000}, 
+	{-0.850651, 0.000000, 0.525731}, 
+	{-0.955423, -0.295242, 0.000000}, 
+	{-0.951056, -0.162460, 0.262866}, 
+	{-0.864188, 0.442863, -0.238856}, 
+	{-0.951056, 0.162460, -0.262866}, 
+	{-0.809017, 0.309017, -0.500000}, 
+	{-0.864188, -0.442863, -0.238856}, 
+	{-0.951056, -0.162460, -0.262866}, 
+	{-0.809017, -0.309017, -0.500000}, 
+	{-0.681718, 0.147621, -0.716567}, 
+	{-0.681718, -0.147621, -0.716567}, 
+	{-0.850651, 0.000000, -0.525731}, 
+	{-0.688191, 0.587785, -0.425325}, 
+	{-0.587785, 0.425325, -0.688191}, 
+	{-0.425325, 0.688191, -0.587785}, 
+	{-0.425325, -0.688191, -0.587785}, 
+	{-0.587785, -0.425325, -0.688191}, 
+	{-0.688191, -0.587785, -0.425325}, 	
+  }
 
   local function z_poly_clip(v,nv,uvs)
     local res,v0={},v[nv]
@@ -662,9 +847,17 @@ function make_cam()
         end
       end    
     end,
-    draw_aliasmodel=function(self,ent,model)      
+    draw_aliasmodel=function(self,ent,model,skin,frame)      
+      local skin = model.skins[skin]
+      local frame = model.frames[frame]
+      local uvs = model.uvs
+      local faces = model.faces
+      -- positions + normals are in the frame
+      local verts, normals = frame.verts,frame.normals
+      
       local v_cache_class={
-        __index=function(self,v)
+        __index=function(self,vi)
+          local v=verts[vi]
           local m,code,x,y,z=self.m,0,v[1],v[2],v[3]
           local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
 
@@ -679,54 +872,47 @@ function make_cam()
           -- to screen space
           local w=1/az
           local a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code}
-          self[v]=a          
+          self[vi]=a          
           return a
         end
       }
 
       local m=self.m
-      --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
       local v_cache,cam_pos=setmetatable({m=m_x_m(m,ent.m)},v_cache_class),v_add(self.pos,ent.origin,-1)
 
-      local pose = model.poses[flr(love.frame / 60)%#model.poses + 1]
-      local skin = model.skins[1]
-      local frame
-      if pose.type==0 then
-        -- single pose model
-        frame = pose
-      else
-        frame = pose.frames[flr(love.frame / 15)%#pose.frames + 1]
-      end
-      local uvs = model.uvs
-      local faces = model.faces
+      -- transform light vector into model space
+      local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
+
       for i=1,#faces,4 do    
-        -- positions are in the frame
-        local verts = frame.verts
         -- vertex index are "constants" (eg. from model)
-        local front=faces[i]
+        local is_front=faces[i]
         local outcode,clipcode,poly=0xffff,0,{}
         for k,vi in pairs({faces[i+1],faces[i+2],faces[i+3]}) do
-          local a=v_cache[verts[vi]]
+          local a=v_cache[vi]
           outcode=band(outcode,a.outcode)
           clipcode=clipcode + band(a.outcode,2)                    
           -- compute uvs
           local uv,u_offset = uvs[vi],0
-          if uv.onseam and not front then
+          if uv.onseam and not is_front then
             u_offset = skin.width / 2
           end
           a.u = uv.u + u_offset
-          a.v = uv.v
+          a.v = uv.v     
+          local light_dot = v_dot(light_n,_normals[normals[vi]]) 
+          a.l = light_dot<0 and (1+light_dot) or 1
           poly[k] = a
         end
         if outcode==0 then
           -- ccw?
           local ax,ay=poly[2].x-poly[1].x,poly[2].y-poly[1].y
           local bx,by=poly[2].x-poly[3].x,poly[2].y-poly[3].y
-          if ax*by - ay*bx<0 then
+          if ax*by - ay*bx<=0 then
             if clipcode>0 then
               poly = z_poly_clip(poly,#poly,true)
             end
             if #poly>2 then
+              -- todo: gouraud
+              push_baselight({1})
               push_texture(skin,0)
               polytex(poly,#poly)    
             end

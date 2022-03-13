@@ -8,10 +8,6 @@ local items=function(progs)
     progs:precache_model("maps/b_bh100.bsp")
     progs:precache_model("maps/b_bh25.bsp")
 
-    progs:precache_model("maps/b_explob.bsp")
-
-    progs:precache_model("progs/flame.mdl")
-
     local H_ROTTEN = 1
     local H_MEGA = 2
 
@@ -57,12 +53,6 @@ local items=function(progs)
             -- todo:     
             print("got health: "..self.healamount)               
         end
-    end
-
-    progs.misc_explobox=function(self)
-        self.SOLID_BSP = true
-        self.MOVETYPE_NONE = true
-        progs:setmodel(self, "maps/b_explob.bsp")
     end
 end
 return items

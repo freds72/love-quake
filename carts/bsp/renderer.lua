@@ -391,7 +391,7 @@ function polytex(p,np,sky)
 	end
 
 	--data for left & right edges:
-	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldw,rx,ru,rv,rw,rdx,rdw=mini,mini,miny,miny
+	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
 	--step through scanlines.
 	if maxy>=270 then
     	maxy=270-1
@@ -473,4 +473,5 @@ function polytex(p,np,sky)
 		rw=rw+rdw
 	end
 end
+
 return renderer

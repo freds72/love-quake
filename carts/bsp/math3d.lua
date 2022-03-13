@@ -36,13 +36,15 @@ function v_add(v,dv,scale)
 		v[3]+scale*dv[3]}
 end
 function v_lerp(a,b,t,uv)
-  local ax,ay,az,u,v=a[1],a[2],a[3],a.u,a.v
+  local ax,ay,az,u,v,l=a[1],a[2],a[3],a.u,a.v,a.l
 	return {
     ax+(b[1]-ax)*t,
     ay+(b[2]-ay)*t,
     az+(b[3]-az)*t,
     u=uv and u+(b.u-u)*t,
-    v=uv and v+(b.v-v)*t
+    v=uv and v+(b.v-v)*t,
+	-- light?
+	l=l and l+(b.l-l)*t
   }
 end
 

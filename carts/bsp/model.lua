@@ -613,36 +613,37 @@ local function load_bsp(data)
     return unpack_map(bsp), unpack_entities(entities)
 end
 
-local function load_aliasframe(ptr, scale, origin, numverts, frame)
+local function load_aliasframe(ptr, scale, origin, numverts, frames)
     -- shared frame information
     local aliasframe = ffi.cast('daliasframe_t*', ptr)
 
-    local name = aliasframe.name
-    if not name then 
-        name="default" 
-    else
-        name = ffi.string(name)
-    end
+    local name = ffi.string(aliasframe.name)
     logging.debug("Loading frame: "..name)
 
-    frame.verts = {}
-    frame.normals = {}        
-    frame.name = name
-    frame.mins = {
-        aliasframe.bboxmin.v[0],
-        aliasframe.bboxmin.v[1],
-        aliasframe.bboxmin.v[2]}
-    frame.maxs = {
-        aliasframe.bboxmax.v[0],
-        aliasframe.bboxmax.v[1],
-        aliasframe.bboxmax.v[2]}
+    local frame={
+        verts = {},
+        normals = {},
+        mins = {
+            aliasframe.bboxmin.v[0],
+            aliasframe.bboxmin.v[1],
+            aliasframe.bboxmin.v[2]},
+        maxs = {
+            aliasframe.bboxmax.v[0],
+            aliasframe.bboxmax.v[1],
+            aliasframe.bboxmax.v[2]}}
+    -- register by name
+    if frames[name] then
+        logging.critical("Duplicate frame name: "..name)
+    end
+
+    frames[name] = frame
 
     ptr = ptr + ffi.sizeof("daliasframe_t")
 
     --    
     for i=1,numverts do
         local tri = ffi.cast('trivertx_t*', ptr)
-        add(frame.normals,tri.lightnormalindex)
+        add(frame.normals,tri.lightnormalindex + 1)
         add(frame.verts,v_add({
             scale[1]*tri.v[0],
             scale[2]*tri.v[1],
@@ -653,39 +654,23 @@ local function load_aliasframe(ptr, scale, origin, numverts, frame)
     return ptr
 end
 
-local function load_framegroup(ptr, scale, origin, numverts, pose)
+local function load_framegroup(ptr, scale, origin, numverts, frames)
     local group = ffi.cast('daliasgroup_t*', ptr)
     ptr = ptr + ffi.sizeof("daliasgroup_t")     
-
-    pose.mins = {
-            group.bboxmin.v[0],
-            group.bboxmin.v[1],
-            group.bboxmin.v[2]}
-            pose.maxs={
-            group.bboxmax.v[0],
-            group.bboxmax.v[1],
-            group.bboxmax.v[2]}
     
     logging.debug("MDL group - #frames: "..group.numframes)
 
-    local intervals={}
+    -- intervals are ignored
+    ptr = ptr + ffi.sizeof("daliasinterval_t") * group.numframes
+
     for i=1,group.numframes do
-        local t = ffi.cast('daliasinterval_t*', ptr).interval
-        add(intervals, t)
-        ptr = ptr + ffi.sizeof("daliasinterval_t")
+        ptr = load_aliasframe(ptr, scale, origin, numverts, frames)
     end
-    local frames={}
-    for i=1,group.numframes do
-        local frame = {
-            interval = intervals[i]
-        }
-        ptr = load_aliasframe(ptr, scale, origin, numverts, frame)
-        add(frames, frame)
-    end
-    pose.frames = frames
     return ptr
 end
 
+-- note: all frames are registered in a dictionary
+-- up to the entity declaration to setup animation sequences
 local function load_aliasmodel(data)
     local mem = data:getFFIPointer()
 
@@ -697,7 +682,7 @@ local function load_aliasmodel(data)
         skins = {},
         uvs = {},
         faces = {},
-        poses = {}
+        frames = {}
     }
     local scale = {header.scale[0],header.scale[1],header.scale[2]}
     local origin = {header.scale_origin[0],header.scale_origin[1],header.scale_origin[2]}
@@ -750,15 +735,11 @@ local function load_aliasmodel(data)
     for i=1,header.numframes do
         local frametype = ffi.cast('daliasframetype_t*', ptr).type
         ptr = ptr + ffi.sizeof("daliasframetype_t")
-        local pose={
-            type = frametype
-        }
         if frametype==0 then
-            ptr = load_aliasframe(ptr, scale, origin, header.numverts, pose)
-        else
-            ptr = load_framegroup(ptr, scale, origin, header.numverts, pose)
+            ptr = load_aliasframe(ptr, scale, origin, header.numverts, mod.frames)
+        else        
+            ptr = load_framegroup(ptr, scale, origin, header.numverts, mod.frames)
         end
-        add(mod.poses, pose)
     end
     return mod
 end

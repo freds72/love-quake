@@ -9,7 +9,8 @@ local main=function(context)
         "lights",
         "walls",
         "player",
-        "items"
+        "items",
+        "misc"
     }
 
     -- global functions
