@@ -1,14 +1,11 @@
 local world={}
 local maths3d = require("math3d")
 
+-- p8 compat
+local band=bit.band
+
 -- init the root of the 2d BSP (for collision)
 function world.init(model)
-end
-
-function world.unregister(ent)
-end
--- 
-function world.register(ent)
 end
 
 -- teleport entity to specified position
@@ -57,4 +54,43 @@ end
 function world.touch(ent)
 end
 
+function world.unregister(ent)
+    -- nothing to unregister
+    if ent.nodes then
+        return
+    end
+    for node,_ in pairs(ent.nodes) do
+        if node.ents then
+            node.ents[ent]=nil
+        end
+    end
+end
+
+function world.register(node, ent)
+    if not node or node.contents==-2 then
+        return
+    end
+
+    -- any non solid content
+    if node.contents then
+        -- entity -> leaf
+        ent.nodes[node]=true
+        -- leaf -> entity
+        if not node.ents then
+            node.ents={}
+        end
+        node.ents[ent]=true
+        return
+    end
+
+    -- classify box
+    local sides = plane_classify_bbox(node.plane, ent.absmins, ent.absmaxs)
+	-- sides or straddling?
+    if band(sides,1)>0 then
+        world.register(node[false], ent)
+    end
+    if band(sides,2)>0 then
+        world.register(node[true], ent)
+    end
+end
 return world

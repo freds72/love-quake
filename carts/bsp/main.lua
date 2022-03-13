@@ -8,6 +8,7 @@ local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs/main")
 local logging = require("logging")
+local world = require("world")
 
 ffi.cdef[[
     #pragma pack(1)
@@ -107,8 +108,11 @@ function love.load(args)
   _flame = load_model(root_path, "progs/b_g_key.mdl")  
 
   local precache_models = {}
-  local world = load_model(root_path, "maps/"..args[2])
-  _world_model = world.model
+  local level = load_model(root_path, "maps/"..args[2])
+  _world_model = level.model
+  -- todo: cleanup main geometry
+  _level = level.model[1]
+
   _entities = {}
   _msg = nil
   _msg_ttl = -1
@@ -157,7 +161,7 @@ function love.load(args)
       if sub(id,1,1)=="*" then
         m = _world_model[tonumber(sub(id,2)) + 1]
         -- bind to model "owner"
-        ent.resources = world.model
+        ent.resources = level.model
       else        
         local cached_model = precache_models[id]
         if cached_model.alias then
@@ -195,6 +199,11 @@ function love.load(args)
         ent.mins = v_clone(m.mins)
         ent.maxs = v_clone(m.maxs)
       end
+      ent.absmins=v_add(ent.origin,ent.mins)
+      ent.absmaxs=v_add(ent.origin,ent.maxs)
+      -- register into world
+      ent.nodes={}
+      world.register(_level.bsp, ent)
     end,
     time=function()
       return love.frame / 60
@@ -227,20 +236,17 @@ function love.load(args)
   })
 
   -- bind entities and engine
-  for i=1,#world.entities do    
+  for i=1,#level.entities do    
     -- order matters: worldspawn is always first
-    local ent = _vm:bind(world.entities[i])
+    local ent = _vm:bind(level.entities[i])
     if ent then
       -- valid entity?
       add(_entities, ent)
     end
   end
 
-  -- main geometry
-  _level = world.model[1]
-
   -- find player pos
-  for _,kv in pairs(world.entities) do
+  for _,kv in pairs(level.entities) do
     for k,v in pairs(kv) do
       if k=="classname" and v=="info_player_start" then
         pos=kv.origin
@@ -440,21 +446,20 @@ function love.draw()
   -- world entity
   _cam:draw_model(_entities[1],_world_model.textures,_world_model.verts,leaves,1,#leaves)
 
-  for i=2,#_entities do
-    local ent=_entities[i]
+  local visents = _cam:collect_entities(_entities)
+  for i=1,#visents do
+    local ent=visents[i]
     local m = ent.model
-    if m and not ent.DRAW_NOT then
-      -- BSP?
-      if m.leaf_start then
-        local res = ent.resources
-        _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
-      else
-        _cam:draw_aliasmodel(
-          ent, 
-          m,
-          ent.skin,
-          ent.frame)        
-      end
+    -- BSP?
+    if m.leaf_start then
+      local res = ent.resources
+      _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
+    else
+      _cam:draw_aliasmodel(
+        ent, 
+        m,
+        ent.skin,
+        ent.frame)        
     end
   end
 
@@ -478,22 +483,20 @@ function love.draw()
   --   love.graphics.line( 2 * n.n0.x, 2 * n.n0.y, 2 * n.n1.x, 2 * n.n1.y)
   -- end
   -- points
-
   --[[
   love.graphics.setColor(0,1,0)
   local bbox={}
   local mdls=0
-  for i=2,#_entities do
-    local ent=_entities[i]
+  for i=1,#visents do
+    local ent=visents[i]
     if ent.m and not ent.m.leaf_start and ent.origin and ent.mins then
       mdls = mdls + 1
-      local mins,maxs=ent.mins,ent.maxs
       for i=0,7 do
-        bbox[i]=v_add({     
-          band(i,1)>0 and maxs[1] or mins[1],
-          band(i,2)>0 and maxs[2] or mins[2],
-          band(i,4)>0 and maxs[3] or mins[3]
-        },ent.origin)
+        bbox[i]={     
+          band(i,1)>0 and ent.absmaxs[1] or ent.absmins[1],
+          band(i,2)>0 and ent.absmaxs[2] or ent.absmins[2],
+          band(i,4)>0 and ent.absmaxs[3] or ent.absmins[3]
+        }
       end
       for k,v in pairs(bbox) do
         local x,y,w=_cam:project(v)        
@@ -512,8 +515,19 @@ function love.draw()
     end
   end
   ]]
+
+  --[[
+  print("classify:"..tostring(plane_classify_bbox_test({
+      type=2,
+      normal={[0]=0,0,1},
+      dist=8
+    },
+    {7,7,7},
+    {10,10,10})))
+    ]]
+
   -- note: text is written using Love2d api - mush be done after direct buffer draw
-  _font.print("fps:" .. love.timer.getFPS(), 2, 2 )
+  _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents, 2, 2 )
 
   -- any on screen message?
   if _msg then
@@ -756,6 +770,22 @@ function make_cam()
       pos=m_x_v(self.m,pos)
       local w=1/pos[2]
       return 480/2+270*pos[1]*w,270/2-270*pos[3]*w,w
+    end,
+    collect_entities=function(self,entities)
+      local ents={}
+      for i=2,#entities do
+        local ent = entities[i]
+        if not ent.DRAW_NOT and ent.nodes then
+          -- find if touching a visible leaf?
+          for node,_ in pairs(ent.nodes) do
+            if node.visframe==visframe then
+              add(ents,ent)
+              break
+            end
+          end
+        end
+      end
+      return ents
     end,
     collect_leaves=function(self,root,leaves)
       local pos={[0]=self.pos[1],self.pos[2],self.pos[3]}

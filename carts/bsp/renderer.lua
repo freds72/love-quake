@@ -217,7 +217,7 @@ function push_viewmatrix(m)
 end
 
 local _gamma = 0
-function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)			
+function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)	
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=x0,x1 do
 		local uw,vw=u/w,v/w
@@ -272,9 +272,7 @@ end
 
 function mode7(x0,y0,x1)	
 	-- sky normal in camera space
-	local n=m_x_n(_viewmatrix,{0,0,-1})
-	local n0=m_x_v(_viewmatrix,{0,0,2048+_params.z})
-	local d=v_dot(n,n0)
+	local n,d=_params.sky,_params.sky_distance
 	local htw,offsetx,offsety=_texw/2,_params.t*32,_params.t*24
 	local texscale = _texscale * 16
 	for x=x0,x1 do

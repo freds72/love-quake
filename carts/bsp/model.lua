@@ -4,15 +4,12 @@ local nfs = require( "nativefs" )
 local entities = require( "entities" )
 local logging = require("logging")
 
--- module globals
-plane_dot,plane_dot1,plane_isfront,plane_get=nil,nil,nil,nil
-
 -- caches
 local _model_cache,_planes={},{}
 
 -- pico8 compat helpers
 local sub,add=string.sub,table.insert
-local flr,ceil=math.floor,math.ceil
+local flr,ceil,abs=math.floor,math.ceil,math.abs
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local sin,cos=math.sin,math.cos
@@ -243,16 +240,13 @@ local function read_all(cname, lump, mem)
     return res
 end
 
--- planes functions
+-- planes functions (globals)
 plane_get=function(pi)
     local n=_planes[pi].normal
     return n[0],n[1],n[2]
 end
 plane_dot=function(pi,v)
     local plane=_planes[pi]
-    if not plane then
-        print("error: "..pi.."/"..#_planes)
-    end
     local t,n=plane.type,plane.normal
     if t<3 then                 
     return n[t]*v[t],plane.dist
@@ -271,9 +265,45 @@ plane_isfront=function(pi,v)
     local plane=_planes[pi]
     local t,n=plane.type,plane.normal
     if t<3 then    
-    return n[t]*v[t]>plane.dist
+        return n[t]*v[t]>plane.dist
     end
     return n[0]*v[0]+n[1]*v[1]+n[2]*v[2]>plane.dist
+end
+-- mins/maxs must be absolute corners
+plane_classify_bbox=function(pi,mins,maxs)
+    local plane=_planes[pi]
+    local t,n=plane.type,plane.normal
+    -- todo: optimize
+    -- if t<3 then
+    --     if n[t]*mins[t+1]<=plane.dist then
+    --         return 1
+    --     elseif n[t]*maxs[t+1]>=plane.dist then
+    --         return 2
+    --     end
+    --     return 3
+    -- end
+    -- cf: https://gdbooks.gitbooks.io/3dcollisions/content/Chapter2/static_aabb_plane.html
+    local c={
+        0.5*(mins[1]+maxs[1]),
+        0.5*(mins[2]+maxs[2]),
+        0.5*(mins[3]+maxs[3])
+    }
+    -- extents
+    local e=make_v(c, maxs)
+    
+    -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
+    local r = e[1]*abs(n[0]) + e[2]*abs(n[1]) + e[3]*abs(n[2])
+  
+    -- Compute distance of box center from plane
+    local s = n[0]*c[1]+n[1]*c[2]+n[2]*c[3] - plane.dist
+  
+    -- Intersection occurs when distance s falls within [-r,+r] interval
+    if s<=-r then
+      return 1
+    elseif s>=r then
+      return 2
+    end
+    return 3  
 end
 
 local function unpack_array(fn,array)
@@ -412,8 +442,8 @@ local function unpack_map(bsp)
 
     unpack_array(function(leaf, i)
         local l={
-        contents = leaf.contents,
-        pvs = vis_cache[i]
+            contents = leaf.contents,
+            pvs = vis_cache[i]
         }
         for i=0,leaf.nummarksurfaces-1 do
         -- de-ref face
