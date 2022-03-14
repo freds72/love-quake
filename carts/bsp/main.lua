@@ -112,6 +112,8 @@ function love.load(args)
   _world_model = level.model
   -- todo: cleanup main geometry
   _level = level.model[1]
+  
+  world.init(_level.bsp)
 
   _entities = {}
   _msg = nil
@@ -203,7 +205,7 @@ function love.load(args)
       ent.absmaxs=v_add(ent.origin,ent.maxs)
       -- register into world
       ent.nodes={}
-      world.register(_level.bsp, ent)
+      world.register(ent)
     end,
     time=function()
       return love.frame / 60
@@ -515,7 +517,7 @@ function love.draw()
     end
   end
   ]]
-
+  
   --[[
   print("classify:"..tostring(plane_classify_bbox_test({
       type=2,

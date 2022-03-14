@@ -1,11 +1,15 @@
 local world={}
 local maths3d = require("math3d")
+local model = require("model")
 
 -- p8 compat
 local band=bit.band
 
 -- init the root of the 2d BSP (for collision)
-function world.init(model)
+local _root=nil
+
+function world.init(root)
+    _root = root
 end
 
 -- teleport entity to specified position
@@ -66,7 +70,7 @@ function world.unregister(ent)
     end
 end
 
-function world.register(node, ent)
+local function register_bbox(node, ent, pos, size)    
     if not node or node.contents==-2 then
         return
     end
@@ -84,13 +88,25 @@ function world.register(node, ent)
     end
 
     -- classify box
-    local sides = plane_classify_bbox(node.plane, ent.absmins, ent.absmaxs)
+    local sides = plane_classify_bbox(node.plane, pos, size)
 	-- sides or straddling?
     if band(sides,1)>0 then
-        world.register(node[false], ent)
+        register_bbox(node[false], ent, pos, size)
     end
     if band(sides,2)>0 then
-        world.register(node[true], ent)
-    end
+        register_bbox(node[true], ent, pos, size)
+    end    
+end
+
+function world.register(ent)
+    local mins,maxs=ent.absmins,ent.absmaxs
+    local c={
+        0.5*(mins[1]+maxs[1]),
+        0.5*(mins[2]+maxs[2]),
+        0.5*(mins[3]+maxs[3])
+    }
+    -- extents
+    local e=make_v(c, maxs)
+    register_bbox(_root, ent, c, e)
 end
 return world

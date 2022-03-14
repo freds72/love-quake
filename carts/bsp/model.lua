@@ -270,7 +270,7 @@ plane_isfront=function(pi,v)
     return n[0]*v[0]+n[1]*v[1]+n[2]*v[2]>plane.dist
 end
 -- mins/maxs must be absolute corners
-plane_classify_bbox=function(pi,mins,maxs)
+plane_classify_bbox=function(pi,c,e)
     local plane=_planes[pi]
     local t,n=plane.type,plane.normal
     -- todo: optimize
@@ -283,14 +283,7 @@ plane_classify_bbox=function(pi,mins,maxs)
     --     return 3
     -- end
     -- cf: https://gdbooks.gitbooks.io/3dcollisions/content/Chapter2/static_aabb_plane.html
-    local c={
-        0.5*(mins[1]+maxs[1]),
-        0.5*(mins[2]+maxs[2]),
-        0.5*(mins[3]+maxs[3])
-    }
-    -- extents
-    local e=make_v(c, maxs)
-    
+
     -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
     local r = e[1]*abs(n[0]) + e[2]*abs(n[1]) + e[3]*abs(n[2])
   
