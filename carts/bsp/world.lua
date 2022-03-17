@@ -98,6 +98,32 @@ local function register_bbox(node, ent, pos, size)
     end    
 end
 
+local function touches_bbox(node, pos, size, out)    
+    if not node or node.contents==-2 then
+        return
+    end
+
+    -- any non solid content
+    if node.contents then        
+        if node.ents then
+            for ent,_ in pairs(node.ents) do
+                out[ent]=true
+            end
+        end
+        return
+    end
+
+    -- classify box
+    local sides = plane_classify_bbox(node.plane, pos, size)
+	-- sides or straddling?
+    if band(sides,1)>0 then
+        touches_bbox(node[false], pos, size, out)
+    end
+    if band(sides,2)>0 then
+        touches_bbox(node[true], pos, size, out)
+    end    
+end
+
 function world.register(ent)
     local mins,maxs=ent.absmins,ent.absmaxs
     local c={
@@ -108,5 +134,12 @@ function world.register(ent)
     -- extents
     local e=make_v(c, maxs)
     register_bbox(_root, ent, c, e)
+end
+
+-- returns all entities touching the given absolute box
+function world.touches(absmins,absmaxs)
+    local ents={}
+    touches_bbox(_root, absmins, absmaxs, ents)
+    return ents
 end
 return world

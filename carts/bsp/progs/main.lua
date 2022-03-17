@@ -10,7 +10,9 @@ local main=function(context)
         "walls",
         "player",
         "items",
-        "misc"
+        "misc",
+        "shambler",
+        "zombie"
     }
 
     -- global functions

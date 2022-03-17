@@ -164,34 +164,41 @@ function push_param(name,value)
 	_params[name] = value
 end
 function push_texture(texture,mip)	
+	if texture.sky then
+		-- always render sky texture in full
+		mip = 0
+	end
 	_texscale=shl(1,mip)
+	-- rebase to 1
 	_texw,_texh=texture.width/_texscale,texture.height/_texscale
 	-- dynamic texture?
 	if texture.swirl then
 		local cache = _texture_cache[texture]
 		if not cache then
 			-- create entry
-			local mips,w,h={},texture.width,texture.height
+			local mips={}
 			for i=0,3 do
+				local w,h=shr(texture.width,i),shr(texture.height,i)
 				add(mips,ffi.new("unsigned char[?]",w*h))
-				w=w/2
-				h=h/2
 			end
 			cache={
-				mips=mips
+				mips=mips,
+				-- frame time per mip
+				frame={}
 			}
 			_texture_cache[texture] = cache
 		end
-		_texptr=cache.mips[mip+1]
+		mip = mip + 1
+		_texptr=cache.mips[mip]
 		local t=_params.t
 		-- refresh image?
-		if cache.frame~=t then
+		if cache.frame[mip]~=t then
 			-- copy texture
-			cache.frame=t
+			cache.frame[mip]=t
 			local closeness, intensity, speed=1,0.5,9
 
 			-- see: https://fdossena.com/?p=quakeFluids/i.md
-			local src=texture.mips[mip+1]
+			local src=texture.mips[mip]
 			for u=0,_texw-1 do
 				for v=0,_texh-1 do
 					local s,t=flr(u/closeness+intensity*sin(t*speed+v/closeness))%_texw,flr(v/closeness+intensity*sin(t*speed+u/closeness))%_texh

@@ -84,6 +84,9 @@ function m_x_n(m,v)
 end
 
 function make_m_from_euler(x,y,z)
+	x=2*3.1415*x/360
+	y=2*3.1415*y/360
+	z=2*3.1415*z/360
 	local a,b = cos(x),-sin(x)
 	local c,d = cos(y),-sin(y)
 	local e,f = cos(z),-sin(z)

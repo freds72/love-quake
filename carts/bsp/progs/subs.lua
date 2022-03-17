@@ -13,16 +13,12 @@ local subs=function(progs)
             -- down
             self.movedir = {0,0,-1}
         else
-            --local m = make_m_from_euler(0,2*3.1415*angle/360,0)
-            angle = 2*3.1415*angle/360
-            self.movedir = {
-                math.cos(angle),
-                math.sin(angle),
-                0
-            }
+            self.movedir=make_m_from_euler(0,0,-angle)
         end
         
         self.angles = {0,0,0}
+        -- kill "move" angle
+        self.angle = nil
     end
 
     function calc_move(self, tdest, tspeed, func)
@@ -81,6 +77,11 @@ local subs=function(progs)
                 end
             end
         end    
+    end
+
+    function makevectors(x,y,z)
+        local m=make_m_from_euler(x,y,z)
+        return m_right(m),m_fwd(m),m_up(m)
     end
 end
 

@@ -105,8 +105,6 @@ function love.load(args)
 
   _font = require("font")(root_path, _palette, _colormap)
 
-  _flame = load_model(root_path, "progs/b_g_key.mdl")  
-
   local precache_models = {}
   local level = load_model(root_path, "maps/"..args[2])
   _world_model = level.model
@@ -148,7 +146,7 @@ function love.load(args)
         ent.origin = {0,0,0}
         ent.mins={0,0,0}
         ent.maxs={0,0,0}
-        ent.size={0,0,0}
+        ent.size={0,0,0}        
         ent.m={
           1,0,0,0,
           0,1,0,0,
@@ -182,12 +180,10 @@ function love.load(args)
       if not ent.origin then
         ent.origin = {0,0,0}
       end
-      ent.m={
-        1,0,0,0,
-        0,1,0,0,
-        0,0,1,0,
-        0,0,0,1
-      }
+      local angles=ent.mangles or {0,0,0}
+      ent.m=make_m_from_euler(unpack(angles))
+      m_set_pos(ent.m,ent.origin)
+
       -- bounding box
       if ent.frame then
         -- animated model?
@@ -409,7 +405,7 @@ function love.update(dt)
   end
 
   _plyr:update()  
-  _cam:track(v_add(_plyr.pos,{0,0,32}),_plyr.m,_plyr.angle)
+  _cam:track(v_add(_plyr.pos,{0,0,22}),_plyr.m,_plyr.angle)
 
   -- kill mouse
   camx,camy=0,0
@@ -1028,10 +1024,10 @@ function make_player(pos,a)
       end
 
       dangle=v_add(dangle,{camy,acc[1]*2,camx})
-      angle=v_add(angle,dangle,1/1024)
+      angle=v_add(angle,dangle,1/24)
     
       local a,dx,dz=angle[3],acc[2],acc[1]
-      local c,s=cos(a),sin(a)
+      local c,s=cos(2*3.1415*a/360),sin(2*3.1415*a/360)
       velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,(on_ground and acc[3] or 0)-0.5})          
             
       -- check next position
