@@ -201,7 +201,9 @@ function love.load(args)
       ent.absmaxs=v_add(ent.origin,ent.maxs)
       -- register into world
       ent.nodes={}
-      world.register(ent)
+      if id~="*0" then
+        world.register(ent)
+      end
     end,
     time=function()
       return love.frame / 60
@@ -528,17 +530,18 @@ function love.draw()
   _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents, 2, 2 )
 
   -- draw 2d map
-  love.graphics.setColor(0.5,0.5,0.5)
-  locate_ent(world.get_map(),v_add(_plyr.pos,{-16,-16,0}),v_add(_plyr.pos,{16,16,48}))
+  _debug_scale = 0.1
+  local player_ent={origin=_plyr.pos,mins={-16,-16,0},maxs={16,16,48}}
+  locate_ent(world.get_map(),player_ent)
   love.graphics.setColor(0,1,0)
   draw_map(world.get_map())
 
   for i=2,#_entities do
     love.graphics.setColor(0.1,0.8,0.1)
-    draw_entity(_entities[i])  
+    --draw_entity(_entities[i])  
   end
   love.graphics.setColor(0,1,0)
-  draw_entity({origin=_plyr.pos,mins={-16,16,0},maxs={16,16,48}},true)
+  draw_entity(player_ent,true)
   -- reset colors
   love.graphics.setColor(1,1,1)
 
@@ -551,26 +554,24 @@ end
 
 function draw_entity(ent,fill)
   local hw,hh=480/2,270/2
-  local scale=0.05
   local mins,maxs=v_add(ent.origin,ent.mins),v_add(ent.origin,ent.maxs)
   love.graphics.rectangle(
     fill and "fill" or "line",
-    hw + scale * mins[1],
-    hh + scale * mins[2],
-    scale * (maxs[1]-mins[1]),
-    scale * (maxs[2]-mins[2]))
+    hw + _debug_scale * mins[1],
+    hh + _debug_scale * mins[2],
+    _debug_scale * (maxs[1]-mins[1]),
+    _debug_scale * (maxs[2]-mins[2]))
 end
 
 function draw_map(cell)
   local mins,maxs=cell.mins,cell.maxs
   local hw,hh=480/2,270/2
-  local scale=0.05
   love.graphics.rectangle(
     "line",
-    hw + scale * mins[1],
-    hh + scale * mins[2],
-    scale * (maxs[1]-mins[1]),
-    scale * (maxs[2]-mins[2]))
+    hw + _debug_scale * mins[1],
+    hh + _debug_scale * mins[2],
+    _debug_scale * (maxs[1]-mins[1]),
+    _debug_scale * (maxs[2]-mins[2]))
 
   if cell[true] then
     draw_map(cell[true])
@@ -580,33 +581,38 @@ function draw_map(cell)
   end
 end
 
-function locate_ent(cell, mins, maxs)
+function locate_ent(cell, ent)
   if not cell then
-    return true
-  end
-  local sides = cell.classify(mins, maxs)
-  
-	-- sides or straddling?
-  if sides==1 then
-    if not locate_ent(cell[false], mins, maxs) then    
-      return
-    end
-  elseif sides==2 then
-    if not locate_ent(cell[true], mins, maxs) then
-      return
-    end
+    return
   end
 
-  -- straddling (or end cell)
-  local mins,maxs=cell.mins,cell.maxs
-  local hw,hh=480/2,270/2
-  local scale=0.05
-  love.graphics.rectangle(
-    "fill",
-    hw + scale * mins[1],
-    hh + scale * mins[2],
-    scale * (maxs[1]-mins[1]),
-    scale * (maxs[2]-mins[2]))
+  local mins,maxs=v_add(ent.origin,ent.mins),v_add(ent.origin,ent.maxs)
+  local sides = cell.classify(mins, maxs)
+  --[[
+  if sides==3 or cell.depth==4 then
+    -- straddling (or end cell)
+    local mins,maxs=cell.mins,cell.maxs
+    local hw,hh=480/2,270/2
+    love.graphics.setColor(0.5,0.5,0.5)
+    love.graphics.rectangle(
+      "fill",
+      hw + _debug_scale * mins[1],
+      hh + _debug_scale * mins[2],
+      _debug_scale * (maxs[1]-mins[1]),
+      _debug_scale * (maxs[2]-mins[2]))
+
+    return
+  end
+  ]]
+
+  -- draw
+  love.graphics.setColor(0.8,0,0)
+  for e,_ in pairs(cell.ents) do
+    draw_entity(e,true)
+  end
+
+  local side=band(sides,2)~=0
+  locate_ent(cell[side], ent)
 end
 
 -- camera
@@ -1116,10 +1122,11 @@ function make_player(pos,a)
         local triggers = {}
         -- check current to target pos
         for i=1,5 do
-          local hits,hitmodel={t=32000}
+          local hits,ents={t=32000},world.touches(v_add(next_pos,{-16,-16,0}), v_add(next_pos,{16,16,48}))
+          add(ents,1,_entities[1])
           -- entities touched (but not blocking)
-          for k=1,#_entities do
-            local ent = _entities[k]
+          for k=1,#ents do
+            local ent = ents[k]
             if not triggers[ent] then
               -- avoid infinite check
               if ent.SOLID_TRIGGER then
@@ -1127,7 +1134,7 @@ function make_player(pos,a)
               end
 
               local model = ent.model
-              if model and ent.SOLID_BSP and not ent.SOLID_NOT then
+              if model and not ent.SOLID_NOT then
                 local tmphits={} 
                 -- convert into model's space (mostly zero except moving brushes)
                 if hitscan(model.hulls[2],v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then

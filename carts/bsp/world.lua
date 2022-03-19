@@ -4,6 +4,7 @@ local modelfs = require("modelfs")
 
 -- p8 compat
 local band=bit.band
+local add=table.insert
 
 -- init the root of the 2d BSP (for collision)
 local _level,_root
@@ -61,6 +62,8 @@ function create_map(mins,maxs,depth)
     return     
     {
         classify=fn,
+        ents={},
+        depth=depth,
         -- debug
         mins=mins,
         maxs=maxs,
@@ -190,6 +193,19 @@ local function touches_bbox(node, pos, size, out)
     end    
 end
 
+local function register_map(cell, ent)
+    local sides = cell.classify(ent.absmins, ent.absmaxs)
+    if sides==3 or cell.depth==4 then
+        -- register in current cell
+        cell.ents[ent]=true
+        ent.cell=cell
+        return
+    end
+    local side=band(sides,2)~=0
+    register_map(cell[side], ent)
+end
+
+
 function world.register(ent)
     if not ent.DRAW_NOT then
         local mins,maxs=ent.absmins,ent.absmaxs
@@ -204,17 +220,24 @@ function world.register(ent)
         register_bbox(_root, ent, c, e)
     end
 
-
-    -- solid object?
-    if ent.SOLID_NOCLIP then
-        return
-    end
+    -- register to 2d map
+    register_map(_map, ent)
 end
 
 -- returns all entities touching the given absolute box
-function world.touches(absmins,absmaxs)
-    local ents={}
-    touches_bbox(_root, absmins, absmaxs, ents)
+function world.touches(mins,maxs)
+    local ents,cell = {},_map
+
+    while cell do
+        -- collect current cell items
+        for e,_ in pairs(cell.ents) do
+            add(ents,e)
+        end
+    
+        local sides = cell.classify(mins, maxs)
+        local side=band(sides,2)~=0
+        cell = cell[side]
+    end
     return ents
 end
 
