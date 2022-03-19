@@ -1,6 +1,6 @@
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
-local model = require( "model" )
+local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
 local fb = require 'fblove_strip'
@@ -106,12 +106,12 @@ function love.load(args)
   _font = require("font")(root_path, _palette, _colormap)
 
   local precache_models = {}
-  local level = load_model(root_path, "maps/"..args[2])
+  local level = modelfs.load(root_path, "maps/"..args[2])
   _world_model = level.model
   -- todo: cleanup main geometry
   _level = level.model[1]
   
-  world.init(_level.bsp)
+  world.init(_level)
 
   _entities = {}
   _msg = nil
@@ -138,7 +138,7 @@ function love.load(args)
     end,
     precache_model=function(self,id)
       if not precache_models[id] then
-        precache_models[id] = load_model(root_path, id)
+        precache_models[id] = modelfs.load(root_path, id)
       end
     end,
     setmodel=function(self,ent,id)
@@ -338,7 +338,7 @@ function hitscan(node,p0,p1,out)
     if not out.n then
       -- check if in global empty space
       -- note: nodes do not have spatial relationships!!
-      if is_empty(_level.clipnodes,p10) then
+      if is_empty(_level.hulls[2],p10) then
         local scale=t<0 and -1 or 1
         local nx,ny,nz=plane_get(node.plane)
         out.n={scale*nx,scale*ny,scale*nz,node_dist}
@@ -440,7 +440,7 @@ function love.draw()
   push_viewmatrix(_cam.m)
 
   -- refresh visible set
-  local leaves = _cam:collect_leaves(_level.bsp,_world_model.leaves)
+  local leaves = _cam:collect_leaves(_level.hulls[1],_world_model.leaves)
   -- world entity
   _cam:draw_model(_entities[1],_world_model.textures,_world_model.verts,leaves,1,#leaves)
 
@@ -527,11 +527,86 @@ function love.draw()
   -- note: text is written using Love2d api - mush be done after direct buffer draw
   _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents, 2, 2 )
 
+  -- draw 2d map
+  love.graphics.setColor(0.5,0.5,0.5)
+  locate_ent(world.get_map(),v_add(_plyr.pos,{-16,-16,0}),v_add(_plyr.pos,{16,16,48}))
+  love.graphics.setColor(0,1,0)
+  draw_map(world.get_map())
+
+  for i=2,#_entities do
+    love.graphics.setColor(0.1,0.8,0.1)
+    draw_entity(_entities[i])  
+  end
+  love.graphics.setColor(0,1,0)
+  draw_entity({origin=_plyr.pos,mins={-16,16,0},maxs={16,16,48}},true)
+  -- reset colors
+  love.graphics.setColor(1,1,1)
+
   -- any on screen message?
   if _msg then
     local w,h = _font.size(_msg)
     _font.print(_msg, 480 - w/2, 270/2 - h/2)
   end
+end
+
+function draw_entity(ent,fill)
+  local hw,hh=480/2,270/2
+  local scale=0.05
+  local mins,maxs=v_add(ent.origin,ent.mins),v_add(ent.origin,ent.maxs)
+  love.graphics.rectangle(
+    fill and "fill" or "line",
+    hw + scale * mins[1],
+    hh + scale * mins[2],
+    scale * (maxs[1]-mins[1]),
+    scale * (maxs[2]-mins[2]))
+end
+
+function draw_map(cell)
+  local mins,maxs=cell.mins,cell.maxs
+  local hw,hh=480/2,270/2
+  local scale=0.05
+  love.graphics.rectangle(
+    "line",
+    hw + scale * mins[1],
+    hh + scale * mins[2],
+    scale * (maxs[1]-mins[1]),
+    scale * (maxs[2]-mins[2]))
+
+  if cell[true] then
+    draw_map(cell[true])
+  end
+  if cell[false] then
+    draw_map(cell[false])
+  end
+end
+
+function locate_ent(cell, mins, maxs)
+  if not cell then
+    return true
+  end
+  local sides = cell.classify(mins, maxs)
+  
+	-- sides or straddling?
+  if sides==1 then
+    if not locate_ent(cell[false], mins, maxs) then    
+      return
+    end
+  elseif sides==2 then
+    if not locate_ent(cell[true], mins, maxs) then
+      return
+    end
+  end
+
+  -- straddling (or end cell)
+  local mins,maxs=cell.mins,cell.maxs
+  local hw,hh=480/2,270/2
+  local scale=0.05
+  love.graphics.rectangle(
+    "fill",
+    hw + scale * mins[1],
+    hh + scale * mins[2],
+    scale * (maxs[1]-mins[1]),
+    scale * (maxs[2]-mins[2]))
 end
 
 -- camera
@@ -1052,10 +1127,10 @@ function make_player(pos,a)
               end
 
               local model = ent.model
-              if model and not ent.SOLID_NOT then
+              if model and ent.SOLID_BSP and not ent.SOLID_NOT then
                 local tmphits={} 
                 -- convert into model's space (mostly zero except moving brushes)
-                if hitscan(model.clipnodes,v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+                if hitscan(model.hulls[2],v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
                   hits=tmphits
                   hitent=ent
                 end

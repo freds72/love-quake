@@ -1,15 +1,81 @@
 local world={}
 local maths3d = require("math3d")
-local model = require("model")
+local modelfs = require("modelfs")
 
 -- p8 compat
 local band=bit.band
 
 -- init the root of the 2d BSP (for collision)
-local _root=nil
+local _level,_root
+-- collision map (2d)
+local _map
 
-function world.init(root)
-    _root = root
+function create_map(mins,maxs,depth)
+    if depth>4 then
+        return
+    end
+    local size,left,right,fn=make_v(mins,maxs)
+
+    if size[1]>size[2] then
+        local dist=mins[1]+0.5*size[1]
+        left={dist,maxs[2],maxs[3]}
+        right={dist,mins[2],mins[3]}
+        fn=function(mins,maxs)
+            -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
+            local c = 0.5*(mins[1]+maxs[1])
+            local r = maxs[1]-c
+        
+            -- Compute distance of box center from plane
+            local s = c - dist
+        
+            -- Intersection occurs when distance s falls within [-r,+r] interval
+            if s<=-r then
+                return 1
+            elseif s>=r then
+                return 2
+            end
+            return 3              
+        end
+    else
+        local dist=mins[2]+0.5*size[2]        
+        left={maxs[1],dist,maxs[3]}
+        right={mins[1],dist,mins[3]}
+        fn=function(mins,maxs)
+            -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
+            local c = 0.5*(mins[2]+maxs[2])
+            local r = maxs[2]-c
+        
+            -- Compute distance of box center from plane
+            local s = c - dist
+        
+            -- Intersection occurs when distance s falls within [-r,+r] interval
+            if s<=-r then
+                return 1
+            elseif s>=r then
+                return 2
+            end
+            return 3              
+        end
+    end
+    
+    return     
+    {
+        classify=fn,
+        -- debug
+        mins=mins,
+        maxs=maxs,
+        [false]=create_map(mins,left,depth+1),        
+        [true]=create_map(right,maxs,depth+1)
+    }
+end
+
+function world.init(level)
+    _level = level
+    _root = level.hulls[1]
+
+    -- init the 2d bsp
+
+    _map = create_map(level.mins,level.maxs,0)      
 end
 
 -- teleport entity to specified position
@@ -95,7 +161,7 @@ local function register_bbox(node, ent, pos, size)
     end
     if band(sides,2)>0 then
         register_bbox(node[true], ent, pos, size)
-    end    
+    end
 end
 
 local function touches_bbox(node, pos, size, out)    
@@ -125,15 +191,24 @@ local function touches_bbox(node, pos, size, out)
 end
 
 function world.register(ent)
-    local mins,maxs=ent.absmins,ent.absmaxs
-    local c={
-        0.5*(mins[1]+maxs[1]),
-        0.5*(mins[2]+maxs[2]),
-        0.5*(mins[3]+maxs[3])
-    }
-    -- extents
-    local e=make_v(c, maxs)
-    register_bbox(_root, ent, c, e)
+    if not ent.DRAW_NOT then
+        local mins,maxs=ent.absmins,ent.absmaxs
+        local c={
+            0.5*(mins[1]+maxs[1]),
+            0.5*(mins[2]+maxs[2]),
+            0.5*(mins[3]+maxs[3])
+        }
+        -- extents
+        local e=make_v(c, maxs)
+        -- register to lowler
+        register_bbox(_root, ent, c, e)
+    end
+
+
+    -- solid object?
+    if ent.SOLID_NOCLIP then
+        return
+    end
 end
 
 -- returns all entities touching the given absolute box
@@ -142,4 +217,9 @@ function world.touches(absmins,absmaxs)
     touches_bbox(_root, absmins, absmaxs, ents)
     return ents
 end
+
+function world.get_map()
+    return _map
+end
+
 return world

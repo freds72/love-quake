@@ -1,4 +1,4 @@
-local model = {}
+local modelfs = {}
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
 local entities = require( "entities" )
@@ -506,15 +506,15 @@ local function unpack_map(bsp)
         }
         local flags = 0
         for i=0,1 do
-        clipnode[i==0]=node.children[i]
+            clipnode[i==0]=node.children[i]
         end
         add(clipnodes, clipnode)
     end, bsp.clipnodes)
     -- attach references
     for _,node in pairs(clipnodes) do
         local function attach_node(side)
-        local id=node[side]
-        node[side]=id<0 and content_types[-id] or clipnodes[id+1]
+            local id=node[side]
+            node[side]=id<0 and content_types[-id] or clipnodes[id+1]
         end
         attach_node(true)
         attach_node(false)
@@ -532,10 +532,14 @@ local function unpack_map(bsp)
             faces=faces,
             mins={mins[0],mins[1],mins[2]},
             maxs={maxs[0],maxs[1],maxs[2]},
-            -- root node (for display)
-            bsp=nodes[model.headnode[0]+1],
-            -- 32 unit clip nodes
-            clipnodes=clipnodes[model.headnode[1]+1],
+            hulls={
+                -- root node (for display)
+                nodes[model.headnode[0]+1],                
+                -- 32 unit clip nodes
+                clipnodes[model.headnode[1]+1],
+                -- 64 unit clip nodes
+                clipnodes[model.headnode[1]+2],
+            },
             leaf_start=leaf_base + 2,
             leaf_end=leaf_base + model.visleafs + 1})
         leaf_base = leaf_base + model.visleafs
@@ -641,7 +645,7 @@ local function load_aliasframe(ptr, scale, origin, numverts, frames)
     local aliasframe = ffi.cast('daliasframe_t*', ptr)
 
     local name = ffi.string(aliasframe.name)
-    logging.debug("Loading frame: "..name)
+    -- logging.debug("Loading frame: "..name)
 
     local frame={
         verts = {},
@@ -769,7 +773,7 @@ local function load_aliasmodel(data)
 end
 
 -- handle to bsp raw memory
-function load_model(root_path, name)
+function modelfs.load(root_path, name)
     local model = _model_cache[name]
     if not model then               
         local filename = root_path.."/"..name
@@ -803,4 +807,4 @@ function load_model(root_path, name)
     return model
 end
 
-return model
+return modelfs

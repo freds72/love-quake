@@ -195,13 +195,16 @@ function push_texture(texture,mip)
 		if cache.frame[mip]~=t then
 			-- copy texture
 			cache.frame[mip]=t
-			local closeness, intensity, speed=1,0.5,9
 
 			-- see: https://fdossena.com/?p=quakeFluids/i.md
 			local src=texture.mips[mip]
+			t=t*0.8
 			for u=0,_texw-1 do
+				local tu=u/_texw
 				for v=0,_texh-1 do
-					local s,t=flr(u/closeness+intensity*sin(t*speed+v/closeness))%_texw,flr(v/closeness+intensity*sin(t*speed+u/closeness))%_texh
+					local tv=v/_texh
+					-- 2* to make sure it rolls over the whole texture space
+					local s,t=flr((tu + 0.1*sin(t+(2*3.1415*tv)))*_texw)%_texw,flr((tv + 0.1*sin(t+(2*3.1415*tu)))*_texh)%_texh
 					_texptr[u + v*_texw] = src[s + t*_texw]
 				end
 			end
