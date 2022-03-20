@@ -526,7 +526,9 @@ function love.draw()
     ]]
 
   -- note: text is written using Love2d api - mush be done after direct buffer draw
-  _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents, 2, 2 )
+  local current_leaf=find_sub_sector(_level.hulls[1],{[0]=_plyr.pos[1],_plyr.pos[2],_plyr.pos[3]})
+  
+  _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents.."\ncontent:"..(current_leaf and current_leaf.contents or "n/a"), 2, 2 )
 
   -- draw 2d map
   local map = world.get_map()
@@ -1111,9 +1113,10 @@ function make_player(pos,a)
         local stairs=false--not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
         -- avoid touching the same non-solid multiple times (ex: triggers)
         local triggers = {}
-        -- check current to target pos
-        local ents=world.touches(v_add(self.absmins,{-256,-256,-256}), v_add(self.absmaxs,{256,256,256}))
+        -- collect all potential touching entities (done only once)
+        local ents=world.touches(v_add(self.absmins,{-256,-256,-256}), v_add(self.absmaxs,{256,256,256}))        
         add(ents,1,_entities[1])
+        -- check current to target pos
         for i=1,5 do
           local hits={t=32000}
           -- entities touched (but not blocking)
@@ -1130,9 +1133,9 @@ function make_player(pos,a)
                 local tmphits={} 
                 -- convert into model's space (mostly zero except moving brushes)
                 local hull
-                if ent.SOLID_SLIDEBOX then
+                if not model.hulls then
                   -- don't shift - hit is computed in ent space
-                  hull = modelfs.make_hull(ent.mins,ent.maxs)
+                  hull = modelfs.make_hull(make_v(maxs,ent.mins),make_v(mins,ent.maxs))
                 else
                   hull = model.hulls[2]
                 end
@@ -1148,6 +1151,7 @@ function make_player(pos,a)
             -- not separating?
             if fix<0 then
               -- todo: trigger action?
+              -- todo: delay after to avoid killtarget or move side effects
               if hitent.touch then
                 -- todo: replace by actual "other" entity
                 hitent.touch({classname="player"})
