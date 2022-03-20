@@ -196,7 +196,7 @@ end
 local function register_map(cell, ent)
     local sides = cell.classify(ent.absmins, ent.absmaxs)
     if sides==3 or cell.depth==4 then
-        -- register in current cell
+        -- stradling? register in current cell
         cell.ents[ent]=true
         ent.cell=cell
         return
@@ -226,18 +226,32 @@ end
 
 -- returns all entities touching the given absolute box
 function world.touches(mins,maxs)
-    local ents,cell = {},_map
-
-    while cell do
+    local ents = {}
+    local x0,y0,z0,x1,y1,z1=mins[1],mins[2],mins[3],maxs[1],maxs[2],maxs[3]
+    local function touches_map(cell)
+        if not cell then
+            return
+        end
         -- collect current cell items
         for e,_ in pairs(cell.ents) do
-            add(ents,e)
+            -- touching?
+            if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
+               y0<=e.absmaxs[2] and y1>=e.absmins[2] and
+               z0<=e.absmaxs[3] and z1>=e.absmins[3] then               
+                add(ents,e)
+            end
         end
     
+        -- visit touching cells
         local sides = cell.classify(mins, maxs)
-        local side=band(sides,2)~=0
-        cell = cell[side]
+        if band(sides,1)~=0 then
+            touches_map(cell[false])
+        end
+        if band(sides,2)~=0 then
+            touches_map(cell[true])
+        end
     end
+    touches_map(_map)
     return ents
 end
 

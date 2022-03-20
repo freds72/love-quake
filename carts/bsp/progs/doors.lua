@@ -140,14 +140,51 @@ local doors=function(progs)
         local oldorigin = v_clone(self.origin)
         local state = 1
 
+        local function fd_secret_move6()
+            calc_move(self, oldorigin, self.speed, function()
+                state = 1
+            end)
+        end
+        -- Wait 1 second...
+        local function fd_secret_move5()
+            self.nextthink = progs:time() + 1.0
+            self.think = fd_secret_move6            
+        end
+                
+        -- Move backward...
+        local function fd_secret_move4()
+            calc_move(self, self.dest1, self.speed, fd_secret_move5)
+        end
+
+        -- Wait here until time to go back...
+        local function fd_secret_move3()
+            if band(self.spawnflags,SECRET_OPEN_ONCE)==0 then
+                self.nextthink = progs:time() + self.wait
+                self.think = fd_secret_move4
+            end
+        end
+
+        -- Start moving sideways w/sound...
+        local function fd_secret_move2()
+            calc_move(self, self.dest2, self.speed, fd_secret_move3)
+        end
+
+        -- Wait after first movement...
+        local function fd_secret_move1()
+            self.nextthink = progs:time() + 1.0
+            self.think = fd_secret_move2
+        end 
+
         local function fd_secret_use()
+            -- ??
             self.health = 10000
         
             -- exit if still moving around...
             if state~=1 then
                 return
             end
-            
+            state = 2
+
             self.message = nil  -- no more message
         
             use_targets(self) -- fire all targets / killtargets
@@ -174,51 +211,15 @@ local doors=function(progs)
             end
         
             if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then
-                self.dest1 = v_add(self.origin,v_up,self.t_width)
+                self.dest1 = v_add(self.origin,v_up,-self.t_width)
             else
-                self.dest1 = v_add(self.origin,v_right,self.t_width * temp)
+                self.dest1 = v_add(self.origin,v_right,-self.t_width * temp)
             end
 
             self.dest2 = v_add(self.dest1,v_fwd,self.t_length)
 
             calc_move(self, self.dest1, self.speed, fd_secret_move1)            
-        end
-        
-        -- Wait after first movement...
-        local function fd_secret_move1()
-            self.nextthink = progs:time() + 1.0
-            self.think = fd_secret_move2
-        end
-
-        -- Start moving sideways w/sound...
-        local function fd_secret_move2()
-            calc_move(self, self.dest2, self.speed, fd_secret_move3)
-        end
-
-        -- Wait here until time to go back...
-        local function fd_secret_move3()
-            if band(self.spawnflags,SECRET_OPEN_ONCE)==0 then
-                self.nextthink = progs:time() + self.wait
-                self.think = fd_secret_move4
-            end
-        end
-        
-        -- Move backward...
-        local function fd_secret_move4()
-            calc_move(self, self.dest1, self.speed, fd_secret_move5)
-        end
-
-        -- Wait 1 second...
-        local function fd_secret_move5()
-            self.nextthink = progs:time() + 1.0
-            self.think = fd_secret_move6            
-        end
-        
-        local function fd_secret_move6()
-            calc_move(self, oldorigin, self.speed, function()
-                state = 1
-            end)
-        end
+        end        
 
         self.touch=function(other)
             if self.targetname then

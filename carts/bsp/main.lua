@@ -530,20 +530,26 @@ function love.draw()
   _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents, 2, 2 )
 
   -- draw 2d map
-  _debug_scale = 0.1
+  local map = world.get_map()
+  _debug_scale = 2*270/(map.maxs[2]-map.mins[2])
+  _debug_x,_debug_y=-map.mins[1],-map.mins[2]
   local player_ent={origin=_plyr.pos,mins={-16,-16,0},maxs={16,16,48}}
-  locate_ent(world.get_map(),player_ent)
+  locate_ent(player_ent)
   love.graphics.setColor(0,1,0)
   draw_map(world.get_map())
 
+
+  love.graphics.setColor(0.1,0.8,0.1)
   for i=2,#_entities do
-    love.graphics.setColor(0.1,0.8,0.1)
-    --draw_entity(_entities[i])  
+    draw_entity(_entities[i])  
   end
+
   love.graphics.setColor(0,1,0)
   draw_entity(player_ent,true)
+
   -- reset colors
   love.graphics.setColor(1,1,1)
+
 
   -- any on screen message?
   if _msg then
@@ -553,23 +559,21 @@ function love.draw()
 end
 
 function draw_entity(ent,fill)
-  local hw,hh=480/2,270/2
   local mins,maxs=v_add(ent.origin,ent.mins),v_add(ent.origin,ent.maxs)
   love.graphics.rectangle(
     fill and "fill" or "line",
-    hw + _debug_scale * mins[1],
-    hh + _debug_scale * mins[2],
+    _debug_scale * (mins[1]+_debug_x),
+    _debug_scale * (mins[2]+_debug_y),
     _debug_scale * (maxs[1]-mins[1]),
     _debug_scale * (maxs[2]-mins[2]))
 end
 
 function draw_map(cell)
   local mins,maxs=cell.mins,cell.maxs
-  local hw,hh=480/2,270/2
   love.graphics.rectangle(
     "line",
-    hw + _debug_scale * mins[1],
-    hh + _debug_scale * mins[2],
+    _debug_scale * (mins[1]+_debug_x),
+    _debug_scale * (mins[2]+_debug_y),
     _debug_scale * (maxs[1]-mins[1]),
     _debug_scale * (maxs[2]-mins[2]))
 
@@ -581,38 +585,15 @@ function draw_map(cell)
   end
 end
 
-function locate_ent(cell, ent)
-  if not cell then
-    return
-  end
-
+function locate_ent(ent)
   local mins,maxs=v_add(ent.origin,ent.mins),v_add(ent.origin,ent.maxs)
-  local sides = cell.classify(mins, maxs)
-  --[[
-  if sides==3 or cell.depth==4 then
-    -- straddling (or end cell)
-    local mins,maxs=cell.mins,cell.maxs
-    local hw,hh=480/2,270/2
-    love.graphics.setColor(0.5,0.5,0.5)
-    love.graphics.rectangle(
-      "fill",
-      hw + _debug_scale * mins[1],
-      hh + _debug_scale * mins[2],
-      _debug_scale * (maxs[1]-mins[1]),
-      _debug_scale * (maxs[2]-mins[2]))
-
-    return
-  end
-  ]]
+  local ents=world.touches(mins,maxs)
 
   -- draw
   love.graphics.setColor(0.8,0,0)
-  for e,_ in pairs(cell.ents) do
+  for _,e in pairs(ents) do
     draw_entity(e,true)
   end
-
-  local side=band(sides,2)~=0
-  locate_ent(cell[side], ent)
 end
 
 -- camera
@@ -1074,11 +1055,17 @@ function make_player(pos,a)
   local angle,dangle,velocity={0,0,a},{0,0,0},{0,0,0}
   local fire_ttl=0
   local on_ground=false
+  local mins={-16,-16,0}
+  local maxs={16,16,48}
 
   -- start above floor
   pos=v_add(pos,{0,0,1})
   return {
     pos=pos,
+    mins=mins,    
+    maxs=maxs,
+    absmins=v_add(pos,mins),
+    absmaxs=v_add(pos,maxs),  
     m=make_m_from_euler(unpack(angle)),
     update=function(self)
       -- damping      
@@ -1121,9 +1108,10 @@ function make_player(pos,a)
         -- avoid touching the same non-solid multiple times (ex: triggers)
         local triggers = {}
         -- check current to target pos
+        local ents=world.touches(v_add(self.absmins,{-256,-256,-256}), v_add(self.absmaxs,{256,256,256}))
+        add(ents,1,_entities[1])
         for i=1,5 do
-          local hits,ents={t=32000},world.touches(v_add(next_pos,{-16,-16,0}), v_add(next_pos,{16,16,48}))
-          add(ents,1,_entities[1])
+          local hits={t=32000}
           -- entities touched (but not blocking)
           for k=1,#ents do
             local ent = ents[k]
@@ -1137,7 +1125,7 @@ function make_player(pos,a)
               if model and not ent.SOLID_NOT then
                 local tmphits={} 
                 -- convert into model's space (mostly zero except moving brushes)
-                if hitscan(model.hulls[2],v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+                if hitscan(model.hulls[2],m_inv_x_v(ent.m,self.pos),m_inv_x_v(ent.m,next_pos),tmphits) and tmphits.n and tmphits.t<hits.t then
                   hits=tmphits
                   hitent=ent
                 end
@@ -1190,6 +1178,8 @@ function make_player(pos,a)
             make_m_from_euler(0,0,angle[3]),
             make_m_from_euler(angle[1],0,0)),
             make_m_from_euler(0,angle[2],0))
+      self.absmins=v_add(self.pos,self.mins)
+      self.absmaxs=v_add(self.pos,self.maxs)
     end
   } 
 end
