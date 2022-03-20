@@ -315,7 +315,6 @@ function hitscan(node,p0,p1,out)
       return
     end
   end
-
   local dist,node_dist=plane_dot1(node.plane,p0)
   local otherdist=plane_dot1(node.plane,p1)
   local side,otherside=dist>node_dist,otherdist>node_dist
@@ -1051,6 +1050,11 @@ function make_cam()
   }
 end
 
+function make_hull(ent)
+
+end
+
+
 function make_player(pos,a)
   local angle,dangle,velocity={0,0,a},{0,0,0},{0,0,0}
   local fire_ttl=0
@@ -1125,7 +1129,14 @@ function make_player(pos,a)
               if model and not ent.SOLID_NOT then
                 local tmphits={} 
                 -- convert into model's space (mostly zero except moving brushes)
-                if hitscan(model.hulls[2],m_inv_x_v(ent.m,self.pos),m_inv_x_v(ent.m,next_pos),tmphits) and tmphits.n and tmphits.t<hits.t then
+                local hull
+                if ent.SOLID_SLIDEBOX then
+                  -- don't shift - hit is computed in ent space
+                  hull = modelfs.make_hull(ent.mins,ent.maxs)
+                else
+                  hull = model.hulls[2]
+                end
+                if hitscan(hull,v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
                   hits=tmphits
                   hitent=ent
                 end

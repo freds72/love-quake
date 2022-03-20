@@ -12,7 +12,8 @@ local main=function(context)
         "items",
         "misc",
         "shambler",
-        "zombie"
+        "zombie",
+        "soldier"
     }
 
     -- global functions

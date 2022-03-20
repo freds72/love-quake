@@ -312,6 +312,18 @@ local function unpack_vert(v,dst)
     return dst
 end
 
+-- shared content leaves
+local content_types={}
+for i=1,6 do
+    -- -1: ordinary leaf
+    -- -2: the leaf is entirely inside a solid (nothing is displayed).
+    -- -3: Water, the vision is troubled.
+    -- -4: Slime, green acid that hurts the player.
+    -- -5: Lava, vision turns red and the player is badly hurt.   
+    -- -6: sky 
+    add(content_types,{contents=-i})
+end  
+
 local function unpack_map(bsp)
     local plane_offset = #_planes + 1
 
@@ -488,17 +500,6 @@ local function unpack_map(bsp)
         attach_node(false,band(node.flags,0x2)~=0)
     end
     
-    -- shared content leaves
-    local content_types={}
-    for i=1,6 do
-        -- -1: ordinary leaf
-        -- -2: the leaf is entirely inside a solid (nothing is displayed).
-        -- -3: Water, the vision is troubled.
-        -- -4: Slime, green acid that hurts the player.
-        -- -5: Lava, vision turns red and the player is badly hurt.   
-        -- -6: sky 
-        add(content_types,{contents=-i})
-    end  
     -- unpack "clipnodes" (collision hulls)
     unpack_array(function(node)
         local clipnode={
@@ -805,6 +806,58 @@ function modelfs.load(root_path, name)
         _model_cache[name] = model
     end
     return model
+end
+
+-- temp hull for slidebox
+local function init_hull()
+    local box_clipnodes={}
+    for i=0,5 do
+        local side,type = band(i,1)==0,shr(i,1)
+        local plane={
+            type = type,
+            normal = {[0]=0,0,0}
+        }
+        -- set vector
+        plane.normal[type]=1
+        -- register
+        add(_planes,plane)
+
+        local clipnode={
+            plane = #_planes
+        }
+        clipnode[side] = -1
+        if i ~= 5 then
+            clipnode[not side] = i + 1
+        else
+            clipnode[not side] = -2
+        end
+        -- register
+        box_clipnodes[i] = clipnode
+    end
+
+    -- attach
+    for _,node in pairs(box_clipnodes) do
+        local function attach_node(side)
+            local id=node[side]
+            node[side]=id<0 and content_types[-id] or box_clipnodes[id]
+        end
+        attach_node(true)
+        attach_node(false)
+    end
+    return box_clipnodes
+end
+
+local _box_hull=init_hull()
+
+function modelfs.make_hull(mins,maxs)
+	_planes[_box_hull[0].plane].dist = maxs[1]
+	_planes[_box_hull[1].plane].dist = mins[1]
+	_planes[_box_hull[2].plane].dist = maxs[2]
+	_planes[_box_hull[3].plane].dist = mins[2]
+	_planes[_box_hull[4].plane].dist = maxs[3]
+	_planes[_box_hull[5].plane].dist = mins[3]
+
+    return _box_hull[0]
 end
 
 return modelfs

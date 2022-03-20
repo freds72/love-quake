@@ -1,4 +1,4 @@
-local misc=function(progs)
+local zombie=function(progs)
 
     -- p8 compat
     local band=bit.band
@@ -31,4 +31,4 @@ local misc=function(progs)
         end
     end
 end
-return misc
+return zombie
