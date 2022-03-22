@@ -45,8 +45,9 @@ local subs=function(progs)
         -- set nextthink to trigger a think when dest is reached
         self.nextthink = progs:time() + traveltime
         self.think = function(self)
-            self.origin = v_clone(tdest)
-            self.velocity = nil            
+            progs:setorigin(self,tdest)
+            self.velocity = nil   
+            -- chain additional logic?         
             if func then
                 func()
             end

@@ -1,4 +1,5 @@
 local renderer={}
+
 local ffi=require 'ffi'
 
 -- p8
@@ -383,6 +384,7 @@ function polyfill(p,np,c)
 end
 
 function polytex(p,np,sky)
+	profiler.push("polytex")
 	local tline=sky and mode7 or tline3d
 
 	local miny,maxy,mini=math.huge,-math.huge
@@ -480,6 +482,7 @@ function polytex(p,np,sky)
 		rv=rv+rdv
 		rw=rw+rdw
 	end
+	profiler.pop("polytex")
 end
 
 return renderer

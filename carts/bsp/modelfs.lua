@@ -446,9 +446,12 @@ local function unpack_map(bsp)
     unpack_node_pvs(bsp.nodes[main_model.headnode[0]], main_model, vis_cache)
 
     unpack_array(function(leaf, i)
+        local mins,maxs=leaf.mins,leaf.maxs
         local l={
             contents = leaf.contents,
-            pvs = vis_cache[i]
+            pvs = vis_cache[i],
+            mins={mins[0],mins[1],mins[2]},
+            maxs={maxs[0],maxs[1],maxs[2]}
         }
         for i=0,leaf.nummarksurfaces-1 do
         -- de-ref face
@@ -458,8 +461,11 @@ local function unpack_map(bsp)
     end, bsp.leaves)
 
     unpack_array(function(node)
+        local mins,maxs=node.mins,node.maxs
         local n={
-        plane=node.planenum + plane_offset
+            plane=node.planenum + plane_offset,
+            mins={mins[0],mins[1],mins[2]},
+            maxs={maxs[0],maxs[1],maxs[2]}
         }
         local flags = 0
         for i=0,1 do

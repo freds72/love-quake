@@ -1,3 +1,5 @@
+PROF_CAPTURE = false
+profiler = require("jprof")
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
 local modelfs = require( "modelfs" )
@@ -27,6 +29,7 @@ local function mid(x, a, b)
 end
 
 local scale=2
+local _memory_thinktime=-1
 
 -- game globals
 local velocity,dangle,angle,pos={0,0,0},{0,0,0},{0,0,0}
@@ -205,6 +208,14 @@ function love.load(args)
         world.register(ent)
       end
     end,
+    setorigin=function(self,ent,pos)
+      ent.origin = v_clone(pos)
+      ent.absmins=v_add(ent.origin,ent.mins)
+      ent.absmaxs=v_add(ent.origin,ent.maxs)
+      m_set_pos(ent.m,ent.origin)
+      -- 
+      world.register(ent)
+    end,
     time=function()
       return love.frame / 60
     end,
@@ -268,10 +279,9 @@ function love.load(args)
   ]]
   _cam = make_cam()
   
-  grab_mouse()
-  
-  -- love.profiler = require('profile') 
-  -- love.profiler.start()
+  --if not PROF_CAPTURE then    
+    grab_mouse()
+  --end
 end
 
 function find_sub_sector(node,pos)
@@ -370,9 +380,12 @@ function grab_mouse()
   love.mouse.setVisible(false)
 end
 
+_debug_display = false
 function love.keypressed(key)
   if key == "tab" then
-    grab_mouse()
+    _debug_display = not _debug_display
+  elseif key == "escape" then
+    love.event.quit(0)
   end
 end
 
@@ -383,6 +396,11 @@ end
 
 love.frame = 0
 function love.update(dt)
+  -- collectgarbage("stop")
+  -- collectgarbage("collect")
+  profiler.push("frame")
+
+  profiler.push("update")
   -- any thinking to do?
   for i=1,#_entities do
     local ent = _entities[i]
@@ -391,6 +409,8 @@ function love.update(dt)
       -- todo: physics...
       -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
       ent.origin = v_add(ent.origin, ent.velocity, 1/60)
+      -- link to world
+      world.register(ent)
     end
 
     if ent.nextthink and ent.nextthink<love.frame/60 and ent.think then
@@ -419,18 +439,14 @@ function love.update(dt)
 
   love.frame = love.frame + 1
 
-  if _profiler_enabled and love.frame%2 == 0 then
-    print(love.profiler.report(20))
-    love.profiler.reset()
-  end
+  profiler.pop("update")
 end
 
 local visframe,prev_leaf=0
 function love.draw()
-  love.graphics.setColor(1,1,1)
+  profiler.push("draw")
   -- cls
-  framebuffer.fill(0)
-  
+  -- framebuffer.fill(0)
   start_frame(_backbuffer)
 	local n=m_x_n(_cam.m,{0,0,-1})
 	local n0=m_x_v(_cam.m,{0,0,2048+_cam.pos[3]})
@@ -439,13 +455,14 @@ function love.draw()
   push_param("t", love.frame / 60)
   push_param("z", _cam.pos[3])
   push_viewmatrix(_cam.m)
-
+  
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.hulls[1],_world_model.leaves)
   -- world entity
   _cam:draw_model(_entities[1],_world_model.textures,_world_model.verts,leaves,1,#leaves)
 
   local visents = _cam:collect_entities(_entities)
+
   for i=1,#visents do
     local ent=visents[i]
     local m = ent.model
@@ -454,16 +471,17 @@ function love.draw()
       local res = ent.resources
       _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
     else
+      --[[
       _cam:draw_aliasmodel(
         ent, 
         m,
         ent.skin,
         ent.frame)        
+      ]]
     end
   end
-
   end_frame()
-
+  profiler.pop("draw")
   --
   -- local model = _flame.alias
   -- local skin = model.skins[1]
@@ -528,35 +546,53 @@ function love.draw()
   -- note: text is written using Love2d api - mush be done after direct buffer draw
   local current_leaf=find_sub_sector(_level.hulls[1],{[0]=_plyr.pos[1],_plyr.pos[2],_plyr.pos[3]})
   
-  _font.print("fps:" .. love.timer.getFPS().."\n#ents:"..#visents.."\ncontent:"..(current_leaf and current_leaf.contents or "n/a"), 2, 2 )
-
-  -- draw 2d map
-  local map = world.get_map()
-  _debug_scale = 2*270/(map.maxs[2]-map.mins[2])
-  _debug_x,_debug_y=-map.mins[1],-map.mins[2]
-  local player_ent={origin=_plyr.pos,mins={-16,-16,0},maxs={16,16,48}}
-  locate_ent(player_ent)
-  love.graphics.setColor(0,1,0)
-  draw_map(world.get_map())
-
-
-  love.graphics.setColor(0.1,0.8,0.1)
-  for i=2,#_entities do
-    draw_entity(_entities[i])  
+  if _memory_thinktime<love.frame then
+    _memory = flr(collectgarbage("count"))
+    _memory_thinktime = love.frame + 30
   end
+  _font.print("RAM:\b".._memory.."\bkb\nFPS:" .. love.timer.getFPS().."\nleaves:"..#leaves.."\n#ents:"..(#visents).."\ncontent:"..(current_leaf and current_leaf.contents or "n/a"), 2, 2 )
 
-  love.graphics.setColor(0,1,0)
-  draw_entity(player_ent,true)
+  if _debug_display then
+    -- draw 2d map
+    local map = world.get_map()
+    _debug_scale = 2*270/(map.maxs[2]-map.mins[2])
+    _debug_x,_debug_y=-map.mins[1],-map.mins[2]
+    local player_ent={origin=_plyr.pos,mins={-16,-16,0},maxs={16,16,48}}
+    locate_ent(player_ent)
+    love.graphics.setColor(0,1,0)
+    draw_map(world.get_map())
 
-  -- reset colors
-  love.graphics.setColor(1,1,1)
+    -- all entities
+    love.graphics.setColor(0.25,0.25,0.25)
+    for i=2,#_entities do
+      draw_entity(_entities[i])  
+    end
 
+    -- "active" entities
+    love.graphics.setColor(0.0,0.8,0.1)
+    local ents = world.touches(v_add(_plyr.absmins, {-256,-256,-256}),v_add(_plyr.absmaxs, {256,256,256}))
+    for i=1,#ents do
+      draw_entity(ents[i])  
+    end
+
+    love.graphics.setColor(0,1,0)
+    draw_entity(player_ent,true)
+
+    -- reset colors
+    love.graphics.setColor(1,1,1)
+  end
 
   -- any on screen message?
   if _msg then
     local w,h = _font.size(_msg)
     _font.print(_msg, 480 - w/2, 270/2 - h/2)
   end
+  -- collectgarbage()
+  profiler.pop("frame")
+end
+
+function love.quit()
+  profiler.write("prof.mpack")
 end
 
 function draw_entity(ent,fill)
@@ -793,21 +829,54 @@ function make_cam()
   end
 
   -- collect bps leaves in order
-  local function collect_bsp(node,pos)
-    local function collect_leaf(side)
-      local child=node[side]
-      if child and child.visframe==visframe then
-        if child.contents then          
-          visleaves[#visleaves+1]=child
-        else
-          collect_bsp(child,pos)
-        end
+  local collect_bsp
+  local function collect_leaf(child,pos)
+    if child and child.visframe==visframe then
+      if child.contents then          
+        visleaves[#visleaves+1]=child
+      else
+        collect_bsp(child,pos)
       end
-    end  
+    end
+  end    
+  collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(side)
-    collect_leaf(not side)
+    collect_leaf(node[side],pos)
+    collect_leaf(node[not side],pos)
   end
+
+  local v_cache={
+    cache={},
+    init=function(self,m,base)
+        self.m = m
+        self.base=base or 1
+        self.cache={}
+    end,
+    transform=function(self,v)
+      profiler.push("transform")
+      local a=self.cache[v]
+      if not a then
+        local base=self.base
+        local m,code,x,y,z=self.m,0,v[base+0],v[base+1],v[base+2]
+        local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
+
+        -- znear=8
+        if az<8 then code=2 end
+        --if az>2048 then code|=1 end
+        if ax>az then code = code + 4
+        elseif ax<-az then code = code + 8 end
+        if ay>az then code = code + 16
+        elseif ay<-az then code = code + 32 end
+        -- save world space coords for clipping
+        -- to screen space
+        local w=1/az
+        a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code,u=0,v=0}
+        self.cache[v]=a   
+      end
+      profiler.pop("transform")       
+      return a
+    end
+  }
 
 	return {
 		pos={0,0,0},    
@@ -832,6 +901,34 @@ function make_cam()
       local w=1/pos[2]
       return 480/2+270*pos[1]*w,270/2-270*pos[3]*w,w
     end,
+    -- returns true if bounding box (mins,maxs) is visible
+    is_visible=function(self,mins,maxs)
+      profiler.push("is_visible")
+      local m,outcode=self.m,0xffff
+      local m1,m5,m9,m13,m2,m6,m10,m14,m3,m7,m11,m15=m[1],m[5],m[9],m[13],m[2],m[6],m[10],m[14],m[3],m[7],m[11],m[15]
+      for i=0,7 do
+        local x,y,z=     
+          band(i,1)~=0 and maxs[1] or mins[1],
+          band(i,2)~=0 and maxs[2] or mins[2],
+          band(i,4)~=0 and maxs[3] or mins[3]    
+        local code = 0
+        local ax,az,ay=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
+    
+        -- znear=8
+        if az<8 then code=2 end
+        --if az>2048 then code|=1 end
+        if ax>az then code = code + 4
+        elseif ax<-az then code = code + 8 end
+        if ay>az then code = code + 16
+        elseif ay<-az then code = code + 32 end
+        outcode = band(outcode, code)
+        if outcode == 0 then
+          profiler.pop("is_visible")
+          return true
+        end
+      end
+      profiler.pop("is_visible")
+    end,
     collect_entities=function(self,entities)
       local ents={}
       for i=2,#entities do
@@ -839,8 +936,9 @@ function make_cam()
         if not ent.DRAW_NOT and ent.nodes then
           -- find if touching a visible leaf?
           for node,_ in pairs(ent.nodes) do
-            if node.visframe==visframe then
+            if node.visframe==visframe then              
               add(ents,ent)
+              -- break at first visible node
               break
             end
           end
@@ -849,6 +947,7 @@ function make_cam()
       return ents
     end,
     collect_leaves=function(self,root,leaves)
+      profiler.push("collect_leaves")
       local pos={[0]=self.pos[1],self.pos[2],self.pos[3]}
       local current_leaf=find_sub_sector(root,pos)
       
@@ -869,6 +968,7 @@ function make_cam()
             if band(bits,shl(0x1,j))~=0 then
               local leaf=leaves[bor(i,j)+2]
               -- tag visible parents (if not already tagged)
+              -- check bounding box
               while leaf and leaf.visframe~=visframe do
                 leaf.visframe=visframe
                 leaf=leaf.parent
@@ -879,48 +979,35 @@ function make_cam()
       end
       visleaves={}
       collect_bsp(root,pos)
+      profiler.pop("collect_leaves")
       return visleaves
     end,  
     draw_model=function(self,ent,textures,verts,leaves,lstart,lend)
-      local v_cache_class={
-        __index=function(self,v)
-          local m,code,x,y,z=self.m,0,v[0],v[1],v[2]
-          local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
+      if not self:is_visible(ent.absmins,ent.absmaxs) then
+        return 
+      end
 
-          -- znear=8
-          if az<8 then code=2 end
-          --if az>2048 then code|=1 end
-          if ax>az then code = code + 4
-          elseif ax<-az then code = code + 8 end
-          if ay>az then code = code + 16
-          elseif ay<-az then code = code + 32 end
-          -- save world space coords for clipping
-          -- to screen space
-          local w=1/az
-          local a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code}
-          self[v]=a          
-          return a
-        end
-      }
-
+      profiler.push("draw_model")
       local m=self.m
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
-      local v_cache=setmetatable({m=m_x_m(m,ent.m)},v_cache_class)
+      v_cache:init(m_x_m(m,ent.m),0)
       local cam_pos=v_add(self.pos,ent.origin,-1)
       cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
-      local f_cache={}
-
+      local poly,styles,bright_style={},{0,0,0,0},{0.5,0.5,0.5,0.5}
+      
       for i=lstart,lend do
         local leaf=leaves[i]
-        for j,face in ipairs(leaf) do
-          if not f_cache[face] and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
-            f_cache[face]=true
-            local outcode,clipcode,poly,uvs=0xffff,0,{},{}
+        for j=1,#leaf do
+          local face=leaf[j]
+          if not face.visframe~=visframe and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
+            -- mark visited
+            face.visframe=visframe            
+            local outcode,clipcode=0xffff,0            
             local texinfo = face.texinfo
             local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
-            for k,vi in pairs(face.verts) do
+            for k,vi in ipairs(face.verts) do
               local v=verts[vi]
-              local a=v_cache[v]
+              local a=v_cache:transform(v)
               outcode=band(outcode,a.outcode)
               clipcode=clipcode + band(a.outcode,2)
               -- compute uvs
@@ -931,93 +1018,85 @@ function make_cam()
               end
               poly[k] = a
             end
+            
             if outcode==0 then
+              local n=#face.verts
               if clipcode>0 then
-                poly = z_poly_clip(poly,#poly,true)
+                poly,n = z_poly_clip(poly,n,true)
               end
-              if #poly>2 then
+              if n>2 then
                 local texture = textures[texinfo.miptex]                
-                if texture then                  
-                  -- animated?
-                  if texture.sequence then
-                    -- texture animation id are between 0-9 (lua counts between 0-8)
-                    local frames = ent.sequence==2 and texture.sequence.alt or texture.sequence.main
-                    local frame = flr(love.frame/15) % (#frames+1)
-                    texture = frames[frame]
-                  end
-                  local mip=3-mid(flr(2048*maxw),0,3)
-                  push_texture(texture,mip)
-                  if texture.bright then
-                    push_baselight({0.5,0.5,0.5,0.5})
-                  else
-                    local styles={0,0,0,0}
-                    for i,style in pairs(face.lightstyles) do
-                      local lightstyle=_light_styles[style]  
-                      if lightstyle then
-                        local frame = flr(love.frame/15) % #lightstyle
-                        --print("light style @"..lightstyle.."["..frame.."]")
-                        styles[i] = lightstyle[frame + 1]
-                      end
-                    end
-                    push_baselight(styles)
-                  end
-                  if face.lightofs then
-                      push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
-                  end                  
-                  
-                  polytex(poly,#poly,texture.sky)    
-                  push_lightmap()     
-                else
-                  polyfill(poly,#poly,0)
+                -- animated?
+                if texture.sequence then
+                  -- texture animation id are between 0-9 (lua counts between 0-8)
+                  local frames = ent.sequence==2 and texture.sequence.alt or texture.sequence.main
+                  local frame = flr(love.frame/15) % (#frames+1)
+                  texture = frames[frame]
                 end
+                local mip=3-mid(flr(2048*maxw),0,3)
+                push_texture(texture,mip)
+                if texture.bright then
+                  push_baselight(bright_style)
+                else
+                  styles[1]=0
+                  styles[2]=0
+                  styles[3]=0
+                  styles[4]=0
+                  for i,style in pairs(face.lightstyles) do
+                    local lightstyle=_light_styles[style]  
+                    if lightstyle then
+                      local frame = flr(love.frame/15) % #lightstyle
+                      --print("light style @"..lightstyle.."["..frame.."]")
+                      styles[i] = lightstyle[frame + 1]
+                    end
+                  end
+                  push_baselight(styles)
+                end
+                if face.lightofs then
+                    push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
+                end                  
+                polytex(poly,n,texture.sky)    
+                push_lightmap()     
               end
             end
           end
         end
-      end    
+      end
+      profiler.pop("draw_model")
     end,
-    draw_aliasmodel=function(self,ent,model,skin,frame)      
+    draw_aliasmodel=function(self,ent,model,skin,frame_name)      
+      -- check bounding box
+      if not self:is_visible(ent.absmins,ent.absmaxs) then
+        return
+      end
+
+      profiler.push("draw_aliasmodel")
       local skin = model.skins[skin]
-      local frame = model.frames[frame]
+      local frame = model.frames[frame_name]
       local uvs = model.uvs
       local faces = model.faces
       -- positions + normals are in the frame
-      local verts, normals = frame.verts,frame.normals
+      local verts, normals = frame.verts, frame.normals
       
-      local v_cache_class={
-        __index=function(self,vi)
-          local v=verts[vi]
-          local m,code,x,y,z=self.m,0,v[1],v[2],v[3]
-          local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
-
-          -- znear=8
-          if az<8 then code=2 end
-          --if az>2048 then code|=1 end
-          if ax>az then code = code + 4
-          elseif ax<-az then code = code + 8 end
-          if ay>az then code = code + 16
-          elseif ay<-az then code = code + 32 end
-          -- save world space coords for clipping
-          -- to screen space
-          local w=1/az
-          local a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code}
-          self[vi]=a          
-          return a
-        end
-      }
-
-      local m=self.m
-      local v_cache,cam_pos=setmetatable({m=m_x_m(m,ent.m)},v_cache_class),v_add(self.pos,ent.origin,-1)
+      v_cache:init(m_x_m(self.m,ent.m))
+      local cam_pos=v_add(self.pos,ent.origin,-1)
 
       -- transform light vector into model space
       local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
+      local poly,baselight={},{1}
+
+      -- todo: gouraud
+      push_baselight(baselight)
+      push_texture(skin,0)      
 
       for i=1,#faces,4 do    
         -- vertex index are "constants" (eg. from model)
         local is_front=faces[i]
-        local outcode,clipcode,poly=0xffff,0,{}
-        for k,vi in pairs({faces[i+1],faces[i+2],faces[i+3]}) do
-          local a=v_cache[vi]
+        local outcode,clipcode=0xffff,0
+        -- read vertex references
+        for k=1,3 do
+          local vi=faces[i+k]
+          local a=v_cache:transform(verts[vi])
           outcode=band(outcode,a.outcode)
           clipcode=clipcode + band(a.outcode,2)                    
           -- compute uvs
@@ -1033,29 +1112,24 @@ function make_cam()
         end
         if outcode==0 then
           -- ccw?
-          local ax,ay=poly[2].x-poly[1].x,poly[2].y-poly[1].y
-          local bx,by=poly[2].x-poly[3].x,poly[2].y-poly[3].y
+          local base=poly[2]
+          local ax,ay=base.x-poly[1].x,base.y-poly[1].y
+          local bx,by=base.x-poly[3].x,base.y-poly[3].y
           if ax*by - ay*bx<=0 then
+            local n=3
             if clipcode>0 then
-              poly = z_poly_clip(poly,#poly,true)
+              poly,n = z_poly_clip(poly,#poly,true)
             end
-            if #poly>2 then
-              -- todo: gouraud
-              push_baselight({1})
-              push_texture(skin,0)
-              polytex(poly,#poly)    
+            if n>2 then
+              polytex(poly,n)    
             end
           end
         end
       end
+      profiler.pop("draw_aliasmodel")
     end  
   }
 end
-
-function make_hull(ent)
-
-end
-
 
 function make_player(pos,a)
   local angle,dangle,velocity={0,0,a},{0,0,0},{0,0,0}

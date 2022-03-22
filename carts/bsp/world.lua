@@ -124,9 +124,6 @@ function world.move(ent)
     end
 end
 
-function world.touch(ent)
-end
-
 function world.unregister(ent)
     -- nothing to unregister
     if ent.nodes then
@@ -207,6 +204,9 @@ end
 
 
 function world.register(ent)
+    -- unlink first
+    world.unregister(ent)
+
     if not ent.DRAW_NOT then
         local mins,maxs=ent.absmins,ent.absmaxs
         local c={
@@ -225,34 +225,37 @@ function world.register(ent)
 end
 
 -- returns all entities touching the given absolute box
-function world.touches(mins,maxs)
-    local ents = {}
-    local x0,y0,z0,x1,y1,z1=mins[1],mins[2],mins[3],maxs[1],maxs[2],maxs[3]
-    local function touches_map(cell)
+local touch_query={ 
+    ents = {},
+    find=function(self,cell,mins,maxs)
         if not cell then
             return
         end
         -- collect current cell items
+        local x0,y0,z0,x1,y1,z1=mins[1],mins[2],mins[3],maxs[1],maxs[2],maxs[3]    
         for e,_ in pairs(cell.ents) do
             -- touching?
             if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
-               y0<=e.absmaxs[2] and y1>=e.absmins[2] and
-               z0<=e.absmaxs[3] and z1>=e.absmins[3] then               
-                add(ents,e)
+            y0<=e.absmaxs[2] and y1>=e.absmins[2] and
+            z0<=e.absmaxs[3] and z1>=e.absmins[3] then               
+                add(self.ents,e)
             end
         end
-    
+
         -- visit touching cells
         local sides = cell.classify(mins, maxs)
         if band(sides,1)~=0 then
-            touches_map(cell[false])
+            self:find(cell[false],mins,maxs)
         end
         if band(sides,2)~=0 then
-            touches_map(cell[true])
+            self:find(cell[true],mins,maxs)
         end
     end
-    touches_map(_map)
-    return ents
+}
+function world.touches(mins,maxs)
+    touch_query.ents = {}
+    touch_query:find(_map,mins,maxs)
+    return touch_query.ents
 end
 
 function world.get_map()

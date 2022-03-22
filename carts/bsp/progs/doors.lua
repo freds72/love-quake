@@ -25,13 +25,18 @@ local doors=function(progs)
         end
 
         self.SOLID_BSP = true
-        self.MOVETYPE_PUSH = true;
+        self.MOVETYPE_PUSH = true
+
         -- set size and link into world
-        progs:setmodel(self, self.model)
+        progs:setmodel(self, self.model)        
     end
 
     -- classname bindings
     progs.func_door=function(self)
+        -- constants
+        local DOOR_START_OPEN = 1
+        local DOOR_DONT_LINK = 4
+
         -- init entity
         init(self)
 
@@ -45,6 +50,12 @@ local doors=function(progs)
             self.movedir,
             abs(v_dot(self.movedir,self.size)) - self.lip)
 
+        -- starts open?
+        if band(self.spawnflags or 0,DOOR_START_OPEN)~=0 then
+            self.pos1,self.pos2=self.pos2,self.pos1
+            progs:setorigin(self,self.pos1)
+        end
+
         local linked_doors={}
 
         -- remote triggered doors don't need to be linked
@@ -57,11 +68,13 @@ local doors=function(progs)
                     return
                 end
                 local doors = progs:find(self, "classname", self.classname)
+                --local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
+                local mins,maxs=self.mins,self.maxs
                 for _,door in pairs(doors) do
-                    local mins,maxs=make_v(door.maxs,self.mins),make_v(self.maxs,door.mins)
+                    local mins,maxs=make_v(door.maxs,mins),make_v(maxs,door.mins)
                     if 
                         mins[1]<=0 and mins[2]<=0 and mins[3]<=0 and
-                        maxs[1]<=0 and maxs[2]<=0 and maxs[3]<=0 then
+                        maxs[1]>=0 and maxs[2]>=0 and maxs[3]>=0 then
                         -- overlap
                         door.owner = self
                         add(linked_doors, door)
@@ -242,6 +255,8 @@ local doors=function(progs)
 
             fd_secret_use()
         end
+
+        self.use=fd_secret_use
     end
 end
 return doors
