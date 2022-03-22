@@ -11,17 +11,15 @@ local doors=function(progs)
         self.classname = "door"
 
         -- default values
-        if not self.speed then
-            self.speed = 100
-        end
-        if not self.wait then
-            self.wait = 3
-        end
-        if not self.lip then
-            self.lip = 8
-        end
-        if not self.dmg then
-            self.dmg = 2
+        local defaults={
+            spawnflags=0,
+            speed=100,
+            wait=3,
+            lip=8,
+            dmg=2
+        }
+        for k,v in pairs(defaults) do
+            self[k] = self[k] or v
         end
 
         self.SOLID_BSP = true
