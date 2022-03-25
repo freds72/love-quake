@@ -16,34 +16,47 @@ local _backbuffer
 function start_frame(buf)
 	_backbuffer = buf
 end
+-- "vbo" cache
+local _pool=require("pool")(5,2500)
 local _spans={}
-function end_frame()
-	_spans={}
+function end_frame()	
+	-- used state
+	--print(_pool:stats())
+	-- reclaim all spans
+	_pool:reset()
+	--print(_pool:stats())
+	-- reset 
+	for k in pairs(_spans) do
+		_spans[k]=nil
+	end
 end
+
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
 	end
+
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
-		_spans[y]={x0=x0,x1=x1,w=w,dw=dw}
+		_spans[y]=_pool:pop(x0,x1,w,dw,-1)
 		return
 	end
-	while span do
-		local s0,s1=span.x0,span.x1
-		
+
+	while span>0 do		
+		local s0,s1=_pool[span],_pool[span+1]
+
 		if s0>x0 then
 			if s0>x1 then
 				-- nnnn
 				--       xxxxxx	
 				-- fully visible
 				fn(x0,y,x1,y,u,v,w,du,dv,dw)
-				local n={x0=x0,x1=x1,w=w,dw=dw,next=span}
+				local n=_pool:pop(x0,x1,w,dw,span)
 				if old then
 					-- chain to previous
-					old.next=n
+					_pool[old+4]=n
 				else
 					-- new first
 					_spans[y]=n
@@ -57,9 +70,9 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			local x2=s0-1
 			local dx=x2-x0
 			fn(x0,y,x2,y,u,v,w,du,dv,dw)
-			local n={x0=x0,x1=x2,w=w,dw=dw,next=span}
+			local n=_pool:pop(x0,x2,w,dw,span)
 			if old then 
-				old.next=n				
+				_pool[old+4]=n				
 			else
 				_spans[y]=n
 			end
@@ -78,21 +91,21 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			--     ??nnnn?
 			--     xxxxxxx	
 			-- totally hidden (or not!)
-			local dx,sdw=x0-s0+1,span.dw
-			local sw=span.w+dx*sdw		
+			local dx,sdw=x0-s0+1,_pool[span+3]
+			local sw=_pool[span+2]+dx*sdw		
 			
 			if sw-w<-0.00001 or (abs(sw-w)<0.00001 and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
 				-- insert (left) clipped existing span as a "new" span
 				if dx>0 then
-					local n={
-						x0=s0,
-						x1=x0-1,
-						w=span.w,
-						dw=sdw,
-						next=span}	
+					local n=_pool:pop(
+						s0,
+						x0-1,
+						_pool[span+2],
+						sdw,
+						span)
 					if old then
-						old.next=n
+						_pool[old+4]=n
 					else
 						_spans[y]=n
 					end
@@ -107,9 +120,9 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					x2=s1
 				end
 				fn(x0,y,x2,y,u,v,w,du,dv,dw)					
-				local n={x0=x0,x1=x2,w=w,dw=dw,next=span}
+				local n=_pool:pop(x0,x2,w,dw,span)
 				if old then 
-					old.next=n				
+					_pool[old+4]=n	
 				else
 					_spans[y]=n
 				end
@@ -117,11 +130,11 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				-- any remaining "right" from current span?
 				if s1-x1-1>=0 then
 					-- "shrink" current span
-					span.x0=x1+1
-					span.w=span.w+(x1+1-s0)*sdw
+					_pool[span]=x1+1
+					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
 				else
 					-- drop current span
-					n.next=span.next
+					_pool[n+4]=_pool[span+4]
 					span=n
 				end					
 			end
@@ -147,14 +160,14 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			-- continue + test against other spans
 		end
 		old=span	
-		span=span.next
+		span=_pool[span+4]
 ::continue::
 	end
 	-- new last?
 	if x1-x0>=0 then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans
-		old.next={x0=x0,x1=x1,w=w,dw=dw}
+		_pool[old+4]=_pool:pop(x0,x1,w,dw,-1)
 	end
 end
 
@@ -270,9 +283,9 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh
 		local coloridx=_texptr[s+t*_texw]
 		--if (x+y0)%2==0 then
-			_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
+		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
 		--else
-		--	_backbuffer[x+y0*480]=_palette[_colormap[_texscale*8+15]]
+		-- _backbuffer[x+y0*480]=_palette[_colormap[_texscale*8+15]]
 		--end
 		
 		u=u+du

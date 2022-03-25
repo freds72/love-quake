@@ -1,4 +1,4 @@
-PROF_CAPTURE = false
+PROF_CAPTURE = true
 profiler = require("jprof")
 local ffi=require 'ffi'
 local nfs = require( "nativefs" )
@@ -40,7 +40,7 @@ end
 
 function split(inputstr, sep)
   if sep == nil then
-          sep = "%s"
+    sep = "%s"
   end
   local t={}
   for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
@@ -91,6 +91,11 @@ end
 local _light_styles={}
 
 love.window.setMode(480 * scale, 270 * scale, {resizable=false, vsync=true, minwidth=480, minheight=270})
+
+if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
+  _dont_grab_mouse = true
+  require("lldebugger").start()
+end
 
 function love.load(args)
   framebuffer = fb(480, 270)
@@ -279,9 +284,25 @@ function love.load(args)
   ]]
   _cam = make_cam()
   
-  --if not PROF_CAPTURE then    
+  -- if not PROF_CAPTURE then    
+  if not _dont_grab_mouse then 
     grab_mouse()
+  end
   --end
+
+  -- collectgarbage("stop")
+  local sus={
+    ["pool.lua"]=true,
+    ["renderer.lua"]=true
+  }
+  function trace (event, line)
+    local s = debug.getinfo(2).short_src
+    if sus[s] then
+      print(s .. ":" .. line)
+    end
+  end
+  
+  --debug.sethook(trace, "l")
 end
 
 function find_sub_sector(node,pos)
@@ -396,7 +417,6 @@ end
 
 love.frame = 0
 function love.update(dt)
-  -- collectgarbage("stop")
   -- collectgarbage("collect")
   profiler.push("frame")
 
@@ -446,7 +466,8 @@ local visframe,prev_leaf=0
 function love.draw()
   profiler.push("draw")
   -- cls
-  -- framebuffer.fill(0)
+  framebuffer.fill(0)
+
   start_frame(_backbuffer)
 	local n=m_x_n(_cam.m,{0,0,-1})
 	local n0=m_x_v(_cam.m,{0,0,2048+_cam.pos[3]})
@@ -459,7 +480,9 @@ function love.draw()
   -- refresh visible set
   local leaves = _cam:collect_leaves(_level.hulls[1],_world_model.leaves)
   -- world entity
+  -- local m0=collectgarbage("count")
   _cam:draw_model(_entities[1],_world_model.textures,_world_model.verts,leaves,1,#leaves)
+  --print(collectgarbage("count")-m0.."kb")
 
   local visents = _cam:collect_entities(_entities)
 
@@ -471,13 +494,11 @@ function love.draw()
       local res = ent.resources
       _cam:draw_model(ent,res.textures,res.verts,res.leaves,m.leaf_start,m.leaf_end)
     else
-      --[[
       _cam:draw_aliasmodel(
         ent, 
         m,
         ent.skin,
-        ent.frame)        
-      ]]
+        ent.frame)              
     end
   end
   end_frame()
@@ -587,6 +608,7 @@ function love.draw()
     local w,h = _font.size(_msg)
     _font.print(_msg, 480 - w/2, 270/2 - h/2)
   end
+  
   -- collectgarbage()
   profiler.pop("frame")
 end
@@ -850,7 +872,10 @@ function make_cam()
     init=function(self,m,base)
         self.m = m
         self.base=base or 1
-        self.cache={}
+        local cache=self.cache
+        for k in pairs(cache) do
+          cache[k]=nil
+        end
     end,
     transform=function(self,v)
       profiler.push("transform")
@@ -994,7 +1019,6 @@ function make_cam()
       local cam_pos=v_add(self.pos,ent.origin,-1)
       cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
       local poly,styles,bright_style={},{0,0,0,0},{0.5,0.5,0.5,0.5}
-      
       for i=lstart,lend do
         local leaf=leaves[i]
         for j=1,#leaf do
@@ -1054,7 +1078,7 @@ function make_cam()
                 end
                 if face.lightofs then
                     push_lightmap(face.lightofs, face.width, face.height, face.umin, face.vmin)
-                end                  
+                end 
                 polytex(poly,n,texture.sky)    
                 push_lightmap()     
               end
