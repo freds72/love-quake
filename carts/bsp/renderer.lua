@@ -1,6 +1,7 @@
 local renderer={}
 
 local ffi=require 'ffi'
+local logging = require("logging")
 
 -- p8
 local abs,flr,ceil=math.abs,math.floor,math.ceil
@@ -396,15 +397,30 @@ function polyfill(p,np,c)
 	end
 end
 
+-- 
+local VBO_1 = 0
+local VBO_2 = 1
+local VBO_3 = 2
+local VBO_X = 3
+local VBO_Y = 4
+local VBO_W = 5
+local VBO_OUTCODE = 6
+local VBO_U = 7
+local VBO_V = 8
+local _vbo
+function push_vbo(vbo)
+	logging.debug("Assign VBO: "..vbo:stats())
+	_vbo = vbo
+end
+
 function polytex(p,np,sky)
 	profiler.push("polytex")
 	local tline=sky and mode7 or tline3d
-
+	local vbo = _vbo
 	local miny,maxy,mini=math.huge,-math.huge
 	-- find extent
 	for i=1,np do
-		local v=p[i]
-		local y=v.y
+		local y=vbo[p[i] + VBO_Y]
 		if y<miny then
       		mini,miny=i,y
     	end
@@ -429,17 +445,17 @@ function polytex(p,np,sky)
 			lj=lj+1
 			if lj>np then lj=1 end
 			local v1=p[lj]
-			local y0,y1=v0.y,v1.y
+			local y0,y1=vbo[v0+VBO_Y],vbo[v1+VBO_Y]
 			local dy=y1-y0
 			ly=flr(y1)
-			lx=v0.x
-			lw=v0.w
-			lu=v0.u*lw
-			lv=v0.v*lw
-			ldx=(v1.x-lx)/dy
-			ldu=(v1.u*v1.w-lu)/dy
-			ldv=(v1.v*v1.w-lv)/dy
-			ldw=(v1.w-lw)/dy
+			lx=vbo[v0 + VBO_X]
+			lw=vbo[v0 + VBO_W]
+			lu=vbo[v0 + VBO_U]*lw
+			lv=vbo[v0 + VBO_V]*lw
+			ldx=(vbo[v1 + VBO_X]-lx)/dy
+			ldu=(vbo[v1 + VBO_U] * vbo[v1 + VBO_W]-lu)/dy
+			ldv=(vbo[v1 + VBO_V] * vbo[v1 + VBO_W]-lv)/dy
+			ldw=(vbo[v1 + VBO_W]-lw)/dy
 			--sub-pixel correction
 			local cy=y-y0
 			lx=lx+cy*ldx
@@ -452,17 +468,17 @@ function polytex(p,np,sky)
 			rj=rj-1
 			if rj<1 then rj=np end
 			local v1=p[rj]
-			local y0,y1=v0.y,v1.y
+			local y0,y1=vbo[v0 + VBO_Y],vbo[v1 + VBO_Y]
 			local dy=y1-y0
 			ry=flr(y1)
-			rx=v0.x
-			rw=v0.w
-			ru=v0.u*rw
-			rv=v0.v*rw
-			rdx=(v1.x-rx)/dy
-			rdu=(v1.u*v1.w-ru)/dy
-			rdv=(v1.v*v1.w-rv)/dy
-			rdw=(v1.w-rw)/dy
+			rx=vbo[v0 + VBO_X]
+			rw=vbo[v0 + VBO_W]
+			ru=vbo[v0 + VBO_U]*rw
+			rv=vbo[v0 + VBO_V]*rw
+			rdx=(vbo[v1 + VBO_X]-rx)/dy
+			rdu=(vbo[v1 + VBO_U]*vbo[v1 + VBO_W]-ru)/dy
+			rdv=(vbo[v1 + VBO_V]*vbo[v1 + VBO_W]-rv)/dy
+			rdw=(vbo[v1 + VBO_W]-rw)/dy
 			--sub-pixel correction
 			local cy=y-y0
 			rx=rx+cy*rdx

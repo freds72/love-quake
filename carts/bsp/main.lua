@@ -1,11 +1,11 @@
 PROF_CAPTURE = true
 profiler = require("jprof")
-local ffi=require 'ffi'
+local ffi=require('ffi')
 local nfs = require( "nativefs" )
 local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
-local fb = require 'fblove_strip'
+local fb = require('fblove_strip')
 local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs/main")
@@ -657,6 +657,30 @@ end
 
 -- camera
 function make_cam()
+  -- "vertex buffer" layout:
+  -- 0: x (cam)
+  -- 1: y (cam)
+  -- 2: z (cam)
+  -- 3: x
+  -- 4: y
+  -- 5: w
+  -- 6: outcode
+  -- 7: u
+  -- 8: v
+  local VBO_1 = 0
+  local VBO_2 = 1
+  local VBO_3 = 2
+  local VBO_X = 3
+  local VBO_Y = 4
+  local VBO_W = 5
+  local VBO_OUTCODE = 6
+  local VBO_U = 7
+  local VBO_V = 8
+  
+  local vbo = require("pool")(9,2500)
+  -- share with rasterizer
+  push_vbo(vbo)
+
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
   -- pre-computed normals for alias models
@@ -825,24 +849,31 @@ function make_cam()
     {-0.688191, -0.587785, -0.425325}, 	
     }
 
-  local function z_poly_clip(v,nv,uvs)
+  local function z_poly_clip(v,nv)
     local res,v0={},v[nv]
-    local d0=v0[3]-8
+    local d0=vbo[v0 + VBO_3] - 8
     for i=1,nv do
       local side=d0>0
       if side then
         res[#res+1]=v0
       end
       local v1=v[i]
-      local d1=v1[3]-8
+      local d1=vbo[v1 + VBO_3]-8
       -- not same sign?
       if (d1>0)~=side then
-        local nv=v_lerp(v0,v1,d0/(d0-d1),uvs)
-        -- project against near plane
-        nv.x=hw+(270*nv[1]/8)
-        nv.y=hh-(270*nv[2]/8)
-        nv.w=1/8
-        res[#res+1]=nv
+        local t = d0/(d0-d1)
+        local x,y,z=
+          lerp(vbo[v0+VBO_1],vbo[v1+VBO_1],t),
+          lerp(vbo[v0+VBO_2],vbo[v1+VBO_2],t),
+          lerp(vbo[v0+VBO_3],vbo[v1+VBO_3],t)
+        res[#res+1]=vbo:pop(          
+          x,y,z,
+          hw+(270*x/8),
+          hh-(270*y/8),
+          1/8,
+          0,
+          lerp(vbo[v0+VBO_U],vbo[v1+VBO_U],t),
+          lerp(vbo[v0+VBO_V],vbo[v1+VBO_V],t))
       end
       v0=v1
       d0=d1
@@ -876,11 +907,13 @@ function make_cam()
         for k in pairs(cache) do
           cache[k]=nil
         end
+        vbo:reset()
     end,
     transform=function(self,v)
       profiler.push("transform")
-      local a=self.cache[v]
-      if not a then
+      -- find vbo (if any)
+      local idx=self.cache[v]
+      if not idx then
         local base=self.base
         local m,code,x,y,z=self.m,0,v[base+0],v[base+1],v[base+2]
         local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
@@ -895,11 +928,11 @@ function make_cam()
         -- save world space coords for clipping
         -- to screen space
         local w=1/az
-        a={ax,ay,az,x=480/2+270*ax*w,y=270/2-270*ay*w,w=w,outcode=code,u=0,v=0}
-        self.cache[v]=a   
+        idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
+        self.cache[v]=idx
       end
       profiler.pop("transform")       
-      return a
+      return idx
     end
   }
 
@@ -1012,10 +1045,11 @@ function make_cam()
         return 
       end
 
-      profiler.push("draw_model")
+      profiler.push("draw_model")      
       local m=self.m
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
       v_cache:init(m_x_m(m,ent.m),0)
+
       local cam_pos=v_add(self.pos,ent.origin,-1)
       cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
       local poly,styles,bright_style={},{0,0,0,0},{0.5,0.5,0.5,0.5}
@@ -1032,13 +1066,14 @@ function make_cam()
             for k,vi in ipairs(face.verts) do
               local v=verts[vi]
               local a=v_cache:transform(v)
-              outcode=band(outcode,a.outcode)
-              clipcode=clipcode + band(a.outcode,2)
+              outcode=band(outcode,vbo[a+VBO_OUTCODE])
+              clipcode=clipcode + band(vbo[a+VBO_OUTCODE],2)
               -- compute uvs
-              a.u=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
-              a.v=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
-              if a.w>maxw then
-                maxw = a.w
+              vbo[a+VBO_U]=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
+              vbo[a+VBO_V]=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
+              local w = vbo[a+VBO_W]
+              if w>maxw then
+                maxw = w
               end
               poly[k] = a
             end
@@ -1121,24 +1156,26 @@ function make_cam()
         for k=1,3 do
           local vi=faces[i+k]
           local a=v_cache:transform(verts[vi])
-          outcode=band(outcode,a.outcode)
-          clipcode=clipcode + band(a.outcode,2)                    
+          outcode=band(outcode,vbo[a+VBO_OUTCODE])
+          clipcode=clipcode + band(vbo[a+VBO_OUTCODE],2)
           -- compute uvs
           local uv,u_offset = uvs[vi],0
           if uv.onseam and not is_front then
             u_offset = skin.width / 2
           end
-          a.u = uv.u + u_offset
-          a.v = uv.v     
-          local light_dot = v_dot(light_n,_normals[normals[vi]]) 
+          vbo[a + VBO_U] = uv.u + u_offset
+          vbo[a + VBO_V] = uv.v     
+          --[[
+          local light_dot = v_dot(light_n,_normals[normals[vi] ]) 
           a.l = light_dot<0 and (1+light_dot) or 1
+          ]]
           poly[k] = a
         end
         if outcode==0 then
           -- ccw?
           local base=poly[2]
-          local ax,ay=base.x-poly[1].x,base.y-poly[1].y
-          local bx,by=base.x-poly[3].x,base.y-poly[3].y
+          local ax,ay=vbo[base + VBO_X]-vbo[poly[1] + VBO_X],vbo[base + VBO_Y]-vbo[poly[1] + VBO_Y]
+          local bx,by=vbo[base + VBO_X]-vbo[poly[3] + VBO_X],vbo[base + VBO_Y]-vbo[poly[3] + VBO_Y]
           if ax*by - ay*bx<=0 then
             local n=3
             if clipcode>0 then
