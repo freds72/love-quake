@@ -1,4 +1,5 @@
-local PoolCls=function(stride,size)
+local PoolCls=function(name,stride,size)
+    local logging = require("logging")
     -- p8 compat
     local add,del=table.insert,table.remove
     local flr=math.floor
@@ -12,7 +13,7 @@ local PoolCls=function(stride,size)
             end
         end
         total = total + size
-        print("new pool#: "..total.."("..#pool..")")
+        logging.debug(name.." - new pool#: "..total.."("..#pool..")")
     end
     local function vargs_copy(idx,value,...)
         if not value then
@@ -39,7 +40,7 @@ local PoolCls=function(stride,size)
             cursor = 0
         end,
         stats=function(self)   
-            return "free: "..(total-cursor).." pool: "..#pool/stride
+            return "pool:"..name.." free: "..(total-cursor).." size: "..#pool
         end
     },{
         __index=function(self,k)

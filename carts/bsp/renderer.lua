@@ -1,5 +1,5 @@
 local renderer={}
-
+local appleCake = require("lib.AppleCake")()  
 local ffi=require 'ffi'
 local logging = require("logging")
 
@@ -18,7 +18,7 @@ function start_frame(buf)
 	_backbuffer = buf
 end
 -- "vbo" cache
-local _pool=require("pool")(5,2500)
+local _pool=require("pool")("spans",5,2500)
 local _spans={}
 function end_frame()	
 	-- used state
@@ -397,7 +397,7 @@ function polyfill(p,np,c)
 	end
 end
 
--- 
+-- layout
 local VBO_1 = 0
 local VBO_2 = 1
 local VBO_3 = 2
@@ -413,8 +413,10 @@ function push_vbo(vbo)
 	_vbo = vbo
 end
 
+local _profilepolytex
 function polytex(p,np,sky)
-	profiler.push("polytex")
+	_profilepolytex = appleCake.profileFunc(nil, _profilepolytex)
+
 	local tline=sky and mode7 or tline3d
 	local vbo = _vbo
 	local miny,maxy,mini=math.huge,-math.huge
@@ -511,7 +513,7 @@ function polytex(p,np,sky)
 		rv=rv+rdv
 		rw=rw+rdw
 	end
-	profiler.pop("polytex")
+	_profilepolytex:stop()
 end
 
 return renderer

@@ -1,5 +1,7 @@
-PROF_CAPTURE = false
-profiler = require("jprof")
+local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
+appleCake.beginSession() --Will write to "profile.json" by default in the save directory
+appleCake.setName("Love Quake")
+
 local ffi=require('ffi')
 local nfs = require( "nativefs" )
 local modelfs = require( "modelfs" )
@@ -8,9 +10,10 @@ local modelfs = require( "modelfs" )
 local fb = require('fblove_strip')
 local renderer = require( "renderer" )
 local math3d = require( "math3d")
-local progs = require("progs/main")
+local progs = require("progs.main")
 local logging = require("logging")
 local world = require("world")
+local lg = love.graphics
 
 ffi.cdef[[
     #pragma pack(1)
@@ -98,6 +101,8 @@ if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
 end
 
 function love.load(args)
+  appleCake.mark("Started load")
+
   framebuffer = fb(480, 270)
   _backbuffer = framebuffer.buf[0]
 
@@ -416,11 +421,10 @@ function love.mousemoved( x, y, dx, dy, istouch )
 end
 
 love.frame = 0
+local _profileUpdate
 function love.update(dt)
-  -- collectgarbage("collect")
-  profiler.push("frame")
+  _profileUpdate = appleCake.profileFunc(nil, _profileUpdate)
 
-  profiler.push("update")
   -- any thinking to do?
   for i=1,#_entities do
     local ent = _entities[i]
@@ -446,7 +450,7 @@ function love.update(dt)
   end
 
   _plyr:update()  
-  _cam:track(v_add(_plyr.pos,{0,0,22}),_plyr.m,_plyr.angle)
+  _cam:track(v_add(_plyr.origin,{0,0,22}),_plyr.m,_plyr.angle)
 
   -- kill mouse
   camx,camy=0,0
@@ -459,22 +463,24 @@ function love.update(dt)
 
   love.frame = love.frame + 1
 
-  profiler.pop("update")
+  _profileUpdate:stop() -- By setting it to love.graphics.getStats we can see details of the draw
 end
 
-local visframe,prev_leaf=0
+local _profileDraw
+local _ram={}
+local _fps={}
 function love.draw()
-  profiler.push("draw")
+  _profileDraw = appleCake.profileFunc(nil, _profileDraw)
   -- cls
-  framebuffer.fill(0)
+  -- framebuffer.fill(0)
 
   start_frame(_backbuffer)
 	local n=m_x_n(_cam.m,{0,0,-1})
-	local n0=m_x_v(_cam.m,{0,0,2048+_cam.pos[3]})
+	local n0=m_x_v(_cam.m,{0,0,2048+_cam.origin[3]})
   push_param("sky", n)  
   push_param("sky_distance", v_dot(n,n0))  
   push_param("t", love.frame / 60)
-  push_param("z", _cam.pos[3])
+  push_param("z", _cam.origin[3])
   push_viewmatrix(_cam.m)
   
   -- refresh visible set
@@ -502,7 +508,10 @@ function love.draw()
     end
   end
   end_frame()
-  profiler.pop("draw")
+
+  appleCake.countMemory()
+  _profileDraw:stop() -- By setting it to love.graphics.getStats we can see details of the draw
+
   --
   -- local model = _flame.alias
   -- local skin = model.skins[1]
@@ -565,20 +574,29 @@ function love.draw()
     ]]
 
   -- note: text is written using Love2d api - mush be done after direct buffer draw
-  local current_leaf=find_sub_sector(_level.hulls[1],{[0]=_plyr.pos[1],_plyr.pos[2],_plyr.pos[3]})
+  local current_leaf=find_sub_sector(_level.hulls[1],{[0]=_plyr.origin[1],_plyr.origin[2],_plyr.origin[3]})
   
   if _memory_thinktime<love.frame then
-    _memory = flr(collectgarbage("count"))
-    _memory_thinktime = -1--love.frame + 30
+    local prev = _memory    
+    _memory = collectgarbage("count")
+    _memory_min = min(_memory, _memory_min or 0)
+    _memory_max = max(_memory, _memory_max or 0)
+    _ram[love.frame%480] = _memory
+    _mem_per_frame = 0
+    if prev then
+      _mem_per_frame=(_memory-prev)
+    end
+    _memory_thinktime = -1 -- love.frame + 30
   end
-  _font.print("RAM:\b".._memory.."\bkb\nFPS:" .. love.timer.getFPS().."\nleaves:"..#leaves.."\n#ents:"..(#visents).."\ncontent:"..(current_leaf and current_leaf.contents or "n/a"), 2, 2 )
+  _fps[love.frame%480]=love.timer.getFPS()
+  _font.print("RAM:\b"..flr(_memory).."\bkb\nRAM/frame:\b"..flr(_mem_per_frame).."\bkb\nFPS:" .. love.timer.getFPS().."\nleaves:"..#leaves.."\n#ents:"..(#visents).."\ncontent:"..(current_leaf and current_leaf.contents or "n/a").."\nground: "..tostring(_plyr.on_ground), 2, 2 )
 
   if _debug_display then
     -- draw 2d map
     local map = world.get_map()
     _debug_scale = 2*270/(map.maxs[2]-map.mins[2])
     _debug_x,_debug_y=-map.mins[1],-map.mins[2]
-    local player_ent={origin=_plyr.pos,mins={-16,-16,0},maxs={16,16,48}}
+    local player_ent={origin=_plyr.origin,mins={-16,-16,0},maxs={16,16,48}}
     locate_ent(player_ent)
     love.graphics.setColor(0,1,0)
     draw_map(world.get_map())
@@ -610,11 +628,30 @@ function love.draw()
   end
   
   -- collectgarbage()
-  profiler.pop("frame")
+  --[[
+  love.graphics.setColor(1,0,0)
+  lg.line(0,270*2-(_memory_max/1024),480,270*2-(_memory_max/1024))
+  love.graphics.setColor(0,1,0)
+  for i=0,480-1 do
+    local mem=_ram[i]
+    if mem then
+      lg.points(i,270*2-(mem/1024))
+    end
+  end
+  love.graphics.setColor(1,1,0)
+  for i=0,480-1 do
+    local counter=_fps[i]
+    if counter then
+      lg.points(i,270*2-counter)
+    end
+  end
+  love.graphics.setColor(1,1,1)
+  ]]
+
 end
 
 function love.quit()
-  profiler.write("prof.mpack")
+  appleCake.endSession()
 end
 
 function draw_entity(ent,fill)
@@ -656,7 +693,11 @@ function locate_ent(ent)
 end
 
 -- camera
+
 function make_cam()
+  local profileTransform
+  local profileDrawModel,profileDrawAlias,profileCollectLeaves,profileCollectEnts
+
   -- "vertex buffer" layout:
   -- 0: x (cam)
   -- 1: y (cam)
@@ -677,7 +718,7 @@ function make_cam()
   local VBO_U = 7
   local VBO_V = 8
   
-  local vbo = require("pool")(9,2500)
+  local vbo = require("pool")("v_cache",9,2500)
   -- share with rasterizer
   push_vbo(vbo)
 
@@ -910,7 +951,7 @@ function make_cam()
         vbo:reset()
     end,
     transform=function(self,v)
-      profiler.push("transform")
+      profileTransform = appleCake.profileFunc(nil, profileTransform)
       -- find vbo (if any)
       local idx=self.cache[v]
       if not idx then
@@ -931,7 +972,7 @@ function make_cam()
         idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
         self.cache[v]=idx
       end
-      profiler.pop("transform")       
+      profileTransform:stop()
       return idx
     end
   }
@@ -952,7 +993,7 @@ function make_cam()
         0,0,1,0,
         -pos[1],-pos[2],-pos[3],1
       })
-      self.pos=pos
+      self.origin=pos
     end,
     project=function(self,pos)
       pos=m_x_v(self.m,pos)
@@ -961,7 +1002,6 @@ function make_cam()
     end,
     -- returns true if bounding box (mins,maxs) is visible
     is_visible=function(self,mins,maxs)
-      profiler.push("is_visible")
       local m,outcode=self.m,0xffff
       local m1,m5,m9,m13,m2,m6,m10,m14,m3,m7,m11,m15=m[1],m[5],m[9],m[13],m[2],m[6],m[10],m[14],m[3],m[7],m[11],m[15]
       for i=0,7 do
@@ -981,11 +1021,9 @@ function make_cam()
         elseif ay<-az then code = code + 32 end
         outcode = band(outcode, code)
         if outcode == 0 then
-          profiler.pop("is_visible")
           return true
         end
       end
-      profiler.pop("is_visible")
     end,
     collect_entities=function(self,entities)
       local ents={}
@@ -1005,12 +1043,14 @@ function make_cam()
       return ents
     end,
     collect_leaves=function(self,root,leaves)
-      profiler.push("collect_leaves")
-      local pos={[0]=self.pos[1],self.pos[2],self.pos[3]}
+      profileCollectLeaves = appleCake.profileFunc(nil, profileCollectLeaves)
+
+      local pos={[0]=self.origin[1],self.origin[2],self.origin[3]}
       local current_leaf=find_sub_sector(root,pos)
       
       if not current_leaf or not current_leaf.pvs then
         -- debug
+        profileCollectLeaves:stop()
         return leaves
       end
 
@@ -1037,7 +1077,8 @@ function make_cam()
       end
       visleaves={}
       collect_bsp(root,pos)
-      profiler.pop("collect_leaves")
+
+      profileCollectLeaves:stop()
       return visleaves
     end,  
     draw_model=function(self,ent,textures,verts,leaves,lstart,lend)
@@ -1045,18 +1086,16 @@ function make_cam()
         return 
       end
 
-      profiler.push("draw_model")      
+      profileDrawModel = appleCake.profileFunc(nil, profileDrawModel)
       local m=self.m
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
       v_cache:init(m_x_m(m,ent.m),0)
 
-      local cam_pos=v_add(self.pos,ent.origin,-1)
+      local cam_pos=v_add(self.origin,ent.origin,-1)
       cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
       local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
       for i=lstart,lend do
-        local leaf=leaves[i]
-        for j=1,#leaf do
-          local face=leaf[j]
+        for j,face in ipairs(leaves[i]) do
           if not f_cache[face] and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
             -- mark visited
             f_cache[face]=true
@@ -1069,8 +1108,8 @@ function make_cam()
               outcode=band(outcode,vbo[a+VBO_OUTCODE])
               clipcode=clipcode + band(vbo[a+VBO_OUTCODE],2)
               -- compute uvs
-              vbo[a+VBO_U]=v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
-              vbo[a+VBO_V]=v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
+              vbo[a+VBO_U] = v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
+              vbo[a+VBO_V] = v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
               local w = vbo[a+VBO_W]
               if w>maxw then
                 maxw = w
@@ -1121,7 +1160,7 @@ function make_cam()
           end
         end
       end
-      profiler.pop("draw_model")
+      profileDrawModel:stop()
     end,
     draw_aliasmodel=function(self,ent,model,skin,frame_name)      
       -- check bounding box
@@ -1129,7 +1168,8 @@ function make_cam()
         return
       end
 
-      profiler.push("draw_aliasmodel")
+      profileDrawAlias = appleCake.profileFunc(nil, profileDrawAlias)
+
       local skin = model.skins[skin]
       local frame = model.frames[frame_name]
       local uvs = model.uvs
@@ -1138,7 +1178,7 @@ function make_cam()
       local verts, normals = frame.verts, frame.normals
       
       v_cache:init(m_x_m(self.m,ent.m))
-      local cam_pos=v_add(self.pos,ent.origin,-1)
+      local cam_pos=v_add(self.origin,ent.origin,-1)
 
       -- transform light vector into model space
       local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
@@ -1187,10 +1227,90 @@ function make_cam()
           end
         end
       end
-      profiler.pop("draw_aliasmodel")
+      profileDrawAlias:stop()
     end  
   }
 end
+
+function try_move(ent,origin,velocity)
+  local vel2d = {velocity[1],velocity[2],0}
+  local vl = v_len(vel2d)
+  local vl0 = vl
+  local next_pos=v_add(origin,velocity)
+  local on_ground,blocked = false,false
+  -- avoid touching the same non-solid multiple times (ex: triggers)
+  local triggers,touched = {},{}
+  -- collect all potential touching entities (done only once)
+  -- todo: smaller box
+  local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}))        
+  add(ents,1,_entities[1])
+  -- check current to target pos
+  for i=1,5 do
+    local hits={t=32000}
+    for k=1,#ents do
+      local other_ent = ents[k]
+      if not triggers[other_ent] then
+        -- avoid infinite check
+        if other_ent.SOLID_TRIGGER then
+          triggers[other_ent] = true
+        end
+
+        local model = other_ent.model
+        if model and not other_ent.SOLID_NOT then
+          local tmphits={} 
+          -- convert into model's space (mostly zero except moving brushes)
+          local hull
+          if not model.hulls then
+            -- don't shift - hit is computed in ent space
+            hull = modelfs.make_hull(make_v(ent.maxs,other_ent.mins),make_v(ent.mins,other_ent.maxs))
+          else
+            hull = model.hulls[2]
+          end
+          if hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+            hits=tmphits
+            hitent=other_ent
+            -- damage or other actions
+            touched[other_ent] = true
+          end
+        end
+      end
+    end          
+    if hits.n then            
+      local fix=v_dot(hits.n,velocity)
+      -- not separating?
+      if fix<0 then
+        -- if solid, correct course
+        if not hitent.SOLID_TRIGGER then
+          vl = vl + v_dot(vel2d,hits.n)
+          velocity=v_add(velocity,hits.n,-fix)
+          -- floor?
+          if hits.n[3]>0.7 then
+            on_ground=true
+          end
+          -- wall hit
+          if not hitent.SOLID_SLIDEBOX and hits.n[3]==0 then
+            blocked=true
+          end
+        end
+      end
+      next_pos=v_add(origin,velocity)
+    else
+      goto clear
+    end
+  end
+  -- cornered?
+  velocity={0,0,0}
+::clear::
+
+  return {
+    pos=next_pos,
+    velocity=velocity,
+    on_ground=on_ground,
+    on_wall=blocked,
+    fraction=max(0,vl/vl0),
+    touched=touched}
+end
+
 
 function make_player(pos,a)
   local angle,dangle,velocity={0,0,a},{0,0,0},{0,0,0}
@@ -1202,7 +1322,8 @@ function make_player(pos,a)
   -- start above floor
   pos=v_add(pos,{0,0,1})
   return {
-    pos=pos,
+    classname="player",
+    origin=pos,
     mins=mins,    
     maxs=maxs,
     absmins=v_add(pos,mins),
@@ -1222,7 +1343,7 @@ function make_player(pos,a)
         ["s"]={0,-1,0},
         ["q"]={1,0,0},
         ["d"]={-1,0,0},
-        ["space"]={0,0,2}
+        ["space"]={0,0,18}
       }
 
       local acc={0,0,0}
@@ -1237,99 +1358,47 @@ function make_player(pos,a)
     
       local a,dx,dz=angle[3],acc[2],acc[1]
       local c,s=cos(2*3.1415*a/360),sin(2*3.1415*a/360)
-      velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,(on_ground and acc[3] or 0)-0.5})          
+      velocity=v_add(velocity,{s*dx-c*dz,c*dx+s*dz,(on_ground and acc[3] or 0)-0.5})
             
       -- check next position
       local vn,vl=v_normz(velocity)      
       if vl>0.1 then
-        on_ground=true
-        local next_pos=v_add(self.pos,velocity)
-        local vel2d=v_normz({vn[1],vn[2],0})
-        local stairs=false--not is_empty(model.clipnodes,v_add(v_add(self.pos,vel2d,16),{0,0,16}))
-        -- avoid touching the same non-solid multiple times (ex: triggers)
-        local triggers = {}
-        -- collect all potential touching entities (done only once)
-        local ents=world.touches(v_add(self.absmins,{-256,-256,-256}), v_add(self.absmaxs,{256,256,256}))        
-        add(ents,1,_entities[1])
-        -- check current to target pos
-        for i=1,5 do
-          local hits={t=32000}
-          -- entities touched (but not blocking)
-          for k=1,#ents do
-            local ent = ents[k]
-            if not triggers[ent] then
-              -- avoid infinite check
-              if ent.SOLID_TRIGGER then
-                triggers[ent] = true
-              end
-
-              local model = ent.model
-              if model and not ent.SOLID_NOT then
-                local tmphits={} 
-                -- convert into model's space (mostly zero except moving brushes)
-                local hull
-                if not model.hulls then
-                  -- don't shift - hit is computed in ent space
-                  hull = modelfs.make_hull(make_v(maxs,ent.mins),make_v(mins,ent.maxs))
-                else
-                  hull = model.hulls[2]
-                end
-                if hitscan(hull,v_add(self.pos,ent.origin,-1),v_add(next_pos,ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
-                  hits=tmphits
-                  hitent=ent
-                end
-              end
-            end
-          end          
-          if hits.n then            
-            local fix=v_dot(hits.n,velocity)
-            -- not separating?
-            if fix<0 then
-              -- todo: trigger action?
-              -- todo: delay after to avoid killtarget or move side effects
-              if hitent.touch then
-                -- todo: replace by actual "other" entity
-                hitent.touch({classname="player"})
-              end
-              -- if solid, correct course
-              if not hitent.SOLID_TRIGGER then
-                vl = vl + fix
-                velocity=v_add(velocity,hits.n,-fix)
-                -- floor?
-                if hits.n[3]>0.7 then
-                  on_ground=true
-                end
-                -- wall hit
-                if abs(hits.n[3])<0.01 then
-                  -- can we clear an edge?
-                  if stairs then
-                    stairs=nil
-                    -- move up
-                    velocity=v_add(velocity,{0,0,4})
-                  end
-                end
-              end
-            end
-            next_pos=v_add(self.pos,velocity)
-          else
-            goto clear
+        local move = try_move(self,self.origin,velocity)   
+        on_ground=move.on_ground
+        if on_ground and move.on_wall and move.fraction<1 then
+          local up_move = try_move(self,v_add(self.origin,{0,0,18}),velocity) 
+          if up_move.fraction>move.fraction then
+            move = up_move
+            -- slight nudge up
+            move.velocity[3] = move.velocity[3] + 3
+            -- "mini" jump
+            on_ground=false
           end
         end
-        -- cornered?
-        velocity={0,0,0}
-::clear::
+        self.origin = move.pos
+        velocity = move.velocity
+
+        -- trigger touched items
+        for other_ent in pairs(move.touched) do
+          if other_ent.touch then
+            other_ent.touch(self)
+          end
+        end       
+        
       else
-        velocity={0,0,0}
+        velocity = {0,0,0}
       end
 
-      self.pos=v_add(self.pos,velocity)
+      -- "debug"
+      self.on_ground = on_ground
+
       self.m=m_x_m(
           m_x_m(
             make_m_from_euler(0,0,angle[3]),
             make_m_from_euler(angle[1],0,0)),
             make_m_from_euler(0,angle[2],0))
-      self.absmins=v_add(self.pos,self.mins)
-      self.absmaxs=v_add(self.pos,self.maxs)
+      self.absmins=v_add(self.origin,self.mins)
+      self.absmaxs=v_add(self.origin,self.maxs)
     end
   } 
 end
