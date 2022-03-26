@@ -1,4 +1,4 @@
-PROF_CAPTURE = true
+PROF_CAPTURE = false
 profiler = require("jprof")
 local ffi=require('ffi')
 local nfs = require( "nativefs" )
@@ -569,7 +569,7 @@ function love.draw()
   
   if _memory_thinktime<love.frame then
     _memory = flr(collectgarbage("count"))
-    _memory_thinktime = love.frame + 30
+    _memory_thinktime = -1--love.frame + 30
   end
   _font.print("RAM:\b".._memory.."\bkb\nFPS:" .. love.timer.getFPS().."\nleaves:"..#leaves.."\n#ents:"..(#visents).."\ncontent:"..(current_leaf and current_leaf.contents or "n/a"), 2, 2 )
 
@@ -1052,14 +1052,14 @@ function make_cam()
 
       local cam_pos=v_add(self.pos,ent.origin,-1)
       cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
-      local poly,styles,bright_style={},{0,0,0,0},{0.5,0.5,0.5,0.5}
+      local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
       for i=lstart,lend do
         local leaf=leaves[i]
         for j=1,#leaf do
           local face=leaf[j]
-          if not face.visframe~=visframe and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
+          if not f_cache[face] and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
             -- mark visited
-            face.visframe=visframe            
+            f_cache[face]=true
             local outcode,clipcode=0xffff,0            
             local texinfo = face.texinfo
             local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset

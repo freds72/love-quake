@@ -4,11 +4,9 @@ local PoolCls=function(stride,size)
     local flr=math.floor
 
     size=size or 100
-    local pool,free,total={},{},0
+    local pool,cursor,total={},0,0
     local function reserve()
         for i=1,size do
-            -- "free" index
-            add(free,#pool+1)
             for j=1,stride do
                 add(pool,0)
             end
@@ -27,34 +25,28 @@ local PoolCls=function(stride,size)
         -- reserve an entry in pool
         pop=function(self,...)
             -- no more entries?
-            if #free==0 then    
+            if cursor==total then    
                 reserve()
             end
-            -- pick from the free list                
-            local idx=del(free)
             -- init values
+            local idx=cursor*stride+1
+            cursor = cursor + 1
             vargs_copy(idx,...)
             return idx
         end,
         -- reclaim everything
         reset=function(self)
-            for i=1,total do
-                free[i]=(i-1)*stride + 1
-            end
-        end,
-        -- reclaim slot
-        push=function(self,idx)
-            add(free,idx)
+            cursor = 0
         end,
         stats=function(self)   
-            return "free: "..#free.." pool: "..#pool/stride
+            return "free: "..(total-cursor).." pool: "..#pool/stride
         end
     },{
         __index=function(self,k)
             return pool[k]
         end,
         __newindex = function(self, key, value)
-            pool [key] = value
+            pool[key] = value
         end
     })
 end
