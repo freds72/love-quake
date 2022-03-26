@@ -168,4 +168,12 @@ function v_tostring(v)
 	return "("..v[1].." "..v[2].." "..v[3]..")"
 end
 
+-- returns if 2 3d boxes overlap
+function bbox_overlap(mins,maxs,other_mins,other_maxs)
+	local x0,y0,z0,x1,y1,z1=mins[1],mins[2],mins[3],maxs[1],maxs[2],maxs[3]    
+	return x0<=other_maxs[1] and x1>=other_mins[1] and
+		   y0<=other_maxs[2] and y1>=other_mins[2] and
+		   z0<=other_maxs[3] and z1>=other_mins[3]
+end
+
 return math3d

@@ -236,8 +236,8 @@ local touch_query={
         for e,_ in pairs(cell.ents) do
             -- touching?
             if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
-            y0<=e.absmaxs[2] and y1>=e.absmins[2] and
-            z0<=e.absmaxs[3] and z1>=e.absmins[3] then               
+               y0<=e.absmaxs[2] and y1>=e.absmins[2] and
+               z0<=e.absmaxs[3] and z1>=e.absmins[3] then
                 add(self.ents,e)
             end
         end

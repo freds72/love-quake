@@ -1239,7 +1239,7 @@ function try_move(ent,origin,velocity)
   local next_pos=v_add(origin,velocity)
   local on_ground,blocked = false,false
   -- avoid touching the same non-solid multiple times (ex: triggers)
-  local triggers,touched = {},{}
+  local not_solid,touched = {},{}
   -- collect all potential touching entities (done only once)
   -- todo: smaller box
   local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}))        
@@ -1249,14 +1249,15 @@ function try_move(ent,origin,velocity)
     local hits={t=32000}
     for k=1,#ents do
       local other_ent = ents[k]
-      if not triggers[other_ent] then
+      if not not_solid[other_ent] then
         -- avoid infinite check
-        if other_ent.SOLID_TRIGGER then
-          triggers[other_ent] = true
+        -- ad-hoc box check
+        if other_ent.SOLID_TRIGGER or other_ent.SOLID_NOT then
+          not_solid[other_ent] = true
         end
 
         local model = other_ent.model
-        if model and not other_ent.SOLID_NOT then
+        if model then
           local tmphits={} 
           -- convert into model's space (mostly zero except moving brushes)
           local hull
@@ -1266,11 +1267,15 @@ function try_move(ent,origin,velocity)
           else
             hull = model.hulls[2]
           end
+
           if hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
-            hits=tmphits
-            hitent=other_ent
             -- damage or other actions
             touched[other_ent] = true
+            -- correct velocity?
+            if not other_ent.SOLID_NOT and not other_ent.SOLID_TRIGGER then
+              hits=tmphits
+              hitent=other_ent
+            end
           end
         end
       end
@@ -1278,19 +1283,16 @@ function try_move(ent,origin,velocity)
     if hits.n then            
       local fix=v_dot(hits.n,velocity)
       -- not separating?
-      if fix<0 then
-        -- if solid, correct course
-        if not hitent.SOLID_TRIGGER then
-          vl = vl + v_dot(vel2d,hits.n)
-          velocity=v_add(velocity,hits.n,-fix)
-          -- floor?
-          if hits.n[3]>0.7 then
-            on_ground=true
-          end
-          -- wall hit
-          if not hitent.SOLID_SLIDEBOX and hits.n[3]==0 then
-            blocked=true
-          end
+      if fix<0 then        
+        vl = vl + v_dot(vel2d,hits.n)
+        velocity=v_add(velocity,hits.n,-fix)
+        -- floor?
+        if hits.n[3]>0.7 then
+          on_ground=true
+        end
+        -- wall hit?
+        if not hitent.SOLID_SLIDEBOX and hits.n[3]==0 then
+          blocked=true
         end
       end
       next_pos=v_add(origin,velocity)
@@ -1343,7 +1345,7 @@ function make_player(pos,a)
         ["s"]={0,-1,0},
         ["q"]={1,0,0},
         ["d"]={-1,0,0},
-        ["space"]={0,0,18}
+        ["space"]={0,0,12}
       }
 
       local acc={0,0,0}
@@ -1367,7 +1369,12 @@ function make_player(pos,a)
         on_ground=move.on_ground
         if on_ground and move.on_wall and move.fraction<1 then
           local up_move = try_move(self,v_add(self.origin,{0,0,18}),velocity) 
+          -- largest distance?
           if up_move.fraction>move.fraction then
+            --local node=find_sub_sector(_level.hulls[1],{[0]=up_move.pos[1],up_move.pos[2],up_move.pos[3]})
+            --if node and node.contents then
+            --  print(node.contents)
+            --end
             move = up_move
             -- slight nudge up
             move.velocity[3] = move.velocity[3] + 3
