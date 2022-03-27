@@ -154,7 +154,7 @@ function love.load(args)
         precache_models[id] = modelfs.load(root_path, id)
       end
     end,
-    setmodel=function(self,ent,id)
+    setmodel=function(self,ent,id,offset)
       if not id then
         ent.origin = {0,0,0}
         ent.mins={0,0,0}
@@ -192,6 +192,9 @@ function love.load(args)
       ent.model = m   
       if not ent.origin then
         ent.origin = {0,0,0}
+      end
+      if offset then
+        ent.origin = v_add(ent.origin,offset)
       end
       local angles=ent.mangles or {0,0,0}
       ent.m=make_m_from_euler(unpack(angles))
@@ -321,14 +324,14 @@ function find_sub_sector(node,pos)
 end
 
 -- find if pos is within an empty space
-function is_empty(node,pos)
+function node_content(node,pos)
   local pos={[0]=pos[1],pos[2],pos[3]}
-  while node.contents==nil or node.contents>0 do
+  while not node.contents do
     node=node[plane_isfront(node.plane,pos)]
   end  
-  --return node.contents~=-1
-  return node.contents~=-2 or node.contents~=-1
+  return node.contents
 end
+
 
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
 -- hull location
@@ -336,20 +339,21 @@ end
 -- https://developer.valvesoftware.com/wiki/BSP
 -- ray/bsp intersection
 function hitscan(node,p0,p1,out)
-  -- is "solid" space (bsp)
-  if not node then
-    return true
-  end
   local contents=node.contents
   if contents then
     -- is "solid" space (bsp)
-    if contents==-2 then
-      return true
+    if contents~=-2 then
+      out.all_solid = false
+      if contents==-1 then
+        out.in_open = true
+      else
+        out.in_water = true
+      end
+    else
+      out.start_solid = true
     end
-    -- in "empty" space
-    if contents<0 then
-      return
-    end
+    -- empty space
+    return true
   end
   local dist,node_dist=plane_dot1(node.plane,p0)
   local otherdist=plane_dot1(node.plane,p1)
@@ -367,23 +371,25 @@ function hitscan(node,p0,p1,out)
   end  
   -- cliping fraction
   local frac=mid(t/(dist-otherdist),0,1)
-  local p10=v_lerp(p0,p1,frac)
-  --add(out,p10)
-  local hit,otherhit=hitscan(node[side],p0,p10,out),hitscan(node[otherside],p10,p1,out)  
-  if hit~=otherhit then
-    -- not already registered?
-    if not out.n then
-      -- check if in global empty space
-      -- note: nodes do not have spatial relationships!!
-      if is_empty(_level.hulls[2],p10) then
-        local scale=t<0 and -1 or 1
-        local nx,ny,nz=plane_get(node.plane)
-        out.n={scale*nx,scale*ny,scale*nz,node_dist}
-        out.t=frac
-      end
-    end
+  local pmid=v_lerp(p0,p1,frac)
+
+  if not hitscan(node[side],p0,pmid,out) then
+    return
   end
-  return hit or otherhit
+
+  if node_content(node[not side],pmid)~=-2 then
+    return hitscan(node[side],pmid,p1,out)
+  end
+
+  -- never got out of the solid area
+  if out.all_solid then
+    return
+  end
+
+  local scale=side and 1 or -1
+  local nx,ny,nz=plane_get(node.plane)
+  out.n={scale*nx,scale*ny,scale*nz,node_dist}
+  out.t=frac
 end
 
 mx,my=0,0
@@ -620,6 +626,9 @@ function love.draw()
     -- reset colors
     love.graphics.setColor(1,1,1)
   end
+
+  
+  -- hitscan(_level.hulls[1],v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits)
 
   -- any on screen message?
   if _msg then
@@ -1219,7 +1228,7 @@ function make_cam()
           if ax*by - ay*bx<=0 then
             local n=3
             if clipcode>0 then
-              poly,n = z_poly_clip(poly,#poly,true)
+              poly,n = z_poly_clip(poly,n)
             end
             if n>2 then
               polytex(poly,n)    
@@ -1238,6 +1247,8 @@ function try_move(ent,origin,velocity)
   local vl0 = vl
   local next_pos=v_add(origin,velocity)
   local on_ground,blocked = false,false
+  local invalid=false
+
   -- avoid touching the same non-solid multiple times (ex: triggers)
   local not_solid,touched = {},{}
   -- collect all potential touching entities (done only once)
@@ -1258,7 +1269,10 @@ function try_move(ent,origin,velocity)
 
         local model = other_ent.model
         if model then
-          local tmphits={} 
+          local tmphits={
+            t=1,
+            all_solid=true
+          } 
           -- convert into model's space (mostly zero except moving brushes)
           local hull
           if not model.hulls then
@@ -1267,8 +1281,19 @@ function try_move(ent,origin,velocity)
           else
             hull = model.hulls[2]
           end
-
-          if hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits) and tmphits.n and tmphits.t<hits.t then
+          
+          hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits)
+          -- local s="hit:"..tostring(res)
+          -- for k,v in pairs(tmphits) do
+          --   s=s.."\t"..k..":"..tostring(v)
+          -- end
+          -- print(s)
+          if tmphits.start_solid or tmphits.all_solid then
+            if not other_ent.SOLID_NOT and not other_ent.SOLID_TRIGGER then
+              goto blocked
+            end
+          end
+          if tmphits.n and tmphits.t<hits.t then
             -- damage or other actions
             touched[other_ent] = true
             -- correct velocity?
@@ -1283,9 +1308,11 @@ function try_move(ent,origin,velocity)
     if hits.n then            
       local fix=v_dot(hits.n,velocity)
       -- not separating?
-      if fix<0 then        
+      if fix<0 then  
         vl = vl + v_dot(vel2d,hits.n)
+        local old_vel = v_clone(velocity)
         velocity=v_add(velocity,hits.n,-fix)
+        -- print("fix pos:"..fix.." before: "..v_tostring(old_vel).." after: "..v_tostring(velocity))      
         -- floor?
         if hits.n[3]>0.7 then
           on_ground=true
@@ -1300,17 +1327,19 @@ function try_move(ent,origin,velocity)
       goto clear
     end
   end
-  -- cornered?
+::blocked::
+  invalid = true
   velocity={0,0,0}
 ::clear::
 
   return {
-    pos=next_pos,
+    pos=v_add(origin,velocity),
     velocity=velocity,
     on_ground=on_ground,
     on_wall=blocked,
     fraction=max(0,vl/vl0),
-    touched=touched}
+    touched=touched,
+    invalid=invalid}
 end
 
 
@@ -1370,7 +1399,7 @@ function make_player(pos,a)
         if on_ground and move.on_wall and move.fraction<1 then
           local up_move = try_move(self,v_add(self.origin,{0,0,18}),velocity) 
           -- largest distance?
-          if up_move.fraction>move.fraction then
+          if not up_move.invalid and up_move.fraction>move.fraction then
             --local node=find_sub_sector(_level.hulls[1],{[0]=up_move.pos[1],up_move.pos[2],up_move.pos[3]})
             --if node and node.contents then
             --  print(node.contents)
