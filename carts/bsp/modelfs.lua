@@ -454,8 +454,8 @@ local function unpack_map(bsp)
             maxs={maxs[0],maxs[1],maxs[2]}
         }
         for i=0,leaf.nummarksurfaces-1 do
-        -- de-ref face
-        add(l, faces[bsp.marksurfaces[leaf.firstmarksurface + i] + 1])
+            -- de-ref face
+            add(l, faces[bsp.marksurfaces[leaf.firstmarksurface + i] + 1])
         end
         add(leaves,l)
     end, bsp.leaves)
@@ -473,19 +473,19 @@ local function unpack_map(bsp)
         if band(child_id,0x8000) ~= 0 then
             child_id = bnot(child_id)
             if child_id ~= 0 then
-            flags = bor(flags, i+1)
-            child_id = child_id + 1
+                flags = bor(flags, i+1)
+                child_id = child_id + 1
             else
-            child_id = 0
+                child_id = 0
             end
         else
             -- node
             if child_id==0 then
-            assert("invalid child reference: 0")
+                assert("invalid child reference: 0")
             end
             child_id = child_id + 1
         end
-        n[i==0] = child_id
+            n[i==0] = child_id
         end
         n.flags=flags
         add(nodes, n)
@@ -494,13 +494,13 @@ local function unpack_map(bsp)
     -- attach nodes/leaves
     for _,node in pairs(nodes) do
         local function attach_node(side,leaf)
-        local refs=leaf and leaves or nodes
-        local child=refs[node[side]]
-        node[side]=child
-        -- used to optimize bsp traversal for rendering
-        if child then
-            child.parent=node
-        end
+            local refs=leaf and leaves or nodes
+            local child=refs[node[side]]
+            node[side]=child
+            -- used to optimize bsp traversal for rendering
+            if child then
+                child.parent=node
+            end
         end
         attach_node(true,band(node.flags,0x1)~=0)
         attach_node(false,band(node.flags,0x2)~=0)
@@ -509,7 +509,7 @@ local function unpack_map(bsp)
     -- unpack "clipnodes" (collision hulls)
     unpack_array(function(node)
         local clipnode={
-        plane=node.planenum + plane_offset
+            plane=node.planenum + plane_offset
         }
         local flags = 0
         for i=0,1 do

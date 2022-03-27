@@ -325,9 +325,15 @@ end
 
 -- find if pos is within an empty space
 function node_content(node,pos)
+  if not node then
+    return -2
+  end
   local pos={[0]=pos[1],pos[2],pos[3]}
   while not node.contents do
     node=node[plane_isfront(node.plane,pos)]
+    if not node then
+      return -2
+    end
   end  
   return node.contents
 end
@@ -378,7 +384,7 @@ function hitscan(node,p0,p1,out)
   end
 
   if node_content(node[not side],pmid)~=-2 then
-    return hitscan(node[side],pmid,p1,out)
+    return hitscan(node[not side],pmid,p1,out)
   end
 
   -- never got out of the solid area
@@ -390,6 +396,7 @@ function hitscan(node,p0,p1,out)
   local nx,ny,nz=plane_get(node.plane)
   out.n={scale*nx,scale*ny,scale*nz,node_dist}
   out.t=frac
+  out.pos = pmid
 end
 
 mx,my=0,0
@@ -627,8 +634,18 @@ function love.draw()
     love.graphics.setColor(1,1,1)
   end
 
-  
-  -- hitscan(_level.hulls[1],v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits)
+  local m=_cam.m
+  local fwd,up={m[2],m[6],m[10]},{m[3],m[7],m[11]}
+  local trace={}
+  hitscan(_level.hulls[1],_cam.origin,v_add(_cam.origin,fwd,1024),trace)
+  if trace.n then
+    local x0,y0,w0=_cam:project(trace.pos)
+    local x1,y1,w1=_cam:project(v_add(trace.pos,trace.n,8))
+    lg.setColor(0,1,0)
+    lg.circle("line",2*x0,2*y0,w0*64)
+    lg.line(2*x0,2*y0,2*x1,2*y1)
+    lg.setColor(1,1,1)
+  end
 
   -- any on screen message?
   if _msg then
@@ -1249,6 +1266,9 @@ function try_move(ent,origin,velocity)
   local on_ground,blocked = false,false
   local invalid=false
 
+  local time_left = 1/60
+  local hit_planes = {}
+
   -- avoid touching the same non-solid multiple times (ex: triggers)
   local not_solid,touched = {},{}
   -- collect all potential touching entities (done only once)
@@ -1256,7 +1276,7 @@ function try_move(ent,origin,velocity)
   local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}))        
   add(ents,1,_entities[1])
   -- check current to target pos
-  for i=1,5 do
+  for i=1,4 do
     local hits={t=32000}
     for k=1,#ents do
       local other_ent = ents[k]
