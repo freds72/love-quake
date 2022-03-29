@@ -405,39 +405,39 @@ local function unpack_map(bsp)
     local unpack_node_pvs
     unpack_node_pvs=function(node, model, cache)
         for i=0,1 do
-        local child_id = node.children[i]
-        if band(child_id,0x8000) ~= 0 then
-            child_id = bnot(child_id)
-            if child_id ~= 0 then
-            local leaf = bsp.leaves[child_id]
-            if leaf.visofs~=-1 and not cache[child_id] then
-                local numbytes = shr(model.visleafs+7,3)
-                -- print("leafs: {} / bytes: {} / offset: {} / {}".format(model.numleafs, numbytes, leaf.visofs, len(visdata)))
-                local vis = {}
-                local i = 0
-                local c_out = 0          
-                while c_out<numbytes do
-                local ii = bsp.visdata[leaf.visofs+i]
-                if ii ~= 0 then
-                    vis[shr(c_out,2)] = bor(vis[shr(c_out,2)] or 0, shl(ii, 8*(c_out%4)))              
-                    i = i + 1
-                    c_out = c_out + 1
-                    goto skip
+            local child_id = node.children[i]
+            if band(child_id,0x8000) ~= 0 then
+                child_id = bnot(child_id)
+                if child_id ~= 0 then
+                    local leaf = bsp.leaves[child_id]
+                    if leaf.visofs~=-1 and not cache[child_id] then
+                        local numbytes = shr(model.visleafs+7,3)
+                        -- print("leafs: {} / bytes: {} / offset: {} / {}".format(model.numleafs, numbytes, leaf.visofs, len(visdata)))
+                        local vis = {}
+                        local i = 0
+                        local c_out = 0     
+                        while c_out<numbytes do
+                            local ii = bsp.visdata[leaf.visofs+i]
+                            if ii ~= 0 then
+                                vis[shr(c_out,2)] = bor(vis[shr(c_out,2)] or 0, shl(ii, 8*(c_out%4)))              
+                                i = i + 1
+                                c_out = c_out + 1
+                                goto skip
+                            end
+                            -- skip 0
+                            i = i + 1
+                            -- number of bytes to skip
+                            c = bsp.visdata[leaf.visofs+i]
+                            i = i + 1
+                            c_out = c_out + c
+::skip::
+                        end
+                        cache[child_id] = vis
+                    end
                 end
-                -- skip 0
-                i = i + 1
-                -- number of bytes to skip
-                c = bsp.visdata[leaf.visofs+i]
-                i = i + 1
-                c_out = c_out + c
-    ::skip::
-                end
-                cache[child_id] = vis
+            else
+                unpack_node_pvs(bsp.nodes[child_id], model, cache)
             end
-            end
-        else
-            unpack_node_pvs(bsp.nodes[child_id], model, cache)
-        end
         end
     end
 

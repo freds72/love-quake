@@ -84,6 +84,13 @@ local subs=function(progs)
         local m=make_m_from_euler(x,y,z)
         return m_right(m),m_fwd(m),m_up(m)
     end
+
+    -- apply the given key/value collection to self
+    function set_defaults(self,defaults)
+        for k,v in pairs(defaults) do
+            self[k] = self[k] or v
+        end    
+    end
 end
 
 return subs

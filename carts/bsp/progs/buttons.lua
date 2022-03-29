@@ -19,16 +19,11 @@ local buttons=function(progs)
         -- init entity
         init_button(self)
         -- default values
-        if not self.speed then
-		    self.speed = 40
-        end
-	    if not self.wait then
-		    self.wait = 1
-        end
-	    if not self.lip then
-		    self.lip = 4
-        end
-
+        set_defaults(self,{
+            speed=40,
+            wait=1,
+            lip=4
+        })
         set_move_dir(self)
 
         local state = 1 -- STATE_BOTTOM
