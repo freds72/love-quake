@@ -46,7 +46,7 @@ local doors=function(progs)
             abs(v_dot(self.movedir,self.size)) - self.lip)
 
         -- starts open?
-        if band(self.spawnflags or 0,DOOR_START_OPEN)~=0 then
+        if band(self.spawnflags,DOOR_START_OPEN)~=0 then
             self.pos1,self.pos2=self.pos2,self.pos1
             progs:setorigin(self,self.pos1)
         end
@@ -63,8 +63,8 @@ local doors=function(progs)
                     return
                 end
                 local doors = progs:find(self, "classname", self.classname)
-                --local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
-                local mins,maxs=self.mins,self.maxs
+                local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
+                --local mins,maxs=self.mins,self.maxs
                 local link_mins,link_maxs=self.mins,self.maxs
                 -- note: assumes doors are in closed position/origin = 0 0 0
                 for _,door in pairs(doors) do
@@ -75,13 +75,12 @@ local doors=function(progs)
                         door.owner = self
                         -- extend min/maxs
                         link_mins=v_min(link_mins, door.mins)
-                        link_maxs=v_min(link_maxs, door.maxs)
+                        link_maxs=v_max(link_maxs, door.maxs)
                         add(linked_doors, door)
                     end                
                 end
                 -- spawn a big trigger field around
                 local trigger = progs:spawn()
-                trigger.trigger_field = true
                 trigger.MOVETYPE_NONE = true
                 trigger.SOLID_TRIGGER = true
                 trigger.DRAW_NOT = true
