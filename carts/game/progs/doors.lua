@@ -68,16 +68,29 @@ local doors=function(progs)
                 local doors = progs:find(self, "classname", self.classname)
                 --local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
                 local mins,maxs=self.mins,self.maxs
+                local link_mins,link_maxs=self.mins,self.maxs
+                -- note: assumes doors are in closed position/origin = 0 0 0
                 for _,door in pairs(doors) do
-                    local mins,maxs=make_v(door.maxs,mins),make_v(maxs,door.mins)
-                    if 
-                        mins[1]<=0 and mins[2]<=0 and mins[3]<=0 and
-                        maxs[1]>=0 and maxs[2]>=0 and maxs[3]>=0 then
+                    if  mins[1]<=door.maxs[1] and maxs[1]>=door.mins[1] and
+                        mins[2]<=door.maxs[2] and maxs[2]>=door.mins[2] and
+                        mins[3]<=door.maxs[3] and maxs[3]>=door.mins[3] then
                         -- overlap
                         door.owner = self
+                        -- extend min/maxs
+                        link_mins=v_min(link_mins, door.mins)
+                        link_maxs=v_min(link_mins, door.maxs)
                         add(linked_doors, door)
                     end                
                 end
+                -- spawn a big trigger field around
+                --[[
+                local trigger = progs:spawn()
+                trigger.MOVETYPE_NONE = true
+                trigger.SOLID_TRIGGER = true
+                trigger.owner = self
+                
+                setsize (trigger, t1 - '60 60 8', t2 + '60 60 8');
+                ]]
             end
         end
 
@@ -117,7 +130,7 @@ local doors=function(progs)
             end
 
             if self.owner then
-                -- linked door
+                -- linked door (or trigger field)
                 self.owner.touch(other)
                 return
             end
