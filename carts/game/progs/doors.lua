@@ -11,16 +11,13 @@ local doors=function(progs)
         self.classname = "door"
 
         -- default values
-        local defaults={
+        set_defaults(self,{
             spawnflags=0,
             speed=100,
             wait=3,
             lip=8,
             dmg=2
-        }
-        for k,v in pairs(defaults) do
-            self[k] = self[k] or v
-        end
+        })
 
         self.SOLID_BSP = true
         self.MOVETYPE_PUSH = true
@@ -158,7 +155,7 @@ local doors=function(progs)
 		    self.wait = 5 --  5 seconds before closing       
         end
         
-        self.mangle = {0,0,0}
+        self.mangles = {0,0,0}
         self.angles = {0,0,0}
 
         local oldorigin = v_clone(self.origin)
@@ -220,7 +217,7 @@ local doors=function(progs)
         
             local temp = 1 - band(self.spawnflags,SECRET_1ST_LEFT) -- 1 or -1
 
-            local v_fwd,v_right,v_up = makevectors(unpack(self.mangle))
+            local v_fwd,v_right,v_up = makevectors(unpack(self.mangles))
             
             if not self.t_width then
                 if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then

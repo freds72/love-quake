@@ -21,7 +21,7 @@ ffi.cdef[[
 ]]    
 
 -- pico8 compat helpers
-local sub,add,ord=string.sub,table.insert,string.byte
+local sub,add,ord,del=string.sub,table.insert,string.byte,table.remove
 local abs,flr=math.abs,math.floor
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
@@ -110,7 +110,7 @@ function love.load(args)
   hh = 270/2
 
   local root_path = args[1]
-  print("INFO - game root: "..root_path)
+  logging.debug("game root: "..root_path)
 
   -- set default palette
   _palette = read_palette(root_path)
@@ -127,6 +127,7 @@ function love.load(args)
   world.init(_level)
 
   _entities = {}
+  _new_entities = {}
   _msg = nil
   _msg_ttl = -1
 
@@ -147,7 +148,7 @@ function love.load(args)
     end,
     objerror=function(self,msg)
       -- todo: set context (if applicable)
-      print("ERROR - "..tostring(msg))
+      logging.error(tostring(msg))
     end,
     precache_model=function(self,id)
       if not precache_models[id] then
@@ -193,9 +194,7 @@ function love.load(args)
       if not ent.origin then
         ent.origin = {0,0,0}
       end
-      if offset then
-        ent.origin = v_add(ent.origin,offset)
-      end
+      ent.offset = offset
       local angles=ent.mangles or {0,0,0}
       ent.m=make_m_from_euler(unpack(angles))
       m_set_pos(ent.m,ent.origin)
@@ -256,6 +255,11 @@ function love.load(args)
         end
       end
       return matches
+    end,
+    spawn=function(_,properties)
+      local ent = _vm:bind(properties)
+      -- don't add new entities in this frame
+      add(_new_entities,ent)
     end
   })
 
@@ -325,6 +329,7 @@ end
 
 -- find if pos is within an empty space
 function node_content(node,pos)
+  -- invalid root?
   if not node then
     return -2
   end
@@ -345,7 +350,12 @@ end
 -- https://developer.valvesoftware.com/wiki/BSP
 -- ray/bsp intersection
 function hitscan(node,p0,p1,out)
-  local contents=node.contents
+  if not node then
+    -- same as -2
+    out.start_solid = true
+    return 
+  end
+  local contents=node.contents  
   if contents then
     -- is "solid" space (bsp)
     if contents~=-2 then
@@ -438,27 +448,45 @@ local _profileUpdate
 function love.update(dt)
   _profileUpdate = appleCake.profileFunc(nil, _profileUpdate)
 
+  -- any entities to create?
+  for i=1,#_new_entities do
+    add(_entities, _new_entities[i])
+  end
+  _new_entities = {}
+
   -- any thinking to do?
-  for i=1,#_entities do
+  for i=#_entities,1,-1 do
     local ent = _entities[i]
-    -- any velocity?
-    if ent.velocity then
-      -- todo: physics...
-      -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
-      ent.origin = v_add(ent.origin, ent.velocity, 1/60)
-      -- link to world
-      world.register(ent)
-    end
+    -- to be removed?
+    if ent.free then
+      world:unregister(ent)
+      del(_entities, i)
+    else
+      -- any velocity?
+      if ent.velocity then
+        -- todo: physics...
+        -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
+        ent.origin = v_add(ent.origin, ent.velocity, 1/60)
+        -- link to world
+        world.register(ent)
+      end
 
-    if ent.nextthink and ent.nextthink<love.frame/60 and ent.think then
-      ent.nextthink = nil
-      ent:think()
-    end
+      if ent.nextthink and ent.nextthink<love.frame/60 and ent.think then
+        ent.nextthink = nil
+        ent:think()
+      end
 
-    -- todo: force origin changes via function
-    if ent.m then
-      -- not a physic entity
-      m_set_pos(ent.m, ent.origin)
+      -- todo: force origin changes via function
+      -- todo: apply angles
+      if ent.m then
+        -- not a physic entity
+        local m=ent.m
+        if ent.mangles then
+          m=make_m_from_euler(unpack(ent.mangles))
+        end
+        m_set_pos(m, ent.origin)
+        ent.m=m
+      end
     end
   end
 
@@ -517,9 +545,10 @@ function love.draw()
         ent, 
         m,
         ent.skin,
-        ent.frame)              
+        ent.frame)
     end
   end
+  
   end_frame()
 
   appleCake.countMemory()
@@ -1204,7 +1233,12 @@ function make_cam()
       local verts, normals = frame.verts, frame.normals
       
       v_cache:init(m_x_m(self.m,ent.m))
-      local cam_pos=v_add(self.origin,ent.origin,-1)
+      local origin=ent.origin
+      if ent.offset then
+        -- visual offset?
+        origin = v_add(origin,ent.offset)
+      end
+      local cam_pos=v_add(self.origin,origin,-1)
 
       -- transform light vector into model space
       local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
@@ -1420,10 +1454,6 @@ function make_player(pos,a)
           local up_move = try_move(self,v_add(self.origin,{0,0,18}),velocity) 
           -- largest distance?
           if not up_move.invalid and up_move.fraction>move.fraction then
-            --local node=find_sub_sector(_level.hulls[1],{[0]=up_move.pos[1],up_move.pos[2],up_move.pos[3]})
-            --if node and node.contents then
-            --  print(node.contents)
-            --end
             move = up_move
             -- slight nudge up
             move.velocity[3] = move.velocity[3] + 3

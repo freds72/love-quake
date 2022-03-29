@@ -1,4 +1,7 @@
 local main=function(context)
+
+    local logging=require("logging")
+
     -- helpers
     -- game modules
     local modules={
@@ -14,14 +17,14 @@ local main=function(context)
         "shambler",
         "zombie",
         "soldier",
-        -- "weapons"
+        "weapons"
     }
 
     -- global functions
     local env = setmetatable({},{__index=context})
     for i=1,#modules do
         local name = modules[i]
-        print("INFO - init extension: "..name)
+        logging.info("init extension: "..name)
         require("progs/"..name)(env)
     end
 

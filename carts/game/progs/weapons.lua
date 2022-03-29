@@ -3,7 +3,7 @@ local weapons=function(progs)
     -- p8 compat
     local band=bit.band
 
-    progs:precache_model ("progs/v_rock.mdl")
+    progs:precache_model ("progs/g_shot.mdl")
 
     progs.weapon_supershotgun=function(self)
         self.SOLID_TRIGGER = true
@@ -12,14 +12,12 @@ local weapons=function(progs)
         self.frame = "shot1"
         self.mangles = {0,0,self.angle or 0}
         -- set size and link into world
-        progs:setmodel(self, "progs/v_rock.mdl",{0,0,56})
+        progs:setmodel(self, "progs/g_shot.mdl",{0,0,56})
 
-        local anim = 0
         self.nextthink = progs:time() + 0.1
         self.think=function()            
-            self.frame = "shot"..((anim%7)+1)
-            self.nextthink = progs:time() + 0.1
-            anim = anim+1
+            self.mangles={0,0,progs:time() * 4}
+            self.nextthink = progs:time() + 0.01
         end        
     end
 end

@@ -126,14 +126,15 @@ end
 
 function world.unregister(ent)
     -- nothing to unregister
-    if ent.nodes then
+    if not ent.nodes then
         return
     end
     for node,_ in pairs(ent.nodes) do
         if node.ents then
             node.ents[ent]=nil
         end
-    end
+        ent.nodes[node] = nil
+    end    
 end
 
 local function register_bbox(node, ent, pos, size)    
