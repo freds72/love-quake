@@ -329,6 +329,7 @@ end
 
 -- find if pos is within an empty space
 function node_content(node,pos)
+  -- invalid root?
   if not node then
     return -2
   end
