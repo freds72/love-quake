@@ -75,19 +75,25 @@ local doors=function(progs)
                         door.owner = self
                         -- extend min/maxs
                         link_mins=v_min(link_mins, door.mins)
-                        link_maxs=v_min(link_mins, door.maxs)
+                        link_maxs=v_min(link_maxs, door.maxs)
                         add(linked_doors, door)
                     end                
                 end
                 -- spawn a big trigger field around
-                --[[
                 local trigger = progs:spawn()
+                trigger.trigger_field = true
                 trigger.MOVETYPE_NONE = true
                 trigger.SOLID_TRIGGER = true
+                trigger.DRAW_NOT = true
                 trigger.owner = self
-                
-                setsize (trigger, t1 - '60 60 8', t2 + '60 60 8');
-                ]]
+                trigger.mins = v_add(link_mins, {-60,-60,-8})                
+                trigger.maxs = v_add(link_maxs, {60,60,8})                
+                trigger.touch=function(other)
+                    if self.touch then
+                        self.touch(other)
+                    end
+                end
+                progs:setorigin(trigger,self.origin)
             end
         end
 

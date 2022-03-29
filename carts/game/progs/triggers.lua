@@ -8,7 +8,7 @@ local triggers=function(progs)
     -- internal helpers
     local function init_trigger(self)
         self.SOLID_TRIGGER = true
-        self.MOVETYPE_NONE = true;
+        self.MOVETYPE_NONE = true
         self.DRAW_NOT = true
         self.nextthink = -1
         -- set size and link into world

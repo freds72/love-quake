@@ -9,13 +9,13 @@
           "command": "C:\\Program Files\\LOVE\\love.exe"
         },
         "args": [
-          "carts/bsp",
+          "carts/game",
           "D:\\Games\\quake\\id1",
           "e1m1.bsp"
         ],
         "scriptRoots": [
-          "${workspaceFolder}\\carts\\bsp",
-          "${workspaceFolder}\\carts\\bsp\\progs",
+          "${workspaceFolder}\\carts\\game",
+          "${workspaceFolder}\\carts\\game\\progs",
           "C:\\Users\\Frederic\\Documents\\GitHub\\megasource\\libs\\love\\src\\modules\\love"
         ]
       }

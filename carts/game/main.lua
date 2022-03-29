@@ -256,10 +256,19 @@ function love.load(args)
       end
       return matches
     end,
-    spawn=function(_,properties)
-      local ent = _vm:bind(properties)
+    spawn=function(_)
       -- don't add new entities in this frame
+      local ent={
+        nodes={},
+        m={
+          1,0,0,0,
+          0,1,0,0,
+          0,0,1,0,
+          0,0,0,1
+        }        
+      }
       add(_new_entities,ent)
+      return ent
     end
   })
 
@@ -1308,7 +1317,7 @@ function try_move(ent,origin,velocity)
   -- collect all potential touching entities (done only once)
   -- todo: smaller box
   local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}))        
-  add(ents,1,_entities[1])
+  add(ents,1,_entities[1])  
   -- check current to target pos
   for i=1,4 do
     local hits={t=32000}
@@ -1321,40 +1330,43 @@ function try_move(ent,origin,velocity)
           not_solid[other_ent] = true
         end
 
-        local model = other_ent.model
-        if model then
-          local tmphits={
-            t=1,
-            all_solid=true
-          } 
-          -- convert into model's space (mostly zero except moving brushes)
-          local hull
-          if not model.hulls then
-            -- don't shift - hit is computed in ent space
-            hull = modelfs.make_hull(make_v(ent.maxs,other_ent.mins),make_v(ent.mins,other_ent.maxs))
-          else
-            hull = model.hulls[2]
+        local tmphits={
+          t=1,
+          all_solid=true
+        } 
+        -- convert into model's space (mostly zero except moving brushes)
+        local model,hull=other_ent.model
+        if not model or not model.hulls then
+          -- don't shift - hit is computed in ent space
+          hull = modelfs.make_hull(make_v(ent.maxs,other_ent.mins),make_v(ent.mins,other_ent.maxs))
+        else
+          hull = model.hulls[2]
+        end
+        
+        hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits)
+        -- local s="hit:"..tostring(res)
+        -- for k,v in pairs(tmphits) do
+        --   s=s.."\t"..k..":"..tostring(v)
+        -- end
+        -- print(s)
+        if tmphits.start_solid or tmphits.all_solid then
+          if not other_ent.SOLID_NOT and not other_ent.SOLID_TRIGGER then
+            goto blocked
           end
-          
-          hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits)
-          -- local s="hit:"..tostring(res)
-          -- for k,v in pairs(tmphits) do
-          --   s=s.."\t"..k..":"..tostring(v)
-          -- end
-          -- print(s)
-          if tmphits.start_solid or tmphits.all_solid then
-            if not other_ent.SOLID_NOT and not other_ent.SOLID_TRIGGER then
-              goto blocked
-            end
-          end
-          if tmphits.n and tmphits.t<hits.t then
-            -- damage or other actions
-            touched[other_ent] = true
-            -- correct velocity?
-            if not other_ent.SOLID_NOT and not other_ent.SOLID_TRIGGER then
-              hits=tmphits
-              hitent=other_ent
-            end
+          -- damage or other actions
+          touched[other_ent] = true
+        end
+
+        if tmphits.n then
+          -- damage or other actions
+          touched[other_ent] = true
+        end
+        
+        if tmphits.n and tmphits.t<hits.t then
+          -- correct velocity?
+          if not (other_ent.SOLID_NOT or other_ent.SOLID_TRIGGER) then
+            hits=tmphits
+            hitent=other_ent
           end
         end
       end
