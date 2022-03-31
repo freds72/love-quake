@@ -55,6 +55,7 @@ local subs=function(progs)
     end
 
     function print_entity(self)
+        print("---- "..self.classname.." -----")
         for k,v in pairs(self) do
             print(k..":"..tostring(v))
         end
@@ -63,6 +64,14 @@ local subs=function(progs)
     -- find all targets from the given entity and "use" them
     -- optional random flag to pick only target
     function use_targets(self,other,random)
+        if self.killtarget then
+            local targets = progs:find(self,"targetname", self.killtarget)
+            print("killing:"..self.killtarget.." matches: "..#targets)
+            for i=1,#targets do
+                progs:remove(targets[i])
+            end
+        end
+
         if self.target then
             local targets = progs:find(self,"targetname", self.target, "use")
             if random then            

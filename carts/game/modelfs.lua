@@ -759,9 +759,10 @@ local function load_aliasmodel(data)
     for i=0,header.numtris-1 do
         local tri = ffi.cast('dtriangle_t*', ptr)
         add(mod.faces,tri.facesfront==1)
-        add(mod.faces,tri.vertindex[0]+1)
-        add(mod.faces,tri.vertindex[1]+1)
-        add(mod.faces,tri.vertindex[2]+1)
+        local v0,v1,v2=tri.vertindex[0],tri.vertindex[1],tri.vertindex[2]
+        add(mod.faces,v0+1)
+        add(mod.faces,v1+1)
+        add(mod.faces,v2+1)
         ptr = ptr + ffi.sizeof("dtriangle_t")
     end
 

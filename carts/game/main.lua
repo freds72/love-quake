@@ -237,7 +237,7 @@ function love.load(args)
       if txt==_msg then
         return
       end
-      print("MESSAGE - "..tostring(txt))
+      logging.debug("MESSAGE - "..tostring(txt))
       _msg = txt
       -- keep 3s on screen
       _msg_ttl = love.frame + 3*60
@@ -248,7 +248,7 @@ function love.load(args)
       local matches={}
       for i=1,#_entities do
         local other=_entities[i]
-        if ent~=other and other[property]==value then
+        if not other.free and ent~=other and other[property]==value then
           if not filter or other[filter] then
             add(matches, other)
           end
@@ -269,6 +269,10 @@ function love.load(args)
       }
       add(_new_entities,ent)
       return ent
+    end,
+    remove=function(_,ent)
+      -- mark entity for deletion
+      ent.free = true
     end
   })
 
@@ -560,7 +564,7 @@ function love.draw()
   
   end_frame()
 
-  appleCake.countMemory()
+  -- appleCake.countMemory()
   _profileDraw:stop() -- By setting it to love.graphics.getStats we can see details of the draw
 
   --
@@ -637,7 +641,7 @@ function love.draw()
     if prev then
       _mem_per_frame=(_memory-prev)
     end
-    _memory_thinktime = -1 -- love.frame + 30
+    _memory_thinktime = love.frame + 30
   end
   _fps[love.frame%480]=love.timer.getFPS()
   _font.print("RAM:\b"..flr(_memory).."\bkb\nRAM/frame:\b"..flr(_mem_per_frame).."\bkb\nFPS:" .. love.timer.getFPS().."\nleaves:"..#leaves.."\n#ents:"..(#visents).."\ncontent:"..(current_leaf and current_leaf.contents or "n/a").."\nground: "..tostring(_plyr.on_ground), 2, 2 )
@@ -1015,7 +1019,6 @@ function make_cam()
         vbo:reset()
     end,
     transform=function(self,v)
-      profileTransform = appleCake.profileFunc(nil, profileTransform)
       -- find vbo (if any)
       local idx=self.cache[v]
       if not idx then
@@ -1036,7 +1039,6 @@ function make_cam()
         idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
         self.cache[v]=idx
       end
-      profileTransform:stop()
       return idx
     end
   }
@@ -1161,26 +1163,29 @@ function make_cam()
       for i=lstart,lend do
         for j,face in ipairs(leaves[i]) do
           if not f_cache[face] and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
+            profileTransform = appleCake.profileFunc(nil, profileTransform)
             -- mark visited
             f_cache[face]=true
-            local outcode,clipcode=0xffff,0            
-            local texinfo = face.texinfo
+            local texinfo,outcode,clipcode=face.texinfo,0xffff,0            
             local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
             for k,vi in ipairs(face.verts) do
               local v=verts[vi]
               local a=v_cache:transform(v)
-              outcode=band(outcode,vbo[a+VBO_OUTCODE])
-              clipcode=clipcode + band(vbo[a+VBO_OUTCODE],2)
+              local code = vbo[a+VBO_OUTCODE]
+              outcode=band(outcode,code)
+              clipcode=clipcode + band(code,2)
               -- compute uvs
-              vbo[a+VBO_U] = v[0]*s[0]+v[1]*s[1]+v[2]*s[2]+s_offset
-              vbo[a+VBO_V] = v[0]*t[0]+v[1]*t[1]+v[2]*t[2]+t_offset
+              local x,y,z=v[0],v[1],v[2]
+              vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
+              vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
               local w = vbo[a+VBO_W]
               if w>maxw then
                 maxw = w
               end
               poly[k] = a
             end
-            
+            profileTransform:stop()
+
             if outcode==0 then
               local n=#face.verts
               if clipcode>0 then
@@ -1258,6 +1263,7 @@ function make_cam()
       push_texture(skin,0)      
 
       for i=1,#faces,4 do    
+        profileTransform = appleCake.profileFunc(nil, profileTransform)
         -- vertex index are "constants" (eg. from model)
         local is_front=faces[i]
         local outcode,clipcode=0xffff,0
@@ -1265,11 +1271,12 @@ function make_cam()
         for k=1,3 do
           local vi=faces[i+k]
           local a=v_cache:transform(verts[vi])
-          outcode=band(outcode,vbo[a+VBO_OUTCODE])
-          clipcode=clipcode + band(vbo[a+VBO_OUTCODE],2)
+          local code = vbo[a+VBO_OUTCODE]
+          outcode=band(outcode,code)
+          clipcode=clipcode + band(code,2)
           -- compute uvs
           local uv,u_offset = uvs[vi],0
-          if uv.onseam and not is_front then
+          if not is_front and uv.onseam then
             u_offset = skin.width / 2
           end
           vbo[a + VBO_U] = uv.u + u_offset
@@ -1280,6 +1287,8 @@ function make_cam()
           ]]
           poly[k] = a
         end
+        profileTransform:stop()
+
         if outcode==0 then
           -- ccw?
           local base=poly[2]
@@ -1361,7 +1370,7 @@ function try_move(ent,origin,velocity)
           -- damage or other actions
           touched[other_ent] = true
         end
-        
+
         if tmphits.n and tmphits.t<hits.t then
           -- correct velocity?
           if not (other_ent.SOLID_NOT or other_ent.SOLID_TRIGGER) then

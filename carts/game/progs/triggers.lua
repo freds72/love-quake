@@ -81,7 +81,8 @@ local triggers=function(progs)
             if self.wait>0 then
                 self.nextthink = progs:time() + self.wait
             else
-                -- todo: remove entity
+                -- remove self
+                self.free = true
                 self.touch = nil
             end
         end
@@ -92,11 +93,12 @@ local triggers=function(progs)
         init_trigger(self)
 
         self.touch=function(other)
-            print("touched by: "..other.classname)
             if self.message then
                 progs:print(self.message)
             end
-            -- todo: remove entity
+            -- kill self
+            self.free = true
+            -- avoid reentrancy
             self.touch = nil
             
             -- trigger action (if any)
@@ -121,6 +123,7 @@ local triggers=function(progs)
             end
             if count==0 then
                 -- kill counter
+                self.free = true
                 self.use = nil
                 use_targets(self)
             end
@@ -137,6 +140,7 @@ local triggers=function(progs)
             if other.classname ~= "player" then
 			    return
             end
+            self.free = true
             self.use = nil
             self.touch = nil
 		    progs.found_secrets = progs.found_secrets + 1

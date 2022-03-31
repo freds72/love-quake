@@ -15,8 +15,7 @@
         ],
         "scriptRoots": [
           "${workspaceFolder}\\carts\\game",
-          "${workspaceFolder}\\carts\\game\\progs",
-          "C:\\Users\\Frederic\\Documents\\GitHub\\megasource\\libs\\love\\src\\modules\\love"
+          "${workspaceFolder}\\carts\\game\\progs"
         ]
       }
     ]
