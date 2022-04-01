@@ -11,6 +11,21 @@ local buttons=function(progs)
         self.MOVETYPE_PUSH = true;
         -- set size and link into world
         progs:setmodel(self, self.model)
+
+        -- create trigger field
+        local trigger = progs:spawn()
+        trigger.MOVETYPE_NONE = true
+        trigger.SOLID_TRIGGER = true
+        trigger.DRAW_NOT = true
+        trigger.owner = self
+        trigger.mins = v_add(self.mins, {-8,-8,-8})                
+        trigger.maxs = v_add(self.maxs, {8,8,8})                
+        trigger.touch=function(other)
+            if self.use then
+                self.use(other)
+            end
+        end
+        progs:setorigin(trigger,self.origin)        
     end
 
     -- classname bindings
@@ -34,7 +49,7 @@ local buttons=function(progs)
             self.movedir,
             abs(v_dot(self.movedir,self.size)) - self.lip)
 
-        self.touch=function(other)
+        self.use=function(other)
             if other.classname ~= "player" then
                 return
             end            
@@ -42,6 +57,8 @@ local buttons=function(progs)
                 return
             end
             state = 2
+
+            -- texture
             self.sequence = 2
             -- trigger action (if any)
             use_targets(self)

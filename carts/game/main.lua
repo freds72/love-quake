@@ -362,7 +362,7 @@ end
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
 -- https://developer.valvesoftware.com/wiki/BSP
 -- ray/bsp intersection
-function hitscan(node,p0,p1,out)
+function ray_bsp_intersect(node,p0,p1,t0,t1,out)
   if not node then
     -- same as -2
     out.start_solid = true
@@ -389,7 +389,7 @@ function hitscan(node,p0,p1,out)
   local side,otherside=dist>node_dist,otherdist>node_dist
   if side==otherside then
     -- go down this side
-    return hitscan(node[side],p0,p1,out)
+    return ray_bsp_intersect(node[side],p0,p1,t0,t1,out)
   end
   -- crossing a node
   local t=dist-node_dist
@@ -401,13 +401,13 @@ function hitscan(node,p0,p1,out)
   -- cliping fraction
   local frac=mid(t/(dist-otherdist),0,1)
   local pmid=v_lerp(p0,p1,frac)
-
-  if not hitscan(node[side],p0,pmid,out) then
+  local tmid=lerp(t0,t1,frac)
+  if not ray_bsp_intersect(node[side],p0,pmid,t0,tmid,out) then
     return
   end
 
   if node_content(node[not side],pmid)~=-2 then
-    return hitscan(node[not side],pmid,p1,out)
+    return ray_bsp_intersect(node[not side],pmid,p1,tmid,t1,out)
   end
 
   -- never got out of the solid area
@@ -418,7 +418,7 @@ function hitscan(node,p0,p1,out)
   local scale=side and 1 or -1
   local nx,ny,nz=plane_get(node.plane)
   out.n={scale*nx,scale*ny,scale*nz,node_dist}
-  out.t=frac
+  out.t=tmid
   out.pos = pmid
 end
 
@@ -678,11 +678,13 @@ function love.draw()
 
   local m=_cam.m
   local fwd,up={m[2],m[6],m[10]},{m[3],m[7],m[11]}
-  local trace={}
-  hitscan(_level.hulls[1],_cam.origin,v_add(_cam.origin,fwd,1024),trace)
-  if trace.n then
-    local x0,y0,w0=_cam:project(trace.pos)
-    local x1,y1,w1=_cam:project(v_add(trace.pos,trace.n,8))
+  local triggers={}
+  local p0,p1 = v_add(_cam.origin,up,-8),v_add(_cam.origin,fwd,1024)
+  local trace = hitscan({0,0,0},{0,0,0},p0,p1,triggers,_entities)
+  if trace and trace.n then
+    local pos = v_add(trace.pos,trace.ent.origin)
+    local x0,y0,w0=_cam:project(pos)
+    local x1,y1,w1=_cam:project(v_add(pos,trace.n,8))
     lg.setColor(0,1,0)
     lg.circle("line",2*x0,2*y0,w0*64)
     lg.line(2*x0,2*y0,2*x1,2*y1)
@@ -1310,6 +1312,64 @@ function make_cam()
   }
 end
 
+-- returns first hit along a ray
+-- note: world is an entity like any other (sort of!)
+function hitscan(mins,maxs,p0,p1,triggers,ents)
+  local size=make_v(mins,maxs)
+  local radius=max(size[1],size[2])
+  local hull_type = 1
+  if radius>=64 then
+    hull_type = 3
+  elseif radius>=32 then
+    hull_type = 2
+  end
+
+  -- collect triggers
+  local hits
+  for k=1,#ents do
+    local other_ent = ents[k]
+    -- skip "hollow" entities
+    if not (other_ent.SOLID_NOT or triggers[other_ent]) then
+      -- convert into model's space (mostly zero except moving brushes)
+      local model,hull=other_ent.model
+      if not model or not model.hulls then
+        -- use local aabb - hit is computed in ent space
+        hull = modelfs.make_hull(make_v(maxs,other_ent.mins),make_v(mins,other_ent.maxs))
+      else
+        hull = model.hulls[hull_type]
+      end
+      
+      local tmphits={
+        t=1,
+        all_solid=true,
+        ent=other_ent
+      } 
+      -- rebase ray in entity origin
+      ray_bsp_intersect(hull,make_v( other_ent.origin,p0),make_v( other_ent.origin,p1),0,1,tmphits)
+      -- "invalid" location
+      if tmphits.start_solid or tmphits.all_solid then
+        if not other_ent.SOLID_TRIGGER then
+          return tmphits
+        end
+        -- damage or other actions
+        triggers[other_ent] = true
+      end
+
+      if tmphits.n then
+        -- closest hit?
+        -- print(other_ent.classname.." @ "..tmphits.t)
+        if other_ent.SOLID_TRIGGER then
+          -- damage or other actions
+          triggers[other_ent] = tmphits
+        elseif tmphits.t<(hits and hits.t or 32000) then
+          hits = tmphits
+        end
+      end
+    end
+  end  
+  return hits
+end
+
 function try_move(ent,origin,velocity)
   local vel2d = {velocity[1],velocity[2],0}
   local vl = v_len(vel2d)
@@ -1318,68 +1378,18 @@ function try_move(ent,origin,velocity)
   local on_ground,blocked = false,false
   local invalid=false
 
-  local time_left = 1/60
-  local hit_planes = {}
-
   -- avoid touching the same non-solid multiple times (ex: triggers)
-  local not_solid,touched = {},{}
+  local touched = {}
   -- collect all potential touching entities (done only once)
   -- todo: smaller box
-  local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}))        
+  local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}))
   add(ents,1,_entities[1])  
   -- check current to target pos
   for i=1,4 do
-    local hits={t=32000}
-    for k=1,#ents do
-      local other_ent = ents[k]
-      if not not_solid[other_ent] then
-        -- avoid infinite check
-        -- ad-hoc box check
-        if other_ent.SOLID_TRIGGER or other_ent.SOLID_NOT then
-          not_solid[other_ent] = true
-        end
-
-        local tmphits={
-          t=1,
-          all_solid=true
-        } 
-        -- convert into model's space (mostly zero except moving brushes)
-        local model,hull=other_ent.model
-        if not model or not model.hulls then
-          -- don't shift - hit is computed in ent space
-          hull = modelfs.make_hull(make_v(ent.maxs,other_ent.mins),make_v(ent.mins,other_ent.maxs))
-        else
-          hull = model.hulls[2]
-        end
-        
-        hitscan(hull,v_add(origin,other_ent.origin,-1),v_add(next_pos,other_ent.origin,-1),tmphits)
-        -- local s="hit:"..tostring(res)
-        -- for k,v in pairs(tmphits) do
-        --   s=s.."\t"..k..":"..tostring(v)
-        -- end
-        -- print(s)
-        if tmphits.start_solid or tmphits.all_solid then
-          if not other_ent.SOLID_NOT and not other_ent.SOLID_TRIGGER then
-            goto blocked
-          end
-          -- damage or other actions
-          touched[other_ent] = true
-        end
-
-        if tmphits.n then
-          -- damage or other actions
-          touched[other_ent] = true
-        end
-
-        if tmphits.n and tmphits.t<hits.t then
-          -- correct velocity?
-          if not (other_ent.SOLID_NOT or other_ent.SOLID_TRIGGER) then
-            hits=tmphits
-            hitent=other_ent
-          end
-        end
-      end
-    end          
+    local hits = hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
+    if not hits then
+      goto clear
+    end
     if hits.n then            
       local fix=v_dot(hits.n,velocity)
       -- not separating?
@@ -1393,13 +1403,11 @@ function try_move(ent,origin,velocity)
           on_ground=true
         end
         -- wall hit?
-        if not hitent.SOLID_SLIDEBOX and hits.n[3]==0 then
+        if not hits.ent.SOLID_SLIDEBOX and hits.n[3]==0 then
           blocked=true
         end
       end
       next_pos=v_add(origin,velocity)
-    else
-      goto clear
     end
   end
 ::blocked::
