@@ -7,7 +7,7 @@ local weapons=function(progs)
 
     progs.weapon_supershotgun=function(self)
         self.SOLID_TRIGGER = true
-        self.MOVETYPE_NONE = true;
+        self.MOVETYPE_NONE = true
         self.skin = 1
         self.frame = "shot1"
         self.mangles = {0,0,self.angle or 0}

@@ -45,20 +45,20 @@ local triggers=function(progs)
     end
 
     progs.info_teleport_destination=function(self)
+        -- 
+        local origin = v_add(self.origin,{0,0,27})
         -- init entity
         self.SOLID_NOT = true
-        self.MOVETYPE_NONE = true;
+        self.MOVETYPE_NONE = true
         self.DRAW_NOT = true
         -- set size and link into world
         progs:setmodel(self, self.model)   
         set_move_dir(self)
 
         self.use=function(other)
-            local origin=v_scale(v_add(self.mins,self.maxs),0.5)
-            other.origin = origin
-            m_set_pos(other.m, origin)
             -- todo: set angle + velocity
-
+            other.velocity = v_clone(self.movedir)
+            progs:setorigin(other, origin)
         end
     end
 
@@ -150,6 +150,26 @@ local triggers=function(progs)
         self.use = use_secret
         if band(self.spawnflags or 0,SPAWNFLAG_NOTOUCH)==0 then
             self.touch = use_secret
+        end
+    end
+
+    progs.trigger_setskill=function(self)
+        init_trigger(self)        
+
+        local skill=tonumber(self.message)
+
+        self.touch=function()
+            progs:set_skill(skill)
+        end
+    end
+
+    progs.trigger_changelevel=function(self)
+        local NO_INTERMISSION = 1
+
+        init_trigger(self)        
+        self.touch = function()
+            -- todo: change level
+            progs:load(self.map, band(self.spawnflags,NO_INTERMISSION)~=0)
         end
     end
 

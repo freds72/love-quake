@@ -225,8 +225,11 @@ function love.load(args)
       ent.absmins=v_add(ent.origin,ent.mins)
       ent.absmaxs=v_add(ent.origin,ent.maxs)
       m_set_pos(ent.m,ent.origin)
-      -- 
-      world.register(ent)
+
+      -- todo: wargh remove!!
+      if ent.classname~="player" then
+        world.register(ent)
+      end
     end,
     time=function()
       return love.frame / 60
@@ -273,29 +276,40 @@ function love.load(args)
     remove=function(_,ent)
       -- mark entity for deletion
       ent.free = true
+    end,
+    set_skill=function(_,skill)
+      logging.debug("Selected skill level: "..skill)
+      _skill = skill
+    end,
+    load=function(_,map,intermission)
+      if intermission then
+        -- switch to intermission state
+      else
+        server:load("maps/"..map..".bsp")
+      end
     end
   })
 
   -- bind entities and engine
-  for i=1,#level.entities do    
+  for i=1,#level.entities do        
     -- order matters: worldspawn is always first
-    local ent = _vm:bind(level.entities[i])
-    if ent then
-      -- valid entity?
-      add(_entities, ent)
+    local ent = level.entities[i]
+    if band(ent.spawnflags or 0,512)==0 then
+      local ent = _vm:bind(ent)
+      if ent then
+        -- valid entity?
+        add(_entities, ent)
+      end
     end
   end
 
   -- find player pos
   for _,kv in pairs(level.entities) do
-    for k,v in pairs(kv) do
-      if k=="classname" and v=="info_player_start" then
-        pos=kv.origin
-        logging.debug("Found player start")
-        break
-      end
+    if kv.classname=="info_player_start" then
+      pos=kv.origin
+      logging.debug("Found player start")
+      break
     end
-    if pos then break end
   end
   pos=pos or {0,0,0}
   _plyr=make_player(pos,0)
@@ -1360,7 +1374,7 @@ function hitscan(mins,maxs,p0,p1,triggers,ents)
         -- print(other_ent.classname.." @ "..tmphits.t)
         if other_ent.SOLID_TRIGGER then
           -- damage or other actions
-          triggers[other_ent] = tmphits
+          triggers[other_ent] = true
         elseif tmphits.t<(hits and hits.t or 32000) then
           hits = tmphits
         end
@@ -1440,6 +1454,8 @@ function make_player(pos,a)
     origin=pos,
     mins=mins,    
     maxs=maxs,
+    nodes={},
+    SOLID_NOT = true,
     absmins=v_add(pos,mins),
     absmaxs=v_add(pos,maxs),  
     m=make_m_from_euler(unpack(angle)),
@@ -1447,6 +1463,7 @@ function make_player(pos,a)
       -- damping      
       angle[2]=angle[2]*0.8
       dangle = v_scale(dangle,0.6)
+      
       velocity[1]=velocity[1]*0.7
       velocity[2]=velocity[2]*0.7
       velocity[3]=velocity[3]*0.9

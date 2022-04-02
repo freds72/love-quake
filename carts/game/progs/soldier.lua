@@ -16,7 +16,7 @@ local soldier=function(progs)
         local anim = 0
         self.nextthink = progs:time() + 0.1
         self.think=function()            
-            self.frame = "stand"..((anim%6)+1)
+            self.frame = "stand"..((anim%8)+1)
             self.nextthink = progs:time() + 0.1
             anim = anim+1
         end
