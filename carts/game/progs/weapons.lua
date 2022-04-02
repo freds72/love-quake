@@ -13,7 +13,8 @@ local weapons=function(progs)
         self.mangles = {0,0,self.angle or 0}
         -- set size and link into world
         progs:setmodel(self, "progs/g_shot.mdl",{0,0,56})
-
+        progs:drop_to_floor(self)
+        
         self.nextthink = progs:time() + 0.1
         self.think=function()            
             self.mangles={0,0,progs:time() * 4}

@@ -25,7 +25,7 @@ local walls=function(progs)
 
     progs.func_illusionary=function(self)
         self.SOLID_NOT = true
-        self.MOVETYPE_NONE = true;
+        self.MOVETYPE_NONE = true;        
         -- set size and link into world
         progs:setmodel(self, self.model)
     end

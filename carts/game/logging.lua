@@ -14,7 +14,8 @@ local logs = {
     debug="DEBUG",
     info="INFO",
     warn="WARNING",
-    err="ERROR"
+    err="ERROR",
+    critical="CRITICAL"
 }
 
 for k,v in pairs(logs) do    

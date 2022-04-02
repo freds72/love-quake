@@ -11,6 +11,7 @@ local misc=function(progs)
         self.SOLID_BSP = true
         self.MOVETYPE_NONE = true
         progs:setmodel(self, "maps/b_explob.bsp")
+        progs:drop_to_floor(self)
     end
 
     progs.light_torch_small_walltorch=function(self)

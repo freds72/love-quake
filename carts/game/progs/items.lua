@@ -16,6 +16,7 @@ local items=function(progs)
         self.MOVETYPE_NONE = true;
         -- set size and link into world
         progs:setmodel(self, "maps/b_shell0.bsp")
+        progs:drop_to_floor(self)
 
         self.touch=function()
             -- kill
@@ -46,7 +47,8 @@ local items=function(progs)
             self.healamount = 25
             self.healtype = 1
         end
-
+        progs:drop_to_floor(self)
+        
         self.touch=function()
             -- kill
             self.touch = nil

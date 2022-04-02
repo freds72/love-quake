@@ -287,6 +287,15 @@ function love.load(args)
       else
         server:load("maps/"..map..".bsp")
       end
+    end,
+    drop_to_floor=function(self,ent)
+      -- find "ground"
+      local hits = hitscan(ent.mins,ent.maxs,v_add(ent.origin,{0,0,8}),v_add(ent.origin,{0,0,-256}),{},{_entities[1]},ent)
+      if not hits or hits.t==1 or hits.all_solid then
+        logging.critical("Entity: "..ent.classname.." unable to find resting ground")
+        return
+      end
+      self:setorigin(ent,hits.pos)
     end
   })
 
@@ -1328,7 +1337,7 @@ end
 
 -- returns first hit along a ray
 -- note: world is an entity like any other (sort of!)
-function hitscan(mins,maxs,p0,p1,triggers,ents)
+function hitscan(mins,maxs,p0,p1,triggers,ents,ignore_ent)
   local size=make_v(mins,maxs)
   local radius=max(size[1],size[2])
   local hull_type = 1
@@ -1343,7 +1352,7 @@ function hitscan(mins,maxs,p0,p1,triggers,ents)
   for k=1,#ents do
     local other_ent = ents[k]
     -- skip "hollow" entities
-    if not (other_ent.SOLID_NOT or triggers[other_ent]) then
+    if not (other_ent.SOLID_NOT or ignore_ent==other_ent or triggers[other_ent]) then
       -- convert into model's space (mostly zero except moving brushes)
       local model,hull=other_ent.model
       if not model or not model.hulls then
