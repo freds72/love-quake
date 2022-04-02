@@ -469,22 +469,22 @@ local function unpack_map(bsp)
         }
         local flags = 0
         for i=0,1 do
-        local child_id = node.children[i]
-        if band(child_id,0x8000) ~= 0 then
-            child_id = bnot(child_id)
-            if child_id ~= 0 then
-                flags = bor(flags, i+1)
-                child_id = child_id + 1
+            local child_id = node.children[i]
+            if band(child_id,0x8000) ~= 0 then
+                child_id = bnot(child_id)
+                if child_id ~= 0 then
+                    flags = bor(flags, i+1)
+                    child_id = child_id + 1
+                else
+                    child_id = 0
+                end
             else
-                child_id = 0
+                -- node
+                if child_id==0 then
+                    assert("invalid child reference: 0")
+                end
+                child_id = child_id + 1
             end
-        else
-            -- node
-            if child_id==0 then
-                assert("invalid child reference: 0")
-            end
-            child_id = child_id + 1
-        end
             n[i==0] = child_id
         end
         n.flags=flags
@@ -496,7 +496,7 @@ local function unpack_map(bsp)
         local function attach_node(side,leaf)
             local refs=leaf and leaves or nodes
             local child=refs[node[side]]
-            node[side]=child
+            node[side]=child or content_types[2]
             -- used to optimize bsp traversal for rendering
             if child then
                 child.parent=node

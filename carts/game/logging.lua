@@ -5,7 +5,7 @@ local function array_tostring(v,...)
     if not v then
         return ""
     end
-    return tostring(v)..array_tostring(...)
+    return tostring(v).." "..array_tostring(...)
 end
 local function log(sev, ...)
     print(sev.." - "..array_tostring(...))

@@ -1,4 +1,4 @@
-local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
@@ -285,7 +285,8 @@ function love.load(args)
       if intermission then
         -- switch to intermission state
       else
-        server:load("maps/"..map..".bsp")
+        logging.info("NOT IMPLEMENTED - loading map: "..map)
+        -- server:load("maps/"..map..".bsp")
       end
     end,
     drop_to_floor=function(self,ent)
@@ -354,27 +355,18 @@ function love.load(args)
 end
 
 function find_sub_sector(node,pos)
-  while node do
+  while not node.contents do
     node=node[plane_isfront(node.plane,pos)]
-    if node and node.contents then
-      -- leaf?
-      return node
-    end
   end
+  return node
 end
 
 -- find if pos is within an empty space
 function node_content(node,pos)
   -- invalid root?
-  if not node then
-    return -2
-  end
   local pos={[0]=pos[1],pos[2],pos[3]}
   while not node.contents do
     node=node[plane_isfront(node.plane,pos)]
-    if not node then
-      return -2
-    end
   end  
   return node.contents
 end
@@ -1455,6 +1447,7 @@ function make_player(pos,a)
   local on_ground=false
   local mins={-16,-16,0}
   local maxs={16,16,48}
+  local lmb_down = false
 
   -- start above floor
   pos=v_add(pos,{0,0,1})
@@ -1540,6 +1533,26 @@ function make_player(pos,a)
             make_m_from_euler(0,angle[2],0))
       self.absmins=v_add(self.origin,self.mins)
       self.absmaxs=v_add(self.origin,self.maxs)
+
+      -- fire?
+      local cur_lmb_down = love.mouse.isDown(1)
+      if not lmb_down and cur_lmb_down then
+        if fire_ttl<love.frame then
+          fire_ttl = love.frame + 5
+          -- hitscan
+            local fwd,up=m_fwd(self.m),m_up(self.m)
+            local eye_pos = v_add(self.origin,up,24)
+            local aim_pos = v_add(eye_pos,fwd,1024)
+            local ents = world.touches(v_add(self.absmins, {-1024,-1024,-1024}),v_add(self.absmaxs, {1024,1024,1024}))            
+            local trace = hitscan({0,0,0},{0,0,0},eye_pos,aim_pos,{},ents)
+            if trace and trace.n then
+              if trace.ent.use then
+                trace.ent.use(self)
+              end
+            end
+        end        
+      end
+      lmb_down = cur_lmb_down
     end
   } 
 end

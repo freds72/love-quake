@@ -14,6 +14,8 @@ local zombie=function(progs)
         self.frame = crucified and "cruc_1" or "stand1"
         self.mangles = {0,0,self.angle or 0}
         progs:setmodel(self, "progs/zombie.mdl")
+        progs:drop_to_floor(self)
+        
         local anim = 0
         self.nextthink = progs:time() + 0.1
         if crucified then

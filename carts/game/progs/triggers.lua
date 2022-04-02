@@ -10,7 +10,10 @@ local triggers=function(progs)
         self.SOLID_TRIGGER = true
         self.MOVETYPE_NONE = true
         self.DRAW_NOT = true
-        self.nextthink = -1
+        set_defaults(self,{
+            nextthink = -1,
+            spawnflags = 0
+        })
         -- set size and link into world
         progs:setmodel(self, self.model)
     end
