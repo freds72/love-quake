@@ -22,6 +22,11 @@ local value_factory={
     wait=tonumber,
     delay=tonumber,
     spawnflags = tonumber,
+    message = function(value)
+        -- fixes \n into real \n!
+        local msg = string.gsub(value, "\\n", "\n")
+        return msg
+    end,
     origin=function(value)
         local coords=split(value," ")
         -- conver to numbers

@@ -121,7 +121,7 @@ typedef struct
                         local ch=sub(s,i,i)
                         if ch=="\n" then
                             sy = sy + 8 * scale
-                            sx = x
+                            sx = 0
                         else
                             sx = sx + 8 * scale
                         end
