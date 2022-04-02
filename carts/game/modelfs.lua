@@ -243,31 +243,23 @@ end
 -- planes functions (globals)
 plane_get=function(pi)
     local n=_planes[pi].normal
-    return n[0],n[1],n[2]
+    return n[1],n[2],n[3]
 end
 plane_dot=function(pi,v)
     local plane=_planes[pi]
     local t,n=plane.type,plane.normal
     if t<3 then                 
-    return n[t]*v[t],plane.dist
+        return n[t+1]*v[t+1],plane.dist
     end
-    return n[0]*v[0]+n[1]*v[1]+n[2]*v[2],plane.dist
-end
-plane_dot1=function(pi,v)
-    local plane=_planes[pi]
-    local t,n=plane.type,plane.normal
-    if t<3 then                 
-    return n[t]*v[t+1],plane.dist
-    end
-    return n[0]*v[1]+n[1]*v[2]+n[2]*v[3],plane.dist
+    return n[1]*v[1]+n[2]*v[2]+n[3]*v[3],plane.dist
 end
 plane_isfront=function(pi,v)
     local plane=_planes[pi]
     local t,n=plane.type,plane.normal
     if t<3 then    
-        return n[t]*v[t]>plane.dist
+        return n[t+1]*v[t+1]>plane.dist
     end
-    return n[0]*v[0]+n[1]*v[1]+n[2]*v[2]>plane.dist
+    return n[1]*v[1]+n[2]*v[2]+n[3]*v[3]>plane.dist
 end
 -- mins/maxs must be absolute corners
 plane_classify_bbox=function(pi,c,e)
@@ -285,10 +277,10 @@ plane_classify_bbox=function(pi,c,e)
     -- cf: https://gdbooks.gitbooks.io/3dcollisions/content/Chapter2/static_aabb_plane.html
 
     -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
-    local r = e[1]*abs(n[0]) + e[2]*abs(n[1]) + e[3]*abs(n[2])
+    local r = e[1]*abs(n[1]) + e[2]*abs(n[2]) + e[3]*abs(n[3])
   
     -- Compute distance of box center from plane
-    local s = n[0]*c[1]+n[1]*c[2]+n[2]*c[3] - plane.dist
+    local s = n[1]*c[1]+n[2]*c[2]+n[3]*c[3] - plane.dist
   
     -- Intersection occurs when distance s falls within [-r,+r] interval
     if s<=-r then
@@ -328,14 +320,23 @@ local function unpack_map(bsp)
     local plane_offset = #_planes + 1
 
     local verts,faces,leaves,nodes,models,uvs,clipnodes={},{},{},{},{},{},{}
+
+    local function v_rebase(v)
+        return {v[0],v[1],v[2]}
+    end
+    -- convert verts to 1-based array
+    unpack_array(function(v)
+        add(verts,v_rebase(v[0]))
+    end, bsp.vertices)
+
     -- register planes in global array
     unpack_array(function(plane)
-        add(_planes,plane)
+        add(_planes,{
+            normal=v_rebase(plane.normal),
+            dist=plane.dist,
+            type=plane.type
+        })
     end, bsp.planes)
-    
-    local function v_dot(a,b)
-        return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
-    end
     
     unpack_array(function(f,i)      
         -- side flag
@@ -349,10 +350,10 @@ local function unpack_map(bsp)
             local edge_id = bsp.surfedges[f.firstedge + i]
             if edge_id>=0 then
                 local edge = bsp.edges[edge_id]
-                add(face_verts, edge.v[0])
+                add(face_verts, edge.v[0]+1)
             else
                 local edge = bsp.edges[-edge_id]
-                add(face_verts, edge.v[1])
+                add(face_verts, edge.v[1]+1)
             end
         end
         -- texture?
@@ -374,9 +375,9 @@ local function unpack_map(bsp)
                 local v_min=32000
                 local v_max=-32000
                 for _,vi in pairs(face_verts) do
-                    local v=bsp.vertices[vi]
-                    local u=v_dot(v,tex.s) + tex.s_offset
-                    local v=v_dot(v,tex.t) + tex.t_offset
+                    local v=verts[vi]
+                    local u=v_dot(v,v_rebase(tex.s)) + tex.s_offset
+                    local v=v_dot(v,v_rebase(tex.t)) + tex.t_offset
                     u_min=min(u_min,u)
                     v_min=min(v_min,v)
                     u_max=max(u_max,u)
@@ -398,7 +399,7 @@ local function unpack_map(bsp)
 
         -- !! 1-based array
         face.verts = face_verts
-        face.cp=plane_dot(face.plane, bsp.vertices[face_verts[1]])
+        face.cp=plane_dot(face.plane, verts[face_verts[1]])
         add(faces, face)
     end, bsp.faces)
     
@@ -529,7 +530,7 @@ local function unpack_map(bsp)
     
     -- unpack "models"  
     local leaf_base=0
-    models.verts=bsp.vertices
+    models.verts=verts
     models.planes=bsp.planes
     models.leaves=leaves
     models.textures=bsp.textures
@@ -630,7 +631,7 @@ local function load_bsp(data)
 
     local bsp={
         models = read_all("dmodel_t", header.models, ptr),
-        vertices = read_all("vec3_t", header.vertices, ptr)[0],
+        vertices = read_all("vec3_t", header.vertices, ptr),
         visdata = read_all("unsigned char", header.visibility, ptr)[0],
         lightmaps = read_all("unsigned char", header.lighting, ptr),
         nodes = read_all("dnode_t", header.nodes, ptr),
@@ -822,10 +823,10 @@ local function init_hull()
         local side,type = band(i,1)==0,shr(i,1)
         local plane={
             type = type,
-            normal = {[0]=0,0,0}
+            normal = {0,0,0}
         }
         -- set vector
-        plane.normal[type]=1
+        plane.normal[type+1]=1
         -- register
         add(_planes,plane)
 

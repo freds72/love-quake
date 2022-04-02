@@ -354,23 +354,13 @@ function love.load(args)
   --debug.sethook(trace, "l")
 end
 
-function find_sub_sector(node,pos)
+-- find node/leaf the given position is in
+function find_node(node,pos)
   while not node.contents do
     node=node[plane_isfront(node.plane,pos)]
   end
   return node
 end
-
--- find if pos is within an empty space
-function node_content(node,pos)
-  -- invalid root?
-  local pos={[0]=pos[1],pos[2],pos[3]}
-  while not node.contents do
-    node=node[plane_isfront(node.plane,pos)]
-  end  
-  return node.contents
-end
-
 
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
 -- hull location
@@ -399,8 +389,8 @@ function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     -- empty space
     return true
   end
-  local dist,node_dist=plane_dot1(node.plane,p0)
-  local otherdist=plane_dot1(node.plane,p1)
+  local dist,node_dist=plane_dot(node.plane,p0)
+  local otherdist=plane_dot(node.plane,p1)
   local side,otherside=dist>node_dist,otherdist>node_dist
   if side==otherside then
     -- go down this side
@@ -421,7 +411,7 @@ function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     return
   end
 
-  if node_content(node[not side],pmid)~=-2 then
+  if find_node(node[not side],pmid).contents ~= -2 then
     return ray_bsp_intersect(node[not side],pmid,p1,tmid,t1,out)
   end
 
@@ -644,7 +634,7 @@ function love.draw()
     ]]
 
   -- note: text is written using Love2d api - mush be done after direct buffer draw
-  local current_leaf=find_sub_sector(_level.hulls[1],{[0]=_plyr.origin[1],_plyr.origin[2],_plyr.origin[3]})
+  local current_leaf=find_node(_level.hulls[1],_plyr.origin)
   
   if _memory_thinktime<love.frame then
     local prev = _memory    
@@ -1026,9 +1016,8 @@ function make_cam()
 
   local v_cache={
     cache={},
-    init=function(self,m,base)
+    init=function(self,m)
         self.m = m
-        self.base=base or 1
         local cache=self.cache
         for k in pairs(cache) do
           cache[k]=nil
@@ -1039,8 +1028,7 @@ function make_cam()
       -- find vbo (if any)
       local idx=self.cache[v]
       if not idx then
-        local base=self.base
-        local m,code,x,y,z=self.m,0,v[base+0],v[base+1],v[base+2]
+        local m,code,x,y,z=self.m,0,v[1],v[2],v[3]
         local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
 
         -- znear=8
@@ -1128,8 +1116,7 @@ function make_cam()
     collect_leaves=function(self,root,leaves)
       profileCollectLeaves = appleCake.profileFunc(nil, profileCollectLeaves)
 
-      local pos={[0]=self.origin[1],self.origin[2],self.origin[3]}
-      local current_leaf=find_sub_sector(root,pos)
+      local current_leaf=find_node(root,self.origin)
       
       if not current_leaf or not current_leaf.pvs then
         -- debug
@@ -1172,10 +1159,9 @@ function make_cam()
       profileDrawModel = appleCake.profileFunc(nil, profileDrawModel)
       local m=self.m
       --local pts,cam_u,cam_v,v_cache,f_cache,cam_pos={},{m[1],m[5],m[9]},{m[2],m[6],m[10]},setmetatable({m=m_x_m(m,model.m)},v_cache_class),{},v_add(self.pos,model.origin,-1)
-      v_cache:init(m_x_m(m,ent.m),0)
+      v_cache:init(m_x_m(m,ent.m))
 
       local cam_pos=v_add(self.origin,ent.origin,-1)
-      cam_pos={[0]=cam_pos[1],cam_pos[2],cam_pos[3]}
       local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
       for i=lstart,lend do
         for j,face in ipairs(leaves[i]) do
@@ -1192,7 +1178,7 @@ function make_cam()
               outcode=band(outcode,code)
               clipcode=clipcode + band(code,2)
               -- compute uvs
-              local x,y,z=v[0],v[1],v[2]
+              local x,y,z=v[1],v[2],v[3]
               vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
               vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
               local w = vbo[a+VBO_W]
