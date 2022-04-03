@@ -34,9 +34,6 @@ end
 local scale=2
 local _memory_thinktime=-1
 
--- game globals
-local velocity,dangle,angle,pos={0,0,0},{0,0,0},{0,0,0}
-
 function printh(...)
     print(...)
 end
@@ -136,10 +133,10 @@ function love.load(args)
     total_secrets = 0,
     found_secrets = 0,
     lightstyle=function(self, id, lightstyle)
-      local style,base={},ord("a")
+      local style,min_light,max_light={},ord("a"),ord("z")
       for frame=0,#lightstyle-1 do
         local ch = sub(lightstyle,frame,frame+1)
-        local scale = 1 - (ord(ch) - base) / 25
+        local scale = (ord(ch) - min_light) / (max_light - min_light)
         assert(scale>=0 and scale<=1, "ERROR - Light style: "..id.." invalid value: '"..ch.." @'..frame")
 
         add(style,scale)
@@ -354,6 +351,50 @@ function love.load(args)
   --debug.sethook(trace, "l")
 end
 
+function love.run()
+	if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
+
+	-- We don't want the first frame's dt to include time taken by love.load.
+	if love.timer then love.timer.step() end
+
+	local dt = 0
+
+	-- Main loop time.
+	return function()
+		-- Process events.
+		if love.event then
+			love.event.pump()
+			for name, a,b,c,d,e,f in love.event.poll() do
+				if name == "quit" then
+					if not love.quit or not love.quit() then
+						return a or 0
+					end
+				end
+				love.handlers[name](a,b,c,d,e,f)
+			end
+		end
+
+    appleCake.mark("Frame")
+
+		-- Update dt, as we'll be passing it to update
+		if love.timer then dt = love.timer.step() end
+
+		-- Call update and draw
+		if love.update then love.update(dt) end -- will pass 0 if love.timer is disabled
+
+		if love.graphics and love.graphics.isActive() then
+			love.graphics.origin()
+			love.graphics.clear(love.graphics.getBackgroundColor())
+
+			if love.draw then love.draw() end
+      
+			love.graphics.present()
+		end
+
+		if love.timer then love.timer.sleep(0.001) end
+	end
+end
+
 -- find node/leaf the given position is in
 function find_node(node,pos)
   while not node.contents do
@@ -546,6 +587,7 @@ function love.draw()
   local leaves = _cam:collect_leaves(_level.hulls[1],_world_model.leaves)
   -- world entity
   -- local m0=collectgarbage("count")
+  appleCake.counter("#leaves", {#leaves}) 
   _cam:draw_model(_entities[1],_world_model.textures,_world_model.verts,leaves,1,#leaves)
   --print(collectgarbage("count")-m0.."kb")
 
@@ -571,6 +613,8 @@ function love.draw()
 
   -- appleCake.countMemory()
   _profileDraw:stop() -- By setting it to love.graphics.getStats we can see details of the draw
+
+  appleCake.counter("FPS", {love.timer.getFPS()}) 
 
   --
   -- local model = _flame.alias
@@ -1166,24 +1210,25 @@ function make_cam()
       local cam_pos=v_add(self.origin,ent.origin,-1)
       local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
       for i=lstart,lend do
-        for j,face in ipairs(leaves[i]) do
+        local leaf = leaves[i]
+        for j=1,#leaf do
+          local face = leaf[j]
           if not f_cache[face] and plane_dot(face.plane,cam_pos)>face.cp~=face.side then
             profileTransform = appleCake.profileFunc(nil, profileTransform)
             -- mark visited
             f_cache[face]=true
-            local texinfo,outcode,clipcode=face.texinfo,0xffff,0            
-            local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset
-            for k,vi in ipairs(face.verts) do
-              local v=verts[vi]
+            local vertref,texinfo,outcode,clipcode=face.verts,face.texinfo,0xffff,0            
+            local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset          
+            for k=1,#vertref do
+              local v=verts[vertref[k]]
               local a=v_cache:transform(v)
               local code = vbo[a+VBO_OUTCODE]
               outcode=band(outcode,code)
               clipcode=clipcode + band(code,2)
               -- compute uvs
-              local x,y,z=v[1],v[2],v[3]
+              local x,y,z,w=v[1],v[2],v[3],vbo[a+VBO_W]
               vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
               vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
-              local w = vbo[a+VBO_W]
               if w>maxw then
                 maxw = w
               end

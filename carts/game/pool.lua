@@ -43,6 +43,7 @@ local PoolCls=function(name,stride,size)
             return "pool:"..name.." free: "..(total-cursor).." size: "..#pool
         end
     },{
+        -- redirect get/set to underlying array
         __index=function(self,k)
             return pool[k]
         end,

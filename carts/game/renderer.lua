@@ -18,8 +18,9 @@ function start_frame(buf)
 	_backbuffer = buf
 end
 -- "vbo" cache
-local _pool=require("pool")("spans",5,2500)
+local _pool=require("pool")("spans",5,5000)
 local _spans={}
+local _poly_id=0
 function end_frame()	
 	-- used state
 	--print(_pool:stats())
@@ -30,19 +31,32 @@ function end_frame()
 	for k in pairs(_spans) do
 		_spans[k]=nil
 	end
+	_poly_id = 0
 end
 
+local function rectfill(x0,y,x1,y)
+	local c = _palette[_colormap[_poly_id%256]]
+	y=y*480
+	for x=y+x0,y+x1 do
+		_backbuffer[x] = c
+	end
+end
+
+local _profilespanfill
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
 	end
+	--_profilespanfill = appleCake.profileFunc(nil, _profilespanfill)
+
+	-- fn = rectfill
 
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		_spans[y]=_pool:pop(x0,x1,w,dw,-1)
-		return
+		goto done
 	end
 
 	while span>0 do		
@@ -62,7 +76,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					-- new first
 					_spans[y]=n
 				end
-				return
+				goto done
 			end
 
 			-- nnnn?????????
@@ -143,7 +157,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			if s1>=x1 then
 				--     ///////
 				--     xxxxxxx	
-				return
+				goto done
 			end
 			--         ///nnn
 			--     xxxxxxx
@@ -170,6 +184,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 		-- end of spans
 		_pool[old+4]=_pool:pop(x0,x1,w,dw,-1)
 	end
+::done::
+	-- _profilespanfill:stop()
 end
 
 local _texptr,_texw,_texh,_texscale
@@ -244,7 +260,7 @@ end
 local _gamma = 0
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)	
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
-	for x=x0,x1 do
+	for x=y0*480+x0,y0*480+x1 do
 		local uw,vw=u/w,v/w
 		if _lightptr then
 			shade=0
@@ -284,7 +300,7 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh
 		local coloridx=_texptr[s+t*_texw]
 		--if (x+y0)%2==0 then
-		_backbuffer[x+y0*480]=_palette[_colormap[coloridx + shade*256]]
+		_backbuffer[x]=_palette[_colormap[coloridx + shade*256]]
 		--else
 		-- _backbuffer[x+y0*480]=_palette[_colormap[_texscale*8+15]]
 		--end
@@ -397,16 +413,7 @@ function polyfill(p,np,c)
 	end
 end
 
--- layout
-local VBO_1 = 0
-local VBO_2 = 1
-local VBO_3 = 2
-local VBO_X = 3
-local VBO_Y = 4
-local VBO_W = 5
-local VBO_OUTCODE = 6
-local VBO_U = 7
-local VBO_V = 8
+
 local _vbo
 function push_vbo(vbo)
 	logging.debug("Assign VBO: "..vbo:stats())
@@ -415,6 +422,17 @@ end
 
 local _profilepolytex
 function polytex(p,np,sky)
+	-- layout
+	local VBO_1 = 0
+	local VBO_2 = 1
+	local VBO_3 = 2
+	local VBO_X = 3
+	local VBO_Y = 4
+	local VBO_W = 5
+	local VBO_OUTCODE = 6
+	local VBO_U = 7
+	local VBO_V = 8
+
 	_profilepolytex = appleCake.profileFunc(nil, _profilepolytex)
 
 	local tline=sky and mode7 or tline3d
@@ -430,6 +448,7 @@ function polytex(p,np,sky)
       		maxy=y
     	end
 	end
+	appleCake.counter("height", {maxy-miny}) 
 
 	--data for left & right edges:
 	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
