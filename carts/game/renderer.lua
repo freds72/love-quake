@@ -129,7 +129,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				end
 				
 				-- any remaining "right" from current span?
-				if s1-x1-1>=0 then
+				if s1-x1-1>0 then
 					-- "shrink" current span
 					_pool[span]=x1+1
 					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw

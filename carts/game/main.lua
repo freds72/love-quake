@@ -1,4 +1,4 @@
-local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
@@ -1000,9 +1000,11 @@ function make_cam()
   -- collect bps leaves in order
   local collect_bsp
   local function collect_leaf(child,pos)
-    if child and child.visframe==visframe then
-      if child.contents then          
-        visleaves[#visleaves+1]=child
+    if child.visframe==visframe then
+      if child.contents then       
+        if _cam:is_visible(child.mins,child.maxs) then
+          visleaves[#visleaves+1]=child
+        end
       else
         collect_bsp(child,pos)
       end

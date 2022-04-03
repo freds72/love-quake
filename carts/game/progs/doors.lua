@@ -152,16 +152,12 @@ local doors=function(progs)
         
         -- init entity
         init(self)
-        self.speed = 50
-        if not self.dmg then
-		    self.dmg = 2
-        end
-        if not self.wait then
-		    self.wait = 5 --  5 seconds before closing       
-        end
-        
-        self.mangles = {0,0,0}
-        self.angles = {0,0,0}
+        set_defaults(self,{
+            speed=50,
+            dmg = 2,
+            wait = 5
+        })
+        set_move_dir(self)        
 
         local oldorigin = v_clone(self.origin)
         local state = 1
@@ -222,27 +218,17 @@ local doors=function(progs)
         
             local temp = 1 - band(self.spawnflags,SECRET_1ST_LEFT) -- 1 or -1
 
-            local v_fwd,v_right,v_up = makevectors(unpack(self.mangles))
-            
-            if not self.t_width then
-                if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then
-                    self.t_width = abs(v_dot(v_up,self.size))
-                else
-                    self.t_width = abs(v_dot(v_right,self.size))
-                end
-            end
-                
-            if  not self.t_length then
-                self.t_length = abs(v_dot(v_fwd,self.size))
+            local v_right,v_fwd,v_up = makevectors(self.movedir)
+            if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then
+                local len = abs(v_dot(v_up,self.size))
+                self.dest1 = v_add(self.origin,v_up,-len)
+            else
+                local len = abs(v_dot(v_right,self.size))
+                self.dest1 = v_add(self.origin,v_right,temp*len)
             end
         
-            if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then
-                self.dest1 = v_add(self.origin,v_up,-self.t_width)
-            else
-                self.dest1 = v_add(self.origin,v_right,-self.t_width * temp)
-            end
-
-            self.dest2 = v_add(self.dest1,v_fwd,self.t_length)
+            local t_length = abs(v_dot(v_fwd,self.size))
+            self.dest2 = v_add(self.dest1,v_fwd,t_length)
 
             calc_move(self, self.dest1, self.speed, fd_secret_move1)            
         end        

@@ -5,7 +5,7 @@ local subs=function(progs)
     local rnd = math.random
 
     function set_move_dir(self)
-        local angle = self.angle or 180
+        local angle = self.angle or 0
         if angle == -1 then
             -- up
             self.movedir = {0,0,1}
@@ -13,7 +13,8 @@ local subs=function(progs)
             -- down
             self.movedir = {0,0,-1}
         else
-            self.movedir=make_m_from_euler(0,0,-angle)
+            local angle=math.pi*angle/180
+            self.movedir={math.cos(angle),math.sin(angle),0}
         end
         
         self.angles = {0,0,0}
@@ -89,8 +90,8 @@ local subs=function(progs)
         end    
     end
 
-    function makevectors(x,y,z)
-        local m=make_m_from_euler(x,y,z)
+    function makevectors(fwd)
+        local m=make_m_look_at({0,0,1},fwd)
         return m_right(m),m_fwd(m),m_up(m)
     end
 
