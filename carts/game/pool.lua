@@ -16,11 +16,10 @@ local PoolCls=function(name,stride,size)
         logging.debug(name.." - new pool#: "..total.."("..#pool..")")
     end
     local function vargs_copy(idx,value,...)
-        if not value then
-            return
+        if value then
+            pool[idx] = value
+            vargs_copy(idx+1,...)
         end
-        pool[idx] = value
-        vargs_copy(idx+1,...)
     end
     return setmetatable({
         -- reserve an entry in pool

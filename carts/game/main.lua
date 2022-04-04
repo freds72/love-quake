@@ -335,20 +335,6 @@ function love.load(args)
     grab_mouse()
   end
   --end
-
-  -- collectgarbage("stop")
-  local sus={
-    ["pool.lua"]=true,
-    ["renderer.lua"]=true
-  }
-  function trace (event, line)
-    local s = debug.getinfo(2).short_src
-    if sus[s] then
-      print(s .. ":" .. line)
-    end
-  end
-  
-  --debug.sethook(trace, "l")
 end
 
 function love.run()
@@ -489,11 +475,26 @@ function grab_mouse()
 end
 
 _debug_display = false
+_debug_trace = false
 function love.keypressed(key)
   if key == "tab" then
     _debug_display = not _debug_display
   elseif key == "escape" then
     love.event.quit(0)
+  elseif key == "h" then
+    if _debug_trace then
+      return
+    end
+    _debug_trace = true
+    _debug_frames={}
+    logging.debug("Function call trace enabled.")
+    local function trace (event, line)
+      local s = debug.getinfo(2).short_src-- .. ":" .. line
+      local count = _debug_frames[s] or 0
+      _debug_frames[s] = count + 1
+    end
+    
+    debug.sethook(trace, "l")
   end
 end
 
@@ -767,6 +768,7 @@ function love.draw()
   love.graphics.setColor(1,1,1)
   ]]
 
+  _debug_frames={}
 end
 
 function love.quit()
@@ -1262,7 +1264,8 @@ function make_cam()
                   for i,style in pairs(face.lightstyles) do
                     local lightstyle=_light_styles[style]  
                     if lightstyle then
-                      local frame = flr(love.frame/15) % #lightstyle
+                      -- change light every 0.1s
+                      local frame = flr(love.frame/6) % #lightstyle
                       --print("light style @"..lightstyle.."["..frame.."]")
                       styles[i] = lightstyle[frame + 1]
                     end

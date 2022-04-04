@@ -448,7 +448,6 @@ function polytex(p,np,sky)
       		maxy=y
     	end
 	end
-	appleCake.counter("height", {maxy-miny}) 
 
 	--data for left & right edges:
 	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
