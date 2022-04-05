@@ -13,6 +13,8 @@ local math3d = require( "math3d")
 local progs = require("progs.main")
 local logging = require("logging")
 local world = require("world")
+local bsp = require("bsp")
+
 local lg = love.graphics
 
 ffi.cdef[[
@@ -381,79 +383,6 @@ function love.run()
 	end
 end
 
--- find node/leaf the given position is in
-function find_node(node,pos)
-  while not node.contents do
-    node=node[plane_isfront(node.plane,pos)]
-  end
-  return node
-end
-
--- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
--- hull location
--- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
--- https://developer.valvesoftware.com/wiki/BSP
--- ray/bsp intersection
-function ray_bsp_intersect(node,p0,p1,t0,t1,out)
-  if not node then
-    -- same as -2
-    out.start_solid = true
-    return 
-  end
-  local contents=node.contents  
-  if contents then
-    -- is "solid" space (bsp)
-    if contents~=-2 then
-      out.all_solid = false
-      if contents==-1 then
-        out.in_open = true
-      else
-        out.in_water = true
-      end
-    else
-      out.start_solid = true
-    end
-    -- empty space
-    return true
-  end
-  local dist,node_dist=plane_dot(node.plane,p0)
-  local otherdist=plane_dot(node.plane,p1)
-  local side,otherside=dist>node_dist,otherdist>node_dist
-  if side==otherside then
-    -- go down this side
-    return ray_bsp_intersect(node[side],p0,p1,t0,t1,out)
-  end
-  -- crossing a node
-  local t=dist-node_dist
-  if t<0 then
-    t=t-0.001
-  else
-    t=t+0.001
-  end  
-  -- cliping fraction
-  local frac=mid(t/(dist-otherdist),0,1)
-  local pmid=v_lerp(p0,p1,frac)
-  local tmid=lerp(t0,t1,frac)
-  if not ray_bsp_intersect(node[side],p0,pmid,t0,tmid,out) then
-    return
-  end
-
-  if find_node(node[not side],pmid).contents ~= -2 then
-    return ray_bsp_intersect(node[not side],pmid,p1,tmid,t1,out)
-  end
-
-  -- never got out of the solid area
-  if out.all_solid then
-    return
-  end
-
-  local scale=side and 1 or -1
-  local nx,ny,nz=plane_get(node.plane)
-  out.n={scale*nx,scale*ny,scale*nz,node_dist}
-  out.t=tmid
-  out.pos = pmid
-end
-
 mx,my=0,0
 diffx,diffy=0,0
 camx,camy=0,0
@@ -679,7 +608,7 @@ function love.draw()
     ]]
 
   -- note: text is written using Love2d api - mush be done after direct buffer draw
-  local current_leaf=find_node(_level.hulls[1],_plyr.origin)
+  local current_leaf=bsp.locate(_level.hulls[1],_plyr.origin)
   
   if _memory_thinktime<love.frame then
     local prev = _memory    
@@ -1164,7 +1093,7 @@ function make_cam()
     collect_leaves=function(self,root,leaves)
       profileCollectLeaves = appleCake.profileFunc(nil, profileCollectLeaves)
 
-      local current_leaf=find_node(root,self.origin)
+      local current_leaf=bsp.locate(root,self.origin)
       
       if not current_leaf or not current_leaf.pvs then
         -- debug
@@ -1396,7 +1325,8 @@ function hitscan(mins,maxs,p0,p1,triggers,ents,ignore_ent)
         ent=other_ent
       } 
       -- rebase ray in entity origin
-      ray_bsp_intersect(hull,make_v( other_ent.origin,p0),make_v( other_ent.origin,p1),0,1,tmphits)
+      bsp.intersect(hull,make_v( other_ent.origin,p0),make_v( other_ent.origin,p1),tmphits)
+
       -- "invalid" location
       if tmphits.start_solid or tmphits.all_solid then
         if not other_ent.SOLID_TRIGGER then

@@ -19,6 +19,9 @@ local player=function(progs)
 
         self.hit=function(dmg,other)
         end
+
+        self.die=function()
+        end
     end
 end
 return player
