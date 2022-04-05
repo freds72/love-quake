@@ -19,8 +19,8 @@ local items=function(progs)
         progs:drop_to_floor(self)
 
         self.touch=function()
-            -- kill
-            self.touch = nil
+            progs:remove(self)
+            
             -- todo:    
             print("got shells")        
         end
@@ -50,8 +50,7 @@ local items=function(progs)
         progs:drop_to_floor(self)
         
         self.touch=function()
-            -- kill
-            self.touch = nil
+            progs:remove(self)
             -- todo:     
             print("got health: "..self.healamount)               
         end

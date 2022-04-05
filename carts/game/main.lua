@@ -1444,9 +1444,7 @@ function make_player(pos,a)
 
         -- trigger touched items
         for other_ent in pairs(move.touched) do
-          if other_ent.touch then
-            other_ent.touch(self)
-          end
+          _vm:call(other_ent,"touch",self)
         end       
         
       else

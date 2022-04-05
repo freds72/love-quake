@@ -29,9 +29,10 @@ local main=function(context)
     end
 
     return {
-        call=function(self,fn,...)
-            if env[fn] then
-                env[fn](...)
+        -- call a "mod" function unless entity is tagged for delete
+        call=function(self,ent,fn,...)
+            if not ent.free and ent[fn] then
+                ent[fn](...)
             end
         end,
         bind=function(self,ent)
