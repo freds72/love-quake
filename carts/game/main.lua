@@ -14,13 +14,9 @@ local progs = require("progs.main")
 local logging = require("logging")
 local world = require("world")
 local bsp = require("bsp")
+local palette = require("palette")
 
 local lg = love.graphics
-
-ffi.cdef[[
-    #pragma pack(1)
-    typedef struct { unsigned char r,g,b; } color_t;
-]]    
 
 -- pico8 compat helpers
 local sub,add,ord,del=string.sub,table.insert,string.byte,table.remove
@@ -60,35 +56,7 @@ function format(str, ...)
   return string.format(str,unpack(args))
 end
 
-function print_vector(v)
-  printh(v[0].." "..v[1].." "..v[2])
-end
 
-function read_palette(path)
-  local palette = {}
-  -- dump to bytes
-  local data = nfs.newFileData(path.."/gfx/palette_orig.lmp")
-
-  local src = ffi.cast('color_t*', data:getFFIPointer())
-  for i=0,255 do
-    -- swap colors
-    local rgb = src[i]
-    palette[i] = 0xff000000 + shl(rgb.b,16) + shl(rgb.g,8) + rgb.r
-  end 
-  return palette
-end
-
-function read_colormap(path)
-  local colormap = {}
-  -- dump to bytes
-  local data = nfs.newFileData(path.."/gfx/colormap.lmp")
-
-  local src = ffi.cast('uint8_t*', data:getFFIPointer())
-  for i=0,256*64-1 do
-    colormap[i] = src[i]
-  end 
-  return colormap
-end
 
 local _light_styles={}
 
@@ -112,8 +80,7 @@ function love.load(args)
   logging.debug("game root: "..root_path)
 
   -- set default palette
-  _palette = read_palette(root_path)
-  _colormap = read_colormap(root_path)
+  _palette,_colormap = palette.load()
 
   _font = require("font")(root_path, _palette, _colormap)
 

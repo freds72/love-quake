@@ -19,6 +19,12 @@ local function fly_move()
     end
 end
 
+-- load level & start game
+function server.load(map)
+    
+end
+
+
 -- SV_RunCmd
 function server.run()
     _player.pre_think()
