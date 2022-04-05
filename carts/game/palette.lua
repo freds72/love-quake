@@ -35,9 +35,11 @@ local function read_colormap()
     return colormap
 end
 
--- read the 
-function palette.load()
-    return read_palette(),read_colormap()
+-- read the palette
+return function()
+    local p,c=read_palette(),read_colormap()
+    return {
+        hw = p,
+        colormap = c
+    }
 end
-
-return palette

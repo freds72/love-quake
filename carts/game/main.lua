@@ -14,7 +14,7 @@ local progs = require("progs.main")
 local logging = require("logging")
 local world = require("world")
 local bsp = require("bsp")
-local palette = require("palette")
+local palette = require("palette")()
 
 local lg = love.graphics
 
@@ -79,10 +79,7 @@ function love.load(args)
   local root_path = args[1]
   logging.debug("game root: "..root_path)
 
-  -- set default palette
-  _palette,_colormap = palette.load()
-
-  _font = require("font")(root_path, _palette, _colormap)
+  _font = require("font")(root_path)
 
   local precache_models = {}
   local level = modelfs.load(root_path, "maps/"..args[2])

@@ -1,7 +1,8 @@
-local fonts=function(root_path, palette)
+local fonts=function(root_path)
     local ffi=require 'ffi'
     local nfs = require( "nativefs" )
-
+    local palette = require("palette")()
+    
     -- p8 compat
     local sub,max=string.sub,math.max
 
@@ -87,7 +88,7 @@ typedef struct
             local dst = ffi.cast('uint32_t*', imagedata:getFFIPointer()) 
             for i=0,16*8*16*8-1 do
                 local col = src[i]
-                dst[i] = col==0 and 0x0 or _palette[col]
+                dst[i] = col==0 and 0x0 or palette.hw[col]
             end
             image:replacePixels(imagedata)        
             

@@ -2,6 +2,7 @@ local renderer={}
 local appleCake = require("lib.AppleCake")()  
 local ffi=require 'ffi'
 local logging = require("logging")
+local palette = require("palette")()
 
 -- p8
 local abs,flr,ceil=math.abs,math.floor,math.ceil
@@ -12,6 +13,9 @@ local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local function mid(x, a, b)
 	return max(a, min(b, x))
   end
+
+-- palette
+local _palette,_colormap=palette.hw,palette.colormap
 
 local _backbuffer
 function start_frame(buf)
