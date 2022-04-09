@@ -1,42 +1,42 @@
-local PoolCls=function(name,stride,size)
+local recycling_pool=function(name,stride,size)
     local logging = require("logging")
+    
     -- p8 compat
     local add,del=table.insert,table.remove
-    local flr=math.floor
 
     size=size or 100
-    local pool,cursor,total={},0,0
+    local pool,free={},{}
     local function reserve()
         for i=1,size do
+            -- "free" index
+            add(free,#pool*stride+1)
             for j=1,stride do
                 add(pool,0)
             end
         end
-        total = total + size
-        logging.debug(name.." - new pool#: "..total.."("..#pool..")")
+        logging.debug("pool:"..name.." - new pool#: "..#pool/stride)
     end
     return setmetatable({
         -- reserve an entry in pool
         pop=function(self,...)
             -- no more entries?
-            if cursor==total then    
+            if #free==0 then    
                 reserve()
             end
-            -- init values
-            local idx=cursor*stride
-            cursor = cursor + 1
+            -- pick from the free list                
+            local idx=del(free)
             local args={...}
-            for i=1,#args do
-                pool[idx+i]=args[i]
+            for i=0,#args-1 do
+                pool[idx+i]=args[i+1]
             end
-            return idx+1
+            return idx
         end,
-        -- reclaim everything
-        reset=function(self)
-            cursor = 0
+        -- reclaim slot
+        push=function(self,idx)
+            add(free,idx)
         end,
         stats=function(self)   
-            return "pool:"..name.." free: "..(total-cursor).." size: "..#pool
+            return "pool: "..name.." free: "..#free.." pool: "..#pool/stride
         end
     },{
         -- redirect get/set to underlying array
@@ -48,4 +48,4 @@ local PoolCls=function(name,stride,size)
         end
     })
 end
-return PoolCls
+return recycling_pool

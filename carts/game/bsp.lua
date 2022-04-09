@@ -70,8 +70,8 @@ local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
 
     local scale=side and 1 or -1
     local nx,ny,nz=plane_get(node.plane)
-    out.n={scale*nx,scale*ny,scale*nz,node_dist}
-    out.t=tmid
+    out.n = {scale*nx,scale*ny,scale*nz,node_dist}
+    out.t = tmid
     out.pos = pmid
 end
 

@@ -138,7 +138,7 @@ function world.unregister(ent)
 end
 
 local function register_bbox(node, ent, pos, size)    
-    if not node or node.contents==-2 then
+    if node.contents==-2 then
         return
     end
 
@@ -157,22 +157,23 @@ local function register_bbox(node, ent, pos, size)
     -- classify box
     local sides = plane_classify_bbox(node.plane, pos, size)
 	-- sides or straddling?
-    if band(sides,1)>0 then
+    if band(sides,1)~=0 then
         register_bbox(node[false], ent, pos, size)
     end
-    if band(sides,2)>0 then
+    if band(sides,2)~=0 then
         register_bbox(node[true], ent, pos, size)
     end
 end
 
 local function touches_bbox(node, pos, size, out)    
-    if not node or node.contents==-2 then
+    if node.contents==-2 then
         return
     end
 
     -- any non solid content
     if node.contents then        
         if node.ents then
+            -- return all entities in this leaf
             for ent,_ in pairs(node.ents) do
                 out[ent]=true
             end
@@ -183,10 +184,10 @@ local function touches_bbox(node, pos, size, out)
     -- classify box
     local sides = plane_classify_bbox(node.plane, pos, size)
 	-- sides or straddling?
-    if band(sides,1)>0 then
+    if band(sides,1)~=0 then
         touches_bbox(node[false], pos, size, out)
     end
-    if band(sides,2)>0 then
+    if band(sides,2)~=0 then
         touches_bbox(node[true], pos, size, out)
     end    
 end
@@ -217,7 +218,7 @@ function world.register(ent)
         }
         -- extents
         local e=make_v(c, maxs)
-        -- register to lowler
+        -- register in visible world
         register_bbox(_root, ent, c, e)
     end
 
@@ -228,34 +229,36 @@ end
 -- returns all entities touching the given absolute box
 local touch_query={ 
     ents = {},
-    find=function(self,cell,mins,maxs)
+    find=function(self,cell,mins,maxs,filter)
         if not cell then
             return
         end
         -- collect current cell items
         local x0,y0,z0,x1,y1,z1=mins[1],mins[2],mins[3],maxs[1],maxs[2],maxs[3]    
         for e,_ in pairs(cell.ents) do
-            -- touching?
-            if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
-               y0<=e.absmaxs[2] and y1>=e.absmins[2] and
-               z0<=e.absmaxs[3] and z1>=e.absmins[3] then
-                add(self.ents,e)
+            if e~=filter then
+                -- touching?
+                if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
+                y0<=e.absmaxs[2] and y1>=e.absmins[2] and
+                z0<=e.absmaxs[3] and z1>=e.absmins[3] then
+                    add(self.ents,e)
+                end
             end
         end
 
         -- visit touching cells
         local sides = cell.classify(mins, maxs)
         if band(sides,1)~=0 then
-            self:find(cell[false],mins,maxs)
+            self:find(cell[false],mins,maxs,filter)
         end
         if band(sides,2)~=0 then
-            self:find(cell[true],mins,maxs)
+            self:find(cell[true],mins,maxs,filter)
         end
     end
 }
-function world.touches(mins,maxs)
+function world.touches(mins,maxs,filter)
     touch_query.ents = {}
-    touch_query:find(_map,mins,maxs)
+    touch_query:find(_map,mins,maxs,filter)
     return touch_query.ents
 end
 

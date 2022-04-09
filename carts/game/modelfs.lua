@@ -497,7 +497,7 @@ local function unpack_map(bsp)
         local function attach_node(side,leaf)
             local refs=leaf and leaves or nodes
             local child=refs[node[side]]
-            node[side]=child or content_types[2]
+            node[side]=child or {contents=content_types[2].contents}
             -- used to optimize bsp traversal for rendering
             if child then
                 child.parent=node
@@ -653,7 +653,7 @@ local function load_aliasframe(ptr, scale, origin, numverts, frames)
     local aliasframe = ffi.cast('daliasframe_t*', ptr)
 
     local name = ffi.string(aliasframe.name)
-    -- logging.debug("Loading frame: "..name)
+    logging.debug("Loading frame: "..name)
 
     local frame={
         verts = {},

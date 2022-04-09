@@ -2,11 +2,13 @@ local misc=function(progs)
 
     -- p8 compat
     local band=bit.band
+    local rnd=math.random
 
     progs:precache_model("maps/b_explob.bsp")
     progs:precache_model("progs/flame.mdl")
     progs:precache_model("progs/flame2.mdl")
-    
+    progs:precache_model("progs/lavaball.mdl")
+
     progs.misc_explobox=function(self)
         self.SOLID_BSP = true
         self.MOVETYPE_NONE = true
@@ -48,5 +50,51 @@ local misc=function(progs)
 
     progs.light_flame_large_yellow=flame2_func
     progs.light_flame_small_yellow=flame2_func
+
+    progs.misc_fireball=function(self)
+        self.classname = "fireball"
+        local particles={
+            rate=15, -- 5 particles/sec
+            ttl={1,2},
+            mins={-8,-8,-8},
+            maxs={8,8,8}
+        }
+        set_defaults(self,{
+            SOLID_NOT=true,            
+            DRAW_NOT=true,
+            speed = 1000,
+            -- for debug/display only
+            mins={-8,-8,-8},
+            maxs={8,8,8},
+            nextthink = progs:time() + 5 * rnd(),
+            think = function()
+                local fireball = progs:spawn()
+                fireball.classname = self.classname
+                fireball.SOLID_TRIGGER = true
+                -- apply balistic physics
+                fireball.MOVETYPE_TOSS = true
+                fireball.origin = v_clone(self.origin)
+                fireball.velocity = {
+                    (rnd() * 100) - 50,
+                    (rnd() * 100) - 50,
+                    self.speed + rnd() * 200}
+                fireball.touch=function(other)
+                    print("fireball touched:"..other.classname)
+                    progs:remove(fireball)
+                end
+                fireball.nextthink = progs:time() + 5
+                fireball.think=function()
+                    progs:remove(fireball)
+                end
+                fireball.skin=1
+                fireball.frame = "frame1"
+                progs:setmodel(fireball,"progs/lavaball.mdl")
+                progs:attach(fireball,"particles",particles)
+
+                -- attach a particle system
+                self.nextthink = progs:time() + 5 * rnd()
+            end
+        })
+    end
 end
 return misc

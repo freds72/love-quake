@@ -1,5 +1,7 @@
 local player=function(progs)
 
+    progs:precache_model ("progs/v_shot.mdl")
+
     progs.player=function(self)
         self.SOLID_SLIDEBOX=true
         self.eyepos = {0,0,22}

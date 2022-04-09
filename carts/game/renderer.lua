@@ -38,12 +38,27 @@ function end_frame()
 	_poly_id = 0
 end
 
+--[[
 local function rectfill(x0,y,x1,y)
-	local c = _palette[_colormap[_poly_id%256]]
+	local c = _palette[_colormap[_poly_id%256] ]
 	y=y*480
 	for x=y+x0,y+x1 do
 		_backbuffer[x] = c
 	end
+end
+]]
+
+local function overdrawfill(x0,y,x1,y)
+	y=y*480
+	for x=y+x0,y+x1 do
+		_backbuffer[x] = bit.bor(0xff000000,_backbuffer[x]+0x0f)
+	end
+end
+
+local function overdrawfill(x0,y,x1,y)
+	y=y*480
+	_backbuffer[x0+y] = 0xffffffff
+	_backbuffer[x1+y] = 0xffffffff
 end
 
 local _profilespanfill
@@ -53,7 +68,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	end
 	--_profilespanfill = appleCake.profileFunc(nil, _profilespanfill)
 
-	-- fn = rectfill
+	-- fn = overdrawfill
 
 	local span,old=_spans[y]
 	-- empty scanline?
@@ -147,7 +162,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				end
 				
 				-- any remaining "right" from current span?
-				if s1-x1-1>0 then
+				if s1-x1-1>=0 then
 					-- "shrink" current span
 					_pool[span]=x1+1
 					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
@@ -261,7 +276,6 @@ function push_viewmatrix(m)
 	_viewmatrix=m
 end
 
-local _gamma = 0
 function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)	
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=y0*480+x0,y0*480+x1 do
@@ -296,10 +310,19 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 					]]
 				end
 			end
-			shade = 63 - flr(mid(shade,0,63))
+			if shade<0 then
+				shade=0
+			elseif shade>63 then
+				shade=63
+			end	
+			shade = 63 - flr(shade)
 		end
 		-- todo: fix gamma
-		shade = mid(shade-_gamma,0,63)
+		if shade<0 then
+			shade=0
+		elseif shade>63 then
+			shade=63
+		end
 
 		local s,t=flr(uw/_texscale)%_texw,flr(vw/_texscale)%_texh
 		local coloridx=_texptr[s+t*_texw]
@@ -536,6 +559,34 @@ function polytex(p,np,sky)
 		rw=rw+rdw
 	end
 	_profilepolytex:stop()
+end
+
+local function line(x0,y,x1,y)
+	local c = _palette[_colormap[15]]
+	y=y*480
+	for x=y+x0,y+x1 do
+		_backbuffer[x] = c
+	end
+end
+
+function rectfill(x0,y0,x1,y1,w)
+	if y1>=270 then
+    	y1=270-1
+  	end
+	if y0<0 then
+	    y0=-1
+  	end
+	if x0<0 then
+		x0=0
+	end
+	if x1>480 then
+		x1=480
+	end
+	x0=flr(x0)
+	x1=flr(x1)-1
+	for y=1+flr(y0),y1 do
+		spanfill(x0,x1,y,0,0,w,0,0,0,line)
+	end
 end
 
 return renderer

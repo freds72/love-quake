@@ -59,6 +59,7 @@ end
 
 
 local _light_styles={}
+local _components={}
 
 love.window.setMode(480 * scale, 270 * scale, {resizable=false, vsync=true, minwidth=480, minheight=270})
 
@@ -80,6 +81,9 @@ function love.load(args)
   logging.debug("game root: "..root_path)
 
   _font = require("font")(root_path)
+
+  -- ECS
+  _components["particles"] = require("particles")()
 
   local precache_models = {}
   local level = modelfs.load(root_path, "maps/"..args[2])
@@ -239,6 +243,15 @@ function love.load(args)
     remove=function(_,ent)
       -- mark entity for deletion
       ent.free = true
+      -- detach from ECS
+      for name,system in pairs(_components) do
+        local c=ent[name]
+        if c then
+          logging.debug("unregister system: "..name)
+          system:free(c)
+          ent[name] = nil
+        end
+      end
     end,
     set_skill=function(_,skill)
       logging.debug("Selected skill level: "..skill)
@@ -260,6 +273,14 @@ function love.load(args)
         return
       end
       self:setorigin(ent,hits.pos)
+    end,
+    attach=function(self,ent,system,args)
+      local c=_components[system]
+      if not c then
+        logging.error("Unknown system: "..system)
+        return
+      end
+      ent[system]=c:new(ent,args)
     end
   })
 
@@ -369,6 +390,7 @@ end
 
 _debug_display = false
 _debug_trace = false
+_debug_frames = {}
 function love.keypressed(key)
   if key == "tab" then
     _debug_display = not _debug_display
@@ -376,13 +398,15 @@ function love.keypressed(key)
     love.event.quit(0)
   elseif key == "h" then
     if _debug_trace then
+      _debug_trace=false
+      debug.sethook()
       return
     end
     _debug_trace = true
     _debug_frames={}
     logging.debug("Function call trace enabled.")
     local function trace (event, line)
-      local s = debug.getinfo(2).short_src-- .. ":" .. line
+      local s = debug.getinfo(2).short_src .. ":" .. line
       local count = _debug_frames[s] or 0
       _debug_frames[s] = count + 1
     end
@@ -400,6 +424,11 @@ love.frame = 0
 local _profileUpdate
 function love.update(dt)
   _profileUpdate = appleCake.profileFunc(nil, _profileUpdate)
+
+  -- update ECS
+  for _,system in pairs(_components) do
+    system:update(1/60)
+  end
 
   -- any entities to create?
   for i=1,#_new_entities do
@@ -419,9 +448,23 @@ function love.update(dt)
       if ent.velocity then
         -- todo: physics...
         -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
-        ent.origin = v_add(ent.origin, ent.velocity, 1/60)
+        if ent.MOVETYPE_TOSS then
+          local move = fly_move(ent,ent.origin,v_scale(ent.velocity,1/60))
+          ent.origin = move.pos
+          ent.velocity[3] = ent.velocity[3] - 800/60          
+          -- hit other entity?
+          if move.ent then
+            _vm:call(ent,"touch",move.ent)
+          end
+        else
+          ent.origin = v_add(ent.origin, ent.velocity, 1/60)
+        end
+        ent.absmins=v_add(ent.origin,ent.mins)
+        ent.absmaxs=v_add(ent.origin,ent.maxs)
+  
         -- link to world
         world.register(ent)
+
       end
 
       if ent.nextthink and ent.nextthink<love.frame/60 and ent.think then
@@ -502,7 +545,13 @@ function love.draw()
         ent.frame)
     end
   end
-  
+    
+  -- test
+  for _,system in pairs(_components) do
+    system:render(_cam,rectfill)
+  end
+
+
   end_frame()
 
   -- appleCake.countMemory()
@@ -520,8 +569,10 @@ function love.draw()
   --   end
   -- end
 
+
 	framebuffer.refresh()
 	framebuffer.draw(0,0, scale)
+
 
   -- love.graphics.setColor(0,1,0)
   -- for k,n in pairs(_normz) do
@@ -601,7 +652,7 @@ function love.draw()
 
     -- all entities
     love.graphics.setColor(0.25,0.25,0.25)
-    for i=2,#_entities do
+    for i=2,#_entities do      
       draw_entity(_entities[i])  
     end
 
@@ -660,8 +711,24 @@ function love.draw()
   end
   love.graphics.setColor(1,1,1)
   ]]
+  if _debug_trace then
+    local y=128
+    local traces={}
 
-  _debug_frames={}
+    for trace,count in pairs(_debug_frames) do
+      add(traces,{line=trace,key=count})
+    end
+    table.sort(traces,function(a, b)
+      return a.key>b.key
+    end)
+    for i=1,min(10,#traces) do
+      local trace=traces[i]
+      lg.print(trace.line.." = "..trace.key,2,y)
+      y = y + 16
+    end
+
+    _debug_frames={}
+  end
 end
 
 function love.quit()
@@ -1315,7 +1382,8 @@ function hitscan(mins,maxs,p0,p1,triggers,ents,ignore_ent)
   return hits
 end
 
-function try_move(ent,origin,velocity)
+-- slide on wall move (players, npc...)
+function slide_move(ent,origin,velocity)
   local vel2d = {velocity[1],velocity[2],0}
   local vl = v_len(vel2d)
   local vl0 = vl
@@ -1370,6 +1438,37 @@ function try_move(ent,origin,velocity)
     invalid=invalid}
 end
 
+-- missile type move (no course correction)
+function fly_move(ent,origin,velocity)
+  local next_pos=v_add(origin,velocity)
+  local invalid,hit_ent=false
+
+  -- avoid touching the same non-solid multiple times (ex: triggers)
+  local touched = {}
+  -- collect all potential touching entities (done only once)
+  -- todo: smaller box
+  local ents=world.touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
+  add(ents,1,_entities[1])  
+  -- check current to target pos
+  local hits = hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
+  if hits then
+    -- invalid move
+    if hits.start_solid or hits.all_solid then
+      next_pos = origin
+      invalid = true
+    else
+      -- position at impact
+      next_pos=v_add(hits.pos, hits.ent.origin)
+      hit_ent = hits.ent
+    end
+  end
+
+  return {
+    pos=next_pos,
+    ent=hit_ent,
+    touched=touched,
+    invalid=invalid}
+end
 
 function make_player(pos,a)
   local angle,dangle,velocity={0,0,a},{0,0,0},{0,0,0}
@@ -1426,10 +1525,10 @@ function make_player(pos,a)
       -- check next position
       local vn,vl=v_normz(velocity)      
       if vl>0.1 then
-        local move = try_move(self,self.origin,velocity)   
+        local move = slide_move(self,self.origin,velocity)   
         on_ground=move.on_ground
         if on_ground and move.on_wall and move.fraction<1 then
-          local up_move = try_move(self,v_add(self.origin,{0,0,18}),velocity) 
+          local up_move = slide_move(self,v_add(self.origin,{0,0,18}),velocity) 
           -- largest distance?
           if not up_move.invalid and up_move.fraction>move.fraction then
             move = up_move
