@@ -1279,7 +1279,7 @@ function make_cam()
 
       -- transform light vector into model space
       local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
-      local poly,baselight={},{1}
+      local baselight={1}
 
       -- todo: gouraud
       push_baselight(baselight)
@@ -1287,36 +1287,26 @@ function make_cam()
 
       for i=1,#faces,4 do    
         profileTransform = appleCake.profileFunc(nil, profileTransform)
-        -- vertex index are "constants" (eg. from model)
-        local is_front=faces[i]
-        local outcode,clipcode=0xffff,0
         -- read vertex references
-        for k=1,3 do
-          local vi=faces[i+k]
-          local a=v_cache:transform(verts[vi])
-          local code = vbo[a+VBO_OUTCODE]
-          outcode=band(outcode,code)
-          clipcode=clipcode + band(code,2)
-          -- compute uvs
-          local uv,u_offset = uvs[vi],0
-          if not is_front and uv.onseam then
-            u_offset = skin.width / 2
-          end
-          vbo[a + VBO_U] = uv.u + u_offset
-          vbo[a + VBO_V] = uv.v     
-          --[[
-          local light_dot = v_dot(light_n,_normals[normals[vi] ]) 
-          a.l = light_dot<0 and (1+light_dot) or 1
-          ]]
-          poly[k] = a
-        end
+        local is_front,v0,v1,v2=faces[i],faces[i+1],faces[i+2],faces[i+3]
+        local a0,a1,a2=v_cache:transform(verts[v0]),v_cache:transform(verts[v1]),v_cache:transform(verts[v2])
+        local outcode=band(0xffff,band(band(vbo[a0+VBO_OUTCODE],vbo[a1+VBO_OUTCODE]),vbo[a2+VBO_OUTCODE]))
+        local clipcode=band(vbo[a0+VBO_OUTCODE],2)+band(vbo[a1+VBO_OUTCODE],2)+band(vbo[a2+VBO_OUTCODE],2)
+        local uv0,uv1,uv2=uvs[v0],uvs[v1],uvs[v2]
+        vbo[a0 + VBO_U] = uv0.u + ((not is_front and uv0.onseam) and (skin.width / 2) or 0)
+        vbo[a0 + VBO_V] = uv0.v     
+        vbo[a1 + VBO_U] = uv1.u + ((not is_front and uv1.onseam) and (skin.width / 2) or 0)
+        vbo[a1 + VBO_V] = uv1.v     
+        vbo[a2 + VBO_U] = uv2.u + ((not is_front and uv2.onseam) and (skin.width / 2) or 0)
+        vbo[a2 + VBO_V] = uv2.v     
+        local poly={a0,a1,a2}
+
         profileTransform:stop()
 
         if outcode==0 then
           -- ccw?
-          local base=poly[2]
-          local ax,ay=vbo[base + VBO_X]-vbo[poly[1] + VBO_X],vbo[base + VBO_Y]-vbo[poly[1] + VBO_Y]
-          local bx,by=vbo[base + VBO_X]-vbo[poly[3] + VBO_X],vbo[base + VBO_Y]-vbo[poly[3] + VBO_Y]
+          local ax,ay=vbo[a1 + VBO_X]-vbo[a0 + VBO_X],vbo[a1 + VBO_Y]-vbo[a0 + VBO_Y]
+          local bx,by=vbo[a1 + VBO_X]-vbo[a2 + VBO_X],vbo[a1 + VBO_Y]-vbo[a2 + VBO_Y]
           if ax*by - ay*bx<=0 then
             local n=3
             if clipcode>0 then

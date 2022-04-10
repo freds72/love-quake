@@ -63,6 +63,7 @@ end
 
 local _profilespanfill
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
+	local _pool=_pool
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
 	end
