@@ -59,7 +59,11 @@ end
 
 
 local _light_styles={}
+local _ramp_styles={}
 local _components={}
+local _globals = {
+  gravity_z = 800
+}
 
 love.window.setMode(480 * scale, 270 * scale, {resizable=false, vsync=true, minwidth=480, minheight=270})
 
@@ -83,7 +87,7 @@ function love.load(args)
   _font = require("font")(root_path)
 
   -- ECS
-  _components["particles"] = require("particles")()
+  _components["particles"] = require("particles")(_ramp_styles)
 
   local precache_models = {}
   local level = modelfs.load(root_path, "maps/"..args[2])
@@ -112,6 +116,9 @@ function love.load(args)
         add(style,scale)
       end
       _light_styles[id] = style
+    end,
+    rampstyle=function(self,id,ramp)
+        _ramp_styles[id] = ramp
     end,
     objerror=function(self,msg)
       -- todo: set context (if applicable)
@@ -247,7 +254,6 @@ function love.load(args)
       for name,system in pairs(_components) do
         local c=ent[name]
         if c then
-          logging.debug("unregister system: "..name)
           system:free(c)
           ent[name] = nil
         end
@@ -448,10 +454,11 @@ function love.update(dt)
       if ent.velocity then
         -- todo: physics...
         -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
+        local prev_contents = ent.contents
         if ent.MOVETYPE_TOSS then
           local move = fly_move(ent,ent.origin,v_scale(ent.velocity,1/60))
-          ent.origin = move.pos
-          ent.velocity[3] = ent.velocity[3] - 800/60          
+          ent.origin = move.pos          
+          ent.velocity[3] = ent.velocity[3] - _globals.gravity_z/60          
           -- hit other entity?
           if move.ent then
             _vm:call(ent,"touch",move.ent)
@@ -465,6 +472,9 @@ function love.update(dt)
         -- link to world
         world.register(ent)
 
+        if prev_contents~=ent.contents then
+          -- print("transition from: "..prev_contents.." to:"..ent.contents)
+        end
       end
 
       if ent.nextthink and ent.nextthink<love.frame/60 and ent.think then

@@ -42,6 +42,11 @@ local world=function(progs)
 	-- 63 testing
 	progs:lightstyle(63, "a")
 
+	-- particle ramps
+	progs:rampstyle(1,{0x6f, 0x6d, 0x6b, 0x69, 0x67, 0x65, 0x63, 0x61})
+	progs:rampstyle(2,{0x6f, 0x6e, 0x6d, 0x6c, 0x6b, 0x6a, 0x68, 0x66})
+	progs:rampstyle(3,{0x6d, 0x6b, 6, 5, 4, 3})
+
     progs.worldspawn=function(self)
         progs.world={
             name = self.message,

@@ -1,5 +1,6 @@
 local world={}
 local maths3d = require("math3d")
+local bsp = require("bsp")
 local modelfs = require("modelfs")
 
 -- p8 compat
@@ -165,33 +166,6 @@ local function register_bbox(node, ent, pos, size)
     end
 end
 
-local function touches_bbox(node, pos, size, out)    
-    if node.contents==-2 then
-        return
-    end
-
-    -- any non solid content
-    if node.contents then        
-        if node.ents then
-            -- return all entities in this leaf
-            for ent,_ in pairs(node.ents) do
-                out[ent]=true
-            end
-        end
-        return
-    end
-
-    -- classify box
-    local sides = plane_classify_bbox(node.plane, pos, size)
-	-- sides or straddling?
-    if band(sides,1)~=0 then
-        touches_bbox(node[false], pos, size, out)
-    end
-    if band(sides,2)~=0 then
-        touches_bbox(node[true], pos, size, out)
-    end    
-end
-
 local function register_map(cell, ent)
     local sides = cell.classify(ent.absmins, ent.absmaxs)
     if sides==3 or cell.depth==4 then
@@ -220,6 +194,10 @@ function world.register(ent)
         local e=make_v(c, maxs)
         -- register in visible world
         register_bbox(_root, ent, c, e)
+
+        -- find current content (origin only)
+        local node = bsp.locate(_root,ent.origin)
+        ent.contents = node.contents
     end
 
     -- register to 2d map

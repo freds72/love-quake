@@ -1,7 +1,7 @@
 local zombie=function(progs)
 
     -- p8 compat
-    local band=bit.band
+    local band,flr,rnd=bit.band,math.floor,math.random
 
     progs:precache_model("progs/zombie.mdl")
     
@@ -16,7 +16,7 @@ local zombie=function(progs)
         progs:setmodel(self, "progs/zombie.mdl")
         progs:drop_to_floor(self)
         
-        local anim = 0
+        local anim = flr(rnd() * 16)
         self.nextthink = progs:time() + 0.1
         if crucified then
             self.think=function()            

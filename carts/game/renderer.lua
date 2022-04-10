@@ -561,15 +561,19 @@ function polytex(p,np,sky)
 	_profilepolytex:stop()
 end
 
+local _color=0
+function push_color(c)
+	_color=_palette[_colormap[c]]
+end
 local function line(x0,y,x1,y)
-	local c = _palette[_colormap[15]]
+	local c = _color
 	y=y*480
 	for x=y+x0,y+x1 do
 		_backbuffer[x] = c
 	end
 end
 
-function rectfill(x0,y0,x1,y1,w)
+function rectfill(x0,y0,x1,y1,w,c)
 	if y1>=270 then
     	y1=270-1
   	end
@@ -584,6 +588,14 @@ function rectfill(x0,y0,x1,y1,w)
 	end
 	x0=flr(x0)
 	x1=flr(x1)-1
+	-- visible?
+	if x0>480 or x1<0 then
+		return
+	end
+	if y0>270 or y1<0 then
+		return
+	end
+	push_color(c)
 	for y=1+flr(y0),y1 do
 		spanfill(x0,x1,y,0,0,w,0,0,0,line)
 	end

@@ -54,18 +54,20 @@ local misc=function(progs)
     progs.misc_fireball=function(self)
         self.classname = "fireball"
         local particles={
-            rate=15, -- 5 particles/sec
-            ttl={1,2},
+            rate=50, -- 50 particles/sec
+            ttl={0.5,1},
             mins={-8,-8,-8},
-            maxs={8,8,8}
+            maxs={8,8,8},
+            gravity={0,0,30},
+            ramp=3
         }
         set_defaults(self,{
             SOLID_NOT=true,            
             DRAW_NOT=true,
             speed = 1000,
             -- for debug/display only
-            mins={-8,-8,-8},
-            maxs={8,8,8},
+            mins={-4,-4,-4},
+            maxs={4,4,4},
             nextthink = progs:time() + 5 * rnd(),
             think = function()
                 local fireball = progs:spawn()
@@ -79,7 +81,6 @@ local misc=function(progs)
                     (rnd() * 100) - 50,
                     self.speed + rnd() * 200}
                 fireball.touch=function(other)
-                    print("fireball touched:"..other.classname)
                     progs:remove(fireball)
                 end
                 fireball.nextthink = progs:time() + 5
