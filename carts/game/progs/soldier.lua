@@ -1,13 +1,14 @@
 local soldier=function(progs)
 
     -- p8 compat
-    local band=bit.band
+    local band,rnd,flr,min=bit.band,math.random,math.floor,math.min
 
     progs:precache_model("progs/soldier.mdl")
     local poses={
-        stand=8,
-        run=8,
-        death=10
+        stand={random=true,length=8},
+        run={random=true,length=8},
+        death={length=10,loop_not=true},
+        deathc={length=11,loop_not=true}
     }
 
     progs.monster_army=function(self)
@@ -19,20 +20,26 @@ local soldier=function(progs)
         progs:setmodel(self, "progs/soldier.mdl")
 
         --     
-        local select_pose=function(pose,ttl,think)    
-            local count,anim=poses[pose],0
+        local select_pose=function(name,ttl,think)    
+            local pose=poses[name]
+            assert(pose, "Unknown pose: "..name)
+
+            local length,anim=pose.length,pose.random and flr(rnd(pose.length)) or 0
             local t0 = progs:time()
-            assert(count, "Unknown pose: "..pose)
+            
             -- first frame
-            self.frame = pose..((anim%count)+1)
+            self.frame = name..((anim%length)+1)
             return function()
-                anim = anim+1   
-                self.frame = pose..((anim%count)+1)
+                anim = anim + 1
+                if pose.loop_not then
+                    anim = min(anim, length-1)
+                end
+                self.frame = name..((anim%length)+1)
                 local t1=progs:time()
                 self.nextthink = t1 + ttl
                 -- gives total elapsed time since last pose switch
                 if think then
-                    think(anim, t1-t0)
+                    think(anim==length-1, t1-t0)
                 end
             end
         end
@@ -41,7 +48,7 @@ local soldier=function(progs)
         self.think=select_pose(
             "stand",
             0.1,
-            function(frame,t)
+            function(is_last_frame,t)
                 if t>15 then
                     self.think = select_pose("run",0.1)
                 end
@@ -51,10 +58,10 @@ local soldier=function(progs)
             -- avoid reentrancy
             self.use=nil
             self.think=select_pose(
-                "death",
+                rnd()>0.5 and "deathc" or "death",
                 0.1,
-                function(frame)
-                    if frame==9 then
+                function(is_last_frame)
+                    if is_last_frame then
                         self.SOLID_NOT = true
                         self.think = nil
                     end

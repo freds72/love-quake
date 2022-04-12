@@ -1489,9 +1489,8 @@ function make_player(pos,a)
       angle[2]=angle[2]*0.8
       dangle = v_scale(dangle,0.6)
       
-      velocity[1]=velocity[1]*0.7
-      velocity[2]=velocity[2]*0.7
-      velocity[3]=velocity[3]*0.9
+      velocity[1]=velocity[1]*0.8
+      velocity[2]=velocity[2]*0.8      
 
       -- move
       local keys={
@@ -1499,7 +1498,7 @@ function make_player(pos,a)
         ["s"]={0,-1,0},
         ["q"]={1,0,0},
         ["d"]={-1,0,0},
-        ["space"]={0,0,12}
+        ["space"]={0,0,6.2}
       }
 
       local acc={0,0,0}
