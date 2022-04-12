@@ -1508,7 +1508,7 @@ function make_player(pos,a)
         end
       end
 
-      dangle=v_add(dangle,{camy,acc[1]*2,camx})
+      dangle=v_add(dangle,{camy,acc[1]*4,camx})
       angle=v_add(angle,dangle,1/24)
     
       local a,dx,dz=angle[3],acc[2],acc[1]
