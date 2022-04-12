@@ -79,13 +79,15 @@ function love.load(args)
   local root_path = args[1]
   logging.debug("game root: "..root_path)
 
+  _pak = require("pak")(root_path)
+
   _font = require("font")(root_path)
 
   -- ECS
   _components["particles"] = require("particles")(_ramp_styles)
 
   local precache_models = {}
-  local level = modelfs.load(root_path, "maps/"..args[2])
+  local level = modelfs.load(_pak, "maps/"..args[2])
   _world_model = level.model
   -- todo: cleanup main geometry
   _level = level.model[1]
@@ -121,7 +123,7 @@ function love.load(args)
     end,
     precache_model=function(self,id)
       if not precache_models[id] then
-        precache_models[id] = modelfs.load(root_path, id)
+        precache_models[id] = modelfs.load(_pak, id)
       end
     end,
     setmodel=function(self,ent,id,offset)

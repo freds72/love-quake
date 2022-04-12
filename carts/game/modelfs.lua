@@ -1,6 +1,5 @@
 local modelfs = {}
 local ffi=require 'ffi'
-local nfs = require( "nativefs" )
 local entities = require( "entities" )
 local logging = require("logging")
 
@@ -618,8 +617,8 @@ local function unpack_textures(lump, mem)
     return textures
 end
 
-local function load_bsp(data)
-    local mem = data:getFFIPointer()
+local function load_bsp(pak, name)
+    local mem = pak:open(name)
 
     local header = ffi.cast('dheader_t*', mem)
     assert(header.version==29, "Unsupported BSP file version: "..header.version)
@@ -653,7 +652,7 @@ local function load_aliasframe(ptr, scale, origin, numverts, frames)
     local aliasframe = ffi.cast('daliasframe_t*', ptr)
 
     local name = ffi.string(aliasframe.name)
-    logging.debug("Loading frame: "..name)
+    -- logging.debug("Loading frame: "..name)
 
     local frame={
         verts = {},
@@ -707,8 +706,8 @@ end
 
 -- note: all frames are registered in a dictionary
 -- up to the entity declaration to setup animation sequences
-local function load_aliasmodel(data)
-    local mem = data:getFFIPointer()
+local function load_aliasmodel(pak, name)
+    local mem = pak:open(name)
 
     local header = ffi.cast('mdl_t*', mem)
     assert(header.version==6, "Unsupported MDL file version: "..header.version)
@@ -782,28 +781,22 @@ local function load_aliasmodel(data)
 end
 
 -- handle to bsp raw memory
-function modelfs.load(root_path, name)
+function modelfs.load(pak, name)
     local model = _model_cache[name]
     if not model then               
-        local filename = root_path.."/"..name
-        local data,err = nfs.newFileData(filename)
-
         -- bsp? or mdl?
         local extension = sub(name,#name-3)
         if extension==".bsp" then
-            logging.info("Loading BSP file: "..filename)
-            local m,e = load_bsp(data)
+            logging.info("Loading BSP file: "..name)
+            local m,e = load_bsp(pak, name)
             model = {
-                -- keep ffi data alive
-                _ffi_ = data,
                 model = m,
                 entities = e
             }
         elseif extension==".mdl" then
-            logging.info("Loading MDL file: "..filename)
-            local alias = load_aliasmodel(data)
+            logging.info("Loading MDL file: "..name)
+            local alias = load_aliasmodel(pak, name)
             model = {
-                _ffi_ = data,
                 alias = alias            
             }
         else
