@@ -61,79 +61,65 @@ typedef struct
     end
 
     -- load gfx.wad file
-    local data = nfs.newFileData(root_path.."/gfx/gfx.wad")
 
-    local mem = data:getFFIPointer()
-
-    local ptr = ffi.cast("unsigned char*",mem)
-
-    local info = ffi.cast('wadinfo_t*', ptr)
-    print("WAD version:"..ffi.string(info.identification))
-
-    local entries = read_directory("lumpinfo_t", info, ptr)
-    
     local scale = 2                
 
     local flr=math.floor
     local transform = love.math.newTransform( )
 
-    for i=0,#entries do
-        local entry = entries[i]
-        if ffi.string(entry.name)=="CONCHARS" then
-            local src = ptr + entry.filepos
-            -- decode image
-            local imagedata = love.image.newImageData(16*8,16*8)
-            local image     = love.graphics.newImage(imagedata,{linear=true, mipmaps=false})
-            image:setFilter('nearest','nearest')        
-            local dst = ffi.cast('uint32_t*', imagedata:getFFIPointer()) 
-            for i=0,16*8*16*8-1 do
-                local col = src[i]
-                dst[i] = col==0 and 0x0 or palette.hw[col]
-            end
-            image:replacePixels(imagedata)        
-            
-            return {
-                -- print text using bitmap font
-                print=function(s,x,y)
-                    love.graphics.setColor(1,1,1)
-                    local sx,sy=x,y
-                    local alt=false
-                    for i=1,#s do
-                        local ch=sub(s,i,i)
-                        if ch=="\n" then
-                            sy = sy + 8 * scale
-                            sx = x
-                        elseif ch=="\b" then
-                            alt = not alt
-                        else
-                            local quad=(alt and alt_char_index or char_index)[ch]
-                            -- display placeholder for unknown chars
-                            quad = quad or alt_char_index["?"]
-                            love.graphics.draw(image, quad, transform:reset():translate(sx,sy):scale(2,2))
-                            sx = sx + 8 * scale
-                        end
-                    end
-                end,
-                -- return text width/height
-                size=function(s)
-                    local w,h=0,0
-                    local sx,sy=0,0
-                    for i=1,#s do
-                        local ch=sub(s,i,i)
-                        if ch=="\n" then
-                            sy = sy + 8 * scale
-                            sx = 0
-                        else
-                            sx = sx + 8 * scale
-                        end
-                        w = max(w,sx)
-                        h = max(h,sy)
-                    end                    
-                    return w,h
-                end
-            }
-        end        
+    local data = love.filesystem.newFileData("fonts/conchars.lmp")
+    local src = ffi.cast("unsigned char*",data:getFFIPointer())
+
+    -- decode image
+    local imagedata = love.image.newImageData(16*8,16*8)
+    local image     = love.graphics.newImage(imagedata,{linear=true, mipmaps=false})
+    image:setFilter('nearest','nearest')        
+    local dst = ffi.cast('uint32_t*', imagedata:getFFIPointer()) 
+    for i=0,16*8*16*8-1 do
+        local col = src[i]
+        dst[i] = col==0 and 0x0 or palette.hw[col]
     end
-    assert(false, "ERROR - missing CONCHARS image lump")
+    image:replacePixels(imagedata)        
+    
+    return {
+        -- print text using bitmap font
+        print=function(s,x,y)
+            love.graphics.setColor(1,1,1)
+            local sx,sy=x,y
+            local alt=false
+            for i=1,#s do
+                local ch=sub(s,i,i)
+                if ch=="\n" then
+                    sy = sy + 8 * scale
+                    sx = x
+                elseif ch=="\b" then
+                    alt = not alt
+                else
+                    local quad=(alt and alt_char_index or char_index)[ch]
+                    -- display placeholder for unknown chars
+                    quad = quad or alt_char_index["?"]
+                    love.graphics.draw(image, quad, transform:reset():translate(sx,sy):scale(2,2))
+                    sx = sx + 8 * scale
+                end
+            end
+        end,
+        -- return text width/height
+        size=function(s)
+            local w,h=0,0
+            local sx,sy=0,0
+            for i=1,#s do
+                local ch=sub(s,i,i)
+                if ch=="\n" then
+                    sy = sy + 8 * scale
+                    sx = 0
+                else
+                    sx = sx + 8 * scale
+                end
+                w = max(w,sx)
+                h = max(h,sy)
+            end                    
+            return w,h
+        end
+    }
 end
 return fonts

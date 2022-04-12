@@ -32,10 +32,6 @@ end
 local scale=2
 local _memory_thinktime=-1
 
-function printh(...)
-    print(...)
-end
-
 function split(inputstr, sep)
   if sep == nil then
     sep = "%s"
@@ -56,10 +52,9 @@ function format(str, ...)
   return string.format(str,unpack(args))
 end
 
-
-
 local _light_styles={}
 local _ramp_styles={}
+-- ECS like registry
 local _components={}
 local _globals = {
   gravity_z = 800
@@ -1094,12 +1089,11 @@ function make_cam()
       local m,outcode=self.m,0xffff
       local m1,m5,m9,m13,m2,m6,m10,m14,m3,m7,m11,m15=m[1],m[5],m[9],m[13],m[2],m[6],m[10],m[14],m[3],m[7],m[11],m[15]
       for i=0,7 do
-        local x,y,z=     
+        local x,y,z=
           band(i,1)~=0 and maxs[1] or mins[1],
           band(i,2)~=0 and maxs[2] or mins[2],
-          band(i,4)~=0 and maxs[3] or mins[3]    
-        local code = 0
-        local ax,az,ay=m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
+          band(i,4)~=0 and maxs[3] or mins[3]
+        local code,ax,az,ay=0,m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
     
         -- znear=8
         if az<8 then code=2 end
@@ -1116,6 +1110,7 @@ function make_cam()
     end,
     collect_entities=function(self,entities)
       local ents={}
+      -- skip world
       for i=2,#entities do
         local ent = entities[i]
         if not ent.DRAW_NOT and ent.nodes then
@@ -1154,7 +1149,6 @@ function make_cam()
             if band(bits,shl(0x1,j))~=0 then
               local leaf=leaves[bor(i,j)+2]
               -- tag visible parents (if not already tagged)
-              -- check bounding box
               while leaf and leaf.visframe~=visframe do
                 leaf.visframe=visframe
                 leaf=leaf.parent
