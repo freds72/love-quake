@@ -31,6 +31,21 @@ local PoolCls=function(name,stride,size)
             end
             return idx+1
         end,
+        pop5=function(self,a,b,c,d,e)
+            -- no more entries?
+            if cursor==total then    
+                reserve()
+            end
+            -- init values
+            local idx=cursor*stride+1
+            cursor = cursor + 1
+            pool[idx]  =a
+            pool[idx+1]=b
+            pool[idx+2]=c
+            pool[idx+3]=d
+            pool[idx+4]=e
+            return idx
+        end,
         -- reclaim everything
         reset=function(self)
             cursor = 0
@@ -40,7 +55,7 @@ local PoolCls=function(name,stride,size)
         end
     },{
         -- redirect get/set to underlying array
-        __index=function(self,k)
+        __index = function(self,k)
             return pool[k]
         end,
         __newindex = function(self, key, value)

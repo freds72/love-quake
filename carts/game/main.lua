@@ -516,7 +516,7 @@ local _fps={}
 function love.draw()
   _profileDraw = appleCake.profileFunc(nil, _profileDraw)
   -- cls
-  -- framebuffer.fill(0)
+  framebuffer.fill(0)
 
   start_frame(_backbuffer)
 	local n=m_x_n(_cam.m,{0,0,-1})
@@ -552,12 +552,11 @@ function love.draw()
         ent.frame)
     end
   end
-    
+
   -- test
   for _,system in pairs(_components) do
     system:render(_cam,rectfill)
   end
-
 
   end_frame()
 
@@ -1015,7 +1014,7 @@ function make_cam()
   local function collect_leaf(child,pos)
     if child.visframe==visframe then
       if child.contents then       
-        if _cam:is_visible(child.mins,child.maxs) then
+        if child.contents~=-2 and _cam:is_visible(child.mins,child.maxs) then
           visleaves[#visleaves+1]=child
         end
       else
@@ -1025,8 +1024,8 @@ function make_cam()
   end    
   collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(node[side],pos)
     collect_leaf(node[not side],pos)
+    collect_leaf(node[side],pos)
   end
 
   local v_cache={
@@ -1528,7 +1527,8 @@ function make_player(pos,a)
           if not up_move.invalid and up_move.fraction>move.fraction then
             move = up_move
             -- slight nudge up
-            move.velocity[3] = move.velocity[3] + 3
+            -- todo: fix / doesn't really work
+            -- move.velocity[3] = move.velocity[3] + 4
             -- "mini" jump
             on_ground=false
           end

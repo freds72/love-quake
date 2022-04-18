@@ -12,7 +12,19 @@ local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local function mid(x, a, b)
 	return max(a, min(b, x))
-  end
+end
+
+local function overdrawfill(x0,y,x1,y)
+	y=y*480
+	for x=y+x0,y+x1 do
+		_backbuffer[x] = bit.bor(0xff000000,_backbuffer[x]+0x1f)
+	end
+	_backbuffer[x0+y] = 0xffffffff
+end
+
+local function wirefill(x0,y,x1,y)
+	_backbuffer[x0+y*480] = 0xffffffff
+end
 
 -- palette
 local _palette,_colormap=palette.hw,palette.colormap
@@ -32,8 +44,15 @@ function end_frame()
 	_pool:reset()
 	--print(_pool:stats())
 	-- reset 
-	for k in pairs(_spans) do
-		_spans[k]=nil
+	for y,span in pairs(_spans) do
+		--[[
+		while span>0 do
+			local x0,x1=_pool[span],_pool[span+1]
+			overdrawfill(x0,y,x1,y)
+			span=_pool[span+4]
+		end
+		]]
+		_spans[y]=nil
 	end
 	_poly_id = 0
 end
@@ -48,26 +67,12 @@ local function rectfill(x0,y,x1,y)
 end
 ]]
 
-local function overdrawfill(x0,y,x1,y)
-	y=y*480
-	for x=y+x0,y+x1 do
-		_backbuffer[x] = bit.bor(0xff000000,_backbuffer[x]+0x0f)
-	end
-end
-
-local function overdrawfill(x0,y,x1,y)
-	y=y*480
-	_backbuffer[x0+y] = 0xffffffff
-	_backbuffer[x1+y] = 0xffffffff
-end
-
 local _profilespanfill
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	local _pool=_pool
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
 	end
-	--_profilespanfill = appleCake.profileFunc(nil, _profilespanfill)
 
 	-- fn = overdrawfill
 
@@ -75,8 +80,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	-- empty scanline?
 	if not span then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
-		_spans[y]=_pool:pop(x0,x1,w,dw,-1)
-		goto done
+		_spans[y]=_pool:pop5(x0,x1,w,dw,-1)
+		return
 	end
 
 	while span>0 do		
@@ -88,7 +93,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				--       xxxxxx	
 				-- fully visible
 				fn(x0,y,x1,y,u,v,w,du,dv,dw)
-				local n=_pool:pop(x0,x1,w,dw,span)
+				local n=_pool:pop5(x0,x1,w,dw,span)
 				if old then
 					-- chain to previous
 					_pool[old+4]=n
@@ -96,7 +101,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					-- new first
 					_spans[y]=n
 				end
-				goto done
+				return
 			end
 
 			-- nnnn?????????
@@ -105,7 +110,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			local x2=s0-1
 			local dx=x2-x0
 			fn(x0,y,x2,y,u,v,w,du,dv,dw)
-			local n=_pool:pop(x0,x2,w,dw,span)
+			local n=_pool:pop5(x0,x2,w,dw,span)
 			if old then 
 				_pool[old+4]=n				
 			else
@@ -126,14 +131,14 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			--     ??nnnn?
 			--     xxxxxxx	
 			-- totally hidden (or not!)
-			local dx,sdw=x0-s0+1,_pool[span+3]
+			local dx,sdw=x0-s0,_pool[span+3]
 			local sw=_pool[span+2]+dx*sdw		
 			
-			if sw-w<-0.00001 or (abs(sw-w)<0.00001 and dw>sdw) then
+			if sw-w<-1e-6 or (sw-w<0.00001 and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
 				-- insert (left) clipped existing span as a "new" span
 				if dx>0 then
-					local n=_pool:pop(
+					local n=_pool:pop5(
 						s0,
 						x0-1,
 						_pool[span+2],
@@ -142,28 +147,28 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					if old then
 						_pool[old+4]=n
 					else
+						-- new first
 						_spans[y]=n
 					end
 					old=n
 				end
 				-- middle ("new")
-				local x2=x1
-				if s1<x1 then
-					--     ??nnnnn???
-					--     xxxxxxx			
-					-- draw only up to s1
-					x2=s1
-				end
+				--     ??nnnnn???
+				--     xxxxxxx			
+				-- draw only up to s1
+				local x2=s1<x1 and s1 or x1
 				fn(x0,y,x2,y,u,v,w,du,dv,dw)					
-				local n=_pool:pop(x0,x2,w,dw,span)
+				local n=_pool:pop5(x0,x2,w,dw,span)
 				if old then 
 					_pool[old+4]=n	
 				else
+					-- new first
 					_spans[y]=n
 				end
 				
 				-- any remaining "right" from current span?
-				if s1-x1-1>=0 then
+				local dx=s1-x1-1
+				if dx>0 then
 					-- "shrink" current span
 					_pool[span]=x1+1
 					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
@@ -177,7 +182,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			if s1>=x1 then
 				--     ///////
 				--     xxxxxxx	
-				goto done
+				return
 			end
 			--         ///nnn
 			--     xxxxxxx
@@ -202,10 +207,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	if x1-x0>=0 then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans
-		_pool[old+4]=_pool:pop(x0,x1,w,dw,-1)
+		_pool[old+4]=_pool:pop5(x0,x1,w,dw,-1)
 	end
-::done::
-	-- _profilespanfill:stop()
 end
 
 local _texptr,_texw,_texh,_texscale
@@ -281,7 +284,7 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=y0*480+x0,y0*480+x1 do
 		local uw,vw=u/w,v/w
-		if _lightptr then
+		if false then --_lightptr then
 			shade=0
 			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
 			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
