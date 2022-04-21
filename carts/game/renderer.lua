@@ -284,7 +284,7 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=y0*480+x0,y0*480+x1 do
 		local uw,vw=u/w,v/w
-		if false then --_lightptr then
+		if _lightptr then
 			shade=0
 			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
 			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)

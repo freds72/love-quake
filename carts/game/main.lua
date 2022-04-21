@@ -1024,8 +1024,8 @@ function make_cam()
   end    
   collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(node[not side],pos)
     collect_leaf(node[side],pos)
+    collect_leaf(node[not side],pos)
   end
 
   local v_cache={
@@ -1159,7 +1159,7 @@ function make_cam()
         end
       end
       visleaves={}
-      collect_bsp(root,pos)
+      collect_bsp(root,self.origin)
 
       profileCollectLeaves:stop()
       return visleaves
