@@ -6,25 +6,13 @@ local palette = require("palette")()
 
 -- p8
 local abs,flr,ceil=math.abs,math.floor,math.ceil
-local add=table.insert
+local add,del=table.insert,table.remove
 local cos,sin=math.cos,math.sin
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local function mid(x, a, b)
 	return max(a, min(b, x))
-end
-
-local function overdrawfill(x0,y,x1,y)
-	y=y*480
-	for x=y+x0,y+x1 do
-		_backbuffer[x] = bit.bor(0xff000000,_backbuffer[x]+0x1f)
-	end
-	_backbuffer[x0+y] = 0xffffffff
-end
-
-local function wirefill(x0,y,x1,y)
-	_backbuffer[x0+y*480] = 0xffffffff
-end
+  end
 
 -- palette
 local _palette,_colormap=palette.hw,palette.colormap
@@ -37,25 +25,7 @@ end
 local _pool=require("pool")("spans",5,5000)
 local _spans={}
 local _poly_id=0
-function end_frame()	
-	-- used state
-	--print(_pool:stats())
-	-- reclaim all spans
-	_pool:reset()
-	--print(_pool:stats())
-	-- reset 
-	for y,span in pairs(_spans) do
-		--[[
-		while span>0 do
-			local x0,x1=_pool[span],_pool[span+1]
-			overdrawfill(x0,y,x1,y)
-			span=_pool[span+4]
-		end
-		]]
-		_spans[y]=nil
-	end
-	_poly_id = 0
-end
+
 
 --[[
 local function rectfill(x0,y,x1,y)
@@ -67,19 +37,35 @@ local function rectfill(x0,y,x1,y)
 end
 ]]
 
+local function overdrawfill(x0,y,x1,y)
+	y=y*480
+	for x=y+x0,y+x1 do
+		_backbuffer[x] = bit.bor(0xff000000,_backbuffer[x]+0x0f)
+	end
+end
+
+local function overdrawfill(x0,y,x1,y)
+	y=y*480
+	_backbuffer[x0+y] = 0xffffffff
+	_backbuffer[x1+y] = 0xffffffff
+end
+
+local _profilespanfill
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	local _pool=_pool
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
 	end
+	--_profilespanfill = appleCake.profileFunc(nil, _profilespanfill)
 
 	-- fn = overdrawfill
+
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
-		_spans[y]=_pool:pop5(x0,x1,w,dw,-1)
-		return
+		_spans[y]=_pool:pop(x0,x1,w,dw,-1)
+		goto done
 	end
 
 	while span>0 do		
@@ -91,7 +77,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				--       xxxxxx	
 				-- fully visible
 				fn(x0,y,x1,y,u,v,w,du,dv,dw)
-				local n=_pool:pop5(x0,x1,w,dw,span)
+				local n=_pool:pop(x0,x1,w,dw,span)
 				if old then
 					-- chain to previous
 					_pool[old+4]=n
@@ -99,7 +85,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					-- new first
 					_spans[y]=n
 				end
-				return
+				goto done
 			end
 
 			-- nnnn?????????
@@ -108,7 +94,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			local x2=s0-1
 			local dx=x2-x0
 			fn(x0,y,x2,y,u,v,w,du,dv,dw)
-			local n=_pool:pop5(x0,x2,w,dw,span)
+			local n=_pool:pop(x0,x2,w,dw,span)
 			if old then 
 				_pool[old+4]=n				
 			else
@@ -129,14 +115,14 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			--     ??nnnn?
 			--     xxxxxxx	
 			-- totally hidden (or not!)
-			local dx,sdw=x0-s0,_pool[span+3]
+			local dx,sdw=x0-s0+1,_pool[span+3]
 			local sw=_pool[span+2]+dx*sdw		
 			
 			if sw-w<-1e-6 or (sw-w<0.00001 and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
 				-- insert (left) clipped existing span as a "new" span
 				if dx>0 then
-					local n=_pool:pop5(
+					local n=_pool:pop(
 						s0,
 						x0-1,
 						_pool[span+2],
@@ -156,7 +142,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				-- draw only up to s1
 				local x2=s1<x1 and s1 or x1
 				fn(x0,y,x2,y,u,v,w,du,dv,dw)					
-				local n=_pool:pop5(x0,x2,w,dw,span)
+				local n=_pool:pop(x0,x2,w,dw,span)
 				if old then 
 					_pool[old+4]=n	
 				else
@@ -165,8 +151,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				end
 				
 				-- any remaining "right" from current span?
-				local dx=s1-x1-1
-				if dx>0 then
+				if s1-x1-1>=0 then
 					-- "shrink" current span
 					_pool[span]=x1+1
 					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
@@ -180,7 +165,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			if s1>=x1 then
 				--     ///////
 				--     xxxxxxx	
-				return
+				goto done
 			end
 			--         ///nnn
 			--     xxxxxxx
@@ -205,8 +190,10 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	if x1-x0>=0 then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans
-		_pool[old+4]=_pool:pop5(x0,x1,w,dw,-1)
+		_pool[old+4]=_pool:pop(x0,x1,w,dw,-1)
 	end
+::done::
+	-- _profilespanfill:stop()
 end
 
 local _texptr,_texw,_texh,_texscale
@@ -216,6 +203,8 @@ function push_param(name,value)
 	_params[name] = value
 end
 function push_texture(texture,mip)	
+	_texture,_mip=texture,mip
+
 	if texture.sky then
 		-- always render sky texture in full
 		mip = 0
@@ -278,11 +267,11 @@ function push_viewmatrix(m)
 	_viewmatrix=m
 end
 
-function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)	
+local function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)	
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=y0*480+x0,y0*480+x1 do
 		local uw,vw=u/w,v/w
-		if _lightptr then
+		if false then --_lightptr then
 			shade=0
 			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
 			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
@@ -367,207 +356,31 @@ function mode7(x0,y0,x1)
 	end
 end
 
-function polyfill(p,np,c)
-	-- convert to real color
-	c=_palette[c]
-
-	local miny,maxy,mini=math.huge,-math.huge
-	-- find extent
-	for i=1,np do
-		local v=p[i]
-		local y=v.y
-		if y<miny then
-      mini,miny=i,y
-    end
-		if y>maxy then
-      maxy=y
-    end
-	end
-
-	--data for left & right edges:
-	local lj,rj,ly,ry,lx,lw,ldx,ldw,rx,rw,rdx,rdw=mini,mini,miny,miny
-	--step through scanlines.
-	if maxy>=270 then
-    maxy=270-1
-  end
-	if miny<0 then
-    miny=-1
-  end
-	for y=1+flr(miny),maxy do
-		--maybe update to next vert
-		while ly<y do
-			local v0=p[lj]
-			lj=lj+1
-			if lj>np then lj=1 end
-			local v1=p[lj]
-			local y0,y1=v0.y,v1.y
-			local dy=y1-y0
-			ly=flr(y1)
-			lx=v0.x
-			lw=v0.w
-			ldx=(v1.x-lx)/dy
-			ldw=(v1.w-lw)/dy
-			--sub-pixel correction
-			local cy=y-y0
-			lx=lx+cy*ldx
-			lw=lw+cy*ldw
-		end   
-		while ry<y do
-			local v0=p[rj]
-			rj=rj-1
-			if rj<1 then rj=np end
-			local v1=p[rj]
-			local y0,y1=v0.y,v1.y
-			local dy=y1-y0
-			ry=flr(y1)
-			rx=v0.x
-			rw=v0.w
-			rdx=(v1.x-rx)/dy
-			rdw=(v1.w-rw)/dy
-			--sub-pixel correction
-			local cy=y-y0
-			rx=rx+cy*rdx
-			rw=rw+cy*rdw
-		end
-  
-		--rectfill(a,y,min(lx\1-1,127),y,w*16)
-    	for x=max(flr(rx),0),min(flr(lx),480)-1 do
-    	  _backbuffer[x+y*480]=c
-    	end
-
-		lx=lx+ldx
-		lw=lw+ldw
-		rx=rx+rdx
-		rw=rw+rdw
-	end
-end
-
-
-local _vbo
-function push_vbo(vbo)
-	logging.debug("Assign VBO: "..vbo:stats())
-	_vbo = vbo
-end
-
-local _profilepolytex
-function polytex(p,np,sky)
-	-- layout
-	local VBO_1 = 0
-	local VBO_2 = 1
-	local VBO_3 = 2
-	local VBO_X = 3
-	local VBO_Y = 4
-	local VBO_W = 5
-	local VBO_OUTCODE = 6
-	local VBO_U = 7
-	local VBO_V = 8
-
-	_profilepolytex = appleCake.profileFunc(nil, _profilepolytex)
-
-	local tline=sky and mode7 or tline3d
-	local vbo = _vbo
-	local miny,maxy,mini=math.huge,-math.huge
-	-- find extent
-	for i=1,np do
-		local y=vbo[p[i] + VBO_Y]
-		if y<miny then
-      		mini,miny=i,y
-    	end
-		if y>maxy then
-      		maxy=y
-    	end
-	end
-
-	--data for left & right edges:
-	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
-	if maxy>=270 then
-    	maxy=270-1
-  	end
-	if miny<0 then
-	    miny=-1
-  	end
-	for y=flr(miny)+1,maxy do
-		--maybe update to next vert
-		while ly<y do
-			local v0=p[lj]
-			lj=lj+1
-			if lj>np then lj=1 end
-			local v1=p[lj]
-			local y0,y1=vbo[v0+VBO_Y],vbo[v1+VBO_Y]
-			local dy=y1-y0
-			ly=flr(y1)
-			lx=vbo[v0 + VBO_X]
-			lw=vbo[v0 + VBO_W]
-			lu=vbo[v0 + VBO_U]*lw
-			lv=vbo[v0 + VBO_V]*lw
-			ldx=(vbo[v1 + VBO_X]-lx)/dy
-			ldu=(vbo[v1 + VBO_U] * vbo[v1 + VBO_W]-lu)/dy
-			ldv=(vbo[v1 + VBO_V] * vbo[v1 + VBO_W]-lv)/dy
-			ldw=(vbo[v1 + VBO_W]-lw)/dy
-			--sub-pixel correction
-			local cy=y-y0
-			lx=lx+cy*ldx
-			lu=lu+cy*ldu
-			lv=lv+cy*ldv
-			lw=lw+cy*ldw
-		end   
-		while ry<y do
-			local v0=p[rj]
-			rj=rj-1
-			if rj<1 then rj=np end
-			local v1=p[rj]
-			local y0,y1=vbo[v0 + VBO_Y],vbo[v1 + VBO_Y]
-			local dy=y1-y0
-			ry=flr(y1)
-			rx=vbo[v0 + VBO_X]
-			rw=vbo[v0 + VBO_W]
-			ru=vbo[v0 + VBO_U]*rw
-			rv=vbo[v0 + VBO_V]*rw
-			rdx=(vbo[v1 + VBO_X]-rx)/dy
-			rdu=(vbo[v1 + VBO_U]*vbo[v1 + VBO_W]-ru)/dy
-			rdv=(vbo[v1 + VBO_V]*vbo[v1 + VBO_W]-rv)/dy
-			rdw=(vbo[v1 + VBO_W]-rw)/dy
-			--sub-pixel correction
-			local cy=y-y0
-			rx=rx+cy*rdx
-			ru=ru+cy*rdu
-			rv=rv+cy*rdv
-			rw=rw+cy*rdw
-		end
-  
-		local dx=lx-rx
-		local du,dv,dw=(lu-ru)/dx,(lv-rv)/dx,(lw-rw)/dx
-		-- todo: faster to clip polygon?
-		local x0,x1,u,v,w=rx,lx,ru,rv,rw
-		if x0<0 then
-			u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
-		end
-		--sub-pixel correction
-		local sa=1-x0%1
-		if x1>480 then
-			x1=480
-		end
-
-		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
-
-		lx=lx+ldx
-		lu=lu+ldu
-		lv=lv+ldv
-		lw=lw+ldw
-		rx=rx+rdx
-		ru=ru+rdu
-		rv=rv+rdv
-		rw=rw+rdw
-	end
-	_profilepolytex:stop()
-end
-
 local _color=0
 function push_color(c)
-	_color=_palette[_colormap[c]]
+	_color=_palette[_colormap[c%256]]
 end
+
 local function line(x0,y,x1,y)
 	local c = _color
+	if y>=270 then
+    	y=270-1
+  	end
+	if y<0 then
+	    y=0
+  	end
+	if x1<0 then
+		return
+	end
+	if x0>480 then
+		return
+	end
+	if x0<0 then
+		x0=0
+	end
+	if x1>480 then
+		x1=480
+	end
 	y=y*480
 	for x=y+x0,y+x1 do
 		_backbuffer[x] = c
@@ -600,6 +413,166 @@ function rectfill(x0,y0,x1,y1,w,c)
 	for y=1+flr(y0),y1 do
 		spanfill(x0,x1,y,0,0,w,0,0,0,line)
 	end
+end
+
+local _vbo
+function push_vbo(vbo)
+	logging.debug("Assign VBO: "..vbo:stats())
+	_vbo = vbo
+end
+
+local _profilepolytex
+local _polys={}
+local _ymin,_ymax=32000,-32000
+function polytex(p,np,sky)
+	-- layout
+	local VBO_Y = 4
+	-- polygon
+	local miny,maxy,mini=math.huge,-math.huge
+	-- find extent
+	for i=1,np do
+		local y=_vbo[p[i] + VBO_Y]
+		if y<miny then mini,miny=i,y end
+		if y>maxy then maxy=y end
+	end
+	if maxy<0 or miny>269 then
+		return
+	end
+
+	local i=miny
+	if i<0 then
+	    i=-1
+  	end
+	i=flr(i)+1
+	local polys_at_line=_polys[i] or {}
+	polys_at_line[_poly_id]=setmetatable({lj=mini,rj=mini,ly=miny,ry=miny,lx=0,lu=0,lv=0,lw=0,ldx=0,ldu=0,ldv=0,ldw=0,rx=0,ru=0,rv=0,rw=0,rdx=0,rdu=0,rdv=0,rdw=0,p=p,np=np,maxy=flr(maxy),texinfo=_texture,mip=_mip},{__index=_G})
+	_polys[i]=polys_at_line
+	_poly_id = _poly_id + 1
+end
+
+local function draw_line(y)
+	if y>maxy then return end
+
+	-- layout
+	local VBO_1 = 0
+	local VBO_2 = 1
+	local VBO_3 = 2
+	local VBO_X = 3
+	local VBO_Y = 4
+	local VBO_W = 5
+	local VBO_OUTCODE = 6
+	local VBO_U = 7
+	local VBO_V = 8
+	
+	local vbo=_vbo
+	--maybe update to next vert
+	while ly<y do
+		local v0=p[lj]
+		lj=lj+1
+		if lj>np then lj=1 end
+		local v1=p[lj]
+		local y0,y1=vbo[v0+VBO_Y],vbo[v1+VBO_Y]
+		local dy=y1-y0
+		ly=flr(y1)
+
+		lx=vbo[v0 + VBO_X]
+		lw=vbo[v0 + VBO_W]
+		lu=vbo[v0 + VBO_U]*lw
+		lv=vbo[v0 + VBO_V]*lw
+		ldx=(vbo[v1 + VBO_X]-lx)/dy
+		ldu=(vbo[v1 + VBO_U] * vbo[v1 + VBO_W]-lu)/dy
+		ldv=(vbo[v1 + VBO_V] * vbo[v1 + VBO_W]-lv)/dy
+		ldw=(vbo[v1 + VBO_W]-lw)/dy
+		--sub-pixel correction
+		local cy=y-y0
+		lx=lx+cy*ldx
+		lu=lu+cy*ldu
+		lv=lv+cy*ldv
+		lw=lw+cy*ldw
+	end  
+	while ry<y do
+		local v0=p[rj]
+		rj=rj-1
+		if rj<1 then rj=np end
+		local v1=p[rj]
+		local y0,y1=vbo[v0 + VBO_Y],vbo[v1 + VBO_Y]
+		local dy=y1-y0
+		ry=flr(y1)
+		rx=vbo[v0 + VBO_X]
+		rw=vbo[v0 + VBO_W]
+		ru=vbo[v0 + VBO_U]*rw
+		rv=vbo[v0 + VBO_V]*rw
+		rdx=(vbo[v1 + VBO_X]-rx)/dy
+		rdu=(vbo[v1 + VBO_U]*vbo[v1 + VBO_W]-ru)/dy
+		rdv=(vbo[v1 + VBO_V]*vbo[v1 + VBO_W]-rv)/dy
+		rdw=(vbo[v1 + VBO_W]-rw)/dy
+		--sub-pixel correction
+		local cy=y-y0
+		rx=rx+cy*rdx
+		ru=ru+cy*rdu
+		rv=rv+cy*rdv
+		rw=rw+cy*rdw
+	end
+
+	local dx=lx-rx
+	local du,dv,dw=(lu-ru)/dx,(lv-rv)/dx,(lw-rw)/dx
+	-- todo: faster to clip polygon?
+	local x0,x1,u,v,w=rx,lx,ru,rv,rw
+	if x0<0 then
+		u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
+	end
+	--sub-pixel correction
+	local sa=1-x0%1
+	if x1>480 then
+		x1=480
+	end
+
+	--print(y..":"..x0.." -> "..x1)
+	--line(flr(x0),y,flr(x1)-1,y)
+	push_texture(texinfo,mip)
+	spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
+
+	lx=lx+ldx
+	lu=lu+ldu
+	lv=lv+ldv
+	lw=lw+ldw
+	rx=rx+rdx
+	ru=ru+rdu
+	rv=rv+rdv
+	rw=rw+rdw
+
+	return true
+end
+
+function end_frame()	
+	local apl,vbo={},_vbo
+	for y=0,269 do
+		-- add active polys
+		for id,poly in pairs(_polys[y] or {}) do
+			apl[id]=poly
+		end
+		-- draw active polygons		
+		for id,poly in pairs(apl) do
+			push_color(id+16)
+
+			-- unpack data for left & right edges:
+			setfenv(draw_line,poly)			
+			if not draw_line(y) then
+				apl[id]=nil
+			end			
+		end
+		-- reclaim all spans
+		_pool:reset()
+		-- reset 
+		for k in pairs(_spans) do
+			_spans[k]=nil
+		end
+	end
+	
+	for k in pairs(_polys) do
+		_polys[k]=nil
+	end
+	_poly_id = 0
 end
 
 return renderer

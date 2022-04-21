@@ -8,7 +8,7 @@ local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
 local fb = require('fblove_strip')
-local renderer = require( "renderer" )
+local renderer = require( "span_renderer" )
 local math3d = require( "math3d")
 local progs = require("progs.main")
 local logging = require("logging")
@@ -536,7 +536,7 @@ function love.draw()
   --print(collectgarbage("count")-m0.."kb")
 
   local visents = _cam:collect_entities(_entities)
-
+  --[[
   for i=1,#visents do
     local ent=visents[i]
     local m = ent.model
@@ -557,6 +557,7 @@ function love.draw()
   for _,system in pairs(_components) do
     system:render(_cam,rectfill)
   end
+  ]]
 
   end_frame()
 
@@ -804,8 +805,11 @@ function make_cam()
   local VBO_OUTCODE = 6
   local VBO_U = 7
   local VBO_V = 8
-  
+    
+  -- vertex buffer "cache"
   local vbo = require("pool")("v_cache",9,2500)
+  -- geometry buffer "cache"
+  local gbo = require("pool")("poly",9,2500)
   -- share with rasterizer
   push_vbo(vbo)
 
@@ -1014,7 +1018,7 @@ function make_cam()
   local function collect_leaf(child,pos)
     if child.visframe==visframe then
       if child.contents then       
-        if child.contents~=-2 and _cam:is_visible(child.mins,child.maxs) then
+        if _cam:is_visible(child.mins,child.maxs) then
           visleaves[#visleaves+1]=child
         end
       else
@@ -1024,8 +1028,8 @@ function make_cam()
   end    
   collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(node[not side],pos)
     collect_leaf(node[side],pos)
+    collect_leaf(node[not side],pos)
   end
 
   local v_cache={
@@ -1056,7 +1060,7 @@ function make_cam()
         -- to screen space
         local w=1/az
         idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
-        self.cache[v]=idx
+        --self.cache[v]=idx
       end
       return idx
     end
@@ -1175,7 +1179,7 @@ function make_cam()
       v_cache:init(m_x_m(m,ent.m))
 
       local cam_pos=v_add(self.origin,ent.origin,-1)
-      local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
+      local f_cache,styles,bright_style={},{0,0,0,0},{0.5,0.5,0.5,0.5}
       for i=lstart,lend do
         local leaf = leaves[i]
         for j=1,#leaf do
@@ -1186,6 +1190,7 @@ function make_cam()
             f_cache[face]=true
             local vertref,texinfo,outcode,clipcode=face.verts,face.texinfo,0xffff,0            
             local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset          
+            local poly={}
             for k=1,#vertref do
               local v=verts[vertref[k]]
               local a=v_cache:transform(v)

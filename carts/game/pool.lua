@@ -46,7 +46,22 @@ local PoolCls=function(name,stride,size)
             pool[idx+4]=e
             return idx
         end,
-        -- reclaim everything
+        pop6=function(self,a,b,c,d,e,f)
+            -- no more entries?
+            if cursor==total then    
+                reserve()
+            end
+            -- init values
+            local idx=cursor*stride+1
+            cursor = cursor + 1
+            pool[idx]  =a
+            pool[idx+1]=b
+            pool[idx+2]=c
+            pool[idx+3]=d
+            pool[idx+4]=e
+            pool[idx+5]=f
+            return idx
+        end,        -- reclaim everything
         reset=function(self)
             cursor = 0
         end,
