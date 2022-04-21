@@ -495,12 +495,10 @@ local function unpack_map(bsp)
     for _,node in pairs(nodes) do
         local function attach_node(side,leaf)
             local refs=leaf and leaves or nodes
-            local child=refs[node[side]]
-            node[side]=child or {contents=content_types[2].contents}
+            local child=refs[node[side]] or {contents=-2}
             -- used to optimize bsp traversal for rendering
-            if child then
-                child.parent=node
-            end
+            child.parent=node
+            node[side]=child
         end
         attach_node(true,band(node.flags,0x1)~=0)
         attach_node(false,band(node.flags,0x2)~=0)

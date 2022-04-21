@@ -548,7 +548,8 @@ function polytex(p,np,sky)
 			x1=480
 		end
 
-		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
+		-- spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
+		tline(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
 
 		lx=lx+ldx
 		lu=lu+ldu

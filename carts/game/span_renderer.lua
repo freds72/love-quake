@@ -23,7 +23,7 @@ function start_frame(buf)
 end
 -- "vbo" cache
 local _pool=require("pool")("spans",5,5000)
-local _spans={}
+local _spans
 local _poly_id=0
 
 
@@ -60,11 +60,11 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 
 	-- fn = overdrawfill
 
-	local span,old=_spans[y]
+	local span,old=_spans
 	-- empty scanline?
 	if not span then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
-		_spans[y]=_pool:pop(x0,x1,w,dw,-1)
+		_spans=_pool:pop(x0,x1,w,dw,-1)
 		goto done
 	end
 
@@ -83,7 +83,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					_pool[old+4]=n
 				else
 					-- new first
-					_spans[y]=n
+					_spans=n
 				end
 				goto done
 			end
@@ -98,7 +98,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			if old then 
 				_pool[old+4]=n				
 			else
-				_spans[y]=n
+				_spans=n
 			end
 			x0=s0
 			--assert(x1-x0>=0,"empty right seg")
@@ -132,7 +132,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 						_pool[old+4]=n
 					else
 						-- new first
-						_spans[y]=n
+						_spans=n
 					end
 					old=n
 				end
@@ -147,7 +147,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					_pool[old+4]=n	
 				else
 					-- new first
-					_spans[y]=n
+					_spans=n
 				end
 				
 				-- any remaining "right" from current span?
@@ -530,7 +530,8 @@ local function draw_line(y)
 	--print(y..":"..x0.." -> "..x1)
 	--line(flr(x0),y,flr(x1)-1,y)
 	push_texture(texinfo,mip)
-	spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
+	-- spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
+	tline3d(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
 
 	lx=lx+ldx
 	lu=lu+ldu
@@ -564,9 +565,7 @@ function end_frame()
 		-- reclaim all spans
 		_pool:reset()
 		-- reset 
-		for k in pairs(_spans) do
-			_spans[k]=nil
-		end
+		_spans=nil
 	end
 	
 	for k in pairs(_polys) do

@@ -8,7 +8,7 @@ local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
 local fb = require('fblove_strip')
-local renderer = require( "span_renderer" )
+local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs.main")
 local logging = require("logging")
@@ -1028,8 +1028,8 @@ function make_cam()
   end    
   collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(node[side],pos)
     collect_leaf(node[not side],pos)
+    collect_leaf(node[side],pos)
   end
 
   local v_cache={
