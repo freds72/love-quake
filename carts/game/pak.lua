@@ -1,6 +1,6 @@
 local pak=function(root_path)    
     local ffi=require 'ffi'
-    local nfs = require( "nativefs" )
+    local nfs = require( "lib.nativefs" )
     local logging = require( "logging" )
 
     ffi.cdef[[

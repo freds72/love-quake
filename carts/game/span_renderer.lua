@@ -42,12 +42,7 @@ local function overdrawfill(x0,y,x1,y)
 	for x=y+x0,y+x1 do
 		_backbuffer[x] = bit.bor(0xff000000,_backbuffer[x]+0x0f)
 	end
-end
-
-local function overdrawfill(x0,y,x1,y)
-	y=y*480
 	_backbuffer[x0+y] = 0xffffffff
-	_backbuffer[x1+y] = 0xffffffff
 end
 
 local _profilespanfill
@@ -203,12 +198,14 @@ function push_param(name,value)
 	_params[name] = value
 end
 function push_texture(texture,mip)	
-	_texture,_mip=texture,mip
-
 	if texture.sky then
 		-- always render sky texture in full
 		mip = 0
 	end
+	_texture,_mip=texture,mip
+end
+
+local function bind_texture(texture,mip)
 	_texscale=shl(1,mip)
 	-- rebase to 1
 	_texw,_texh=texture.width/_texscale,texture.height/_texscale
@@ -424,16 +421,33 @@ end
 local _profilepolytex
 local _polys={}
 local _ymin,_ymax=32000,-32000
+local _gbo=require("pool")("poly vertex cache",5,2500)
 function polytex(p,np,sky)
+	_profilepolytex = appleCake.profileFunc(nil, _profilepolytex)
 	-- layout
+	local VBO_X = 3
 	local VBO_Y = 4
+	local VBO_W = 5
+	local VBO_U = 7
+	local VBO_V = 8
+
 	-- polygon
 	local miny,maxy,mini=math.huge,-math.huge
-	-- find extent
+	-- find extent + copy poly
+	local poly_env={lx=0,lu=0,lv=0,lw=0,ldx=0,ldu=0,ldv=0,ldw=0,rx=0,ru=0,rv=0,rw=0,rdx=0,rdu=0,rdv=0,rdw=0,np=np,texinfo=_texture,mip=_mip,zorder=_poly_id}
 	for i=1,np do
-		local y=_vbo[p[i] + VBO_Y]
+		local idx=p[i] 
+		local y=_vbo[idx + VBO_Y]
+		-- copy coords
+		add(poly_env,_gbo:pop(
+			_vbo[idx + VBO_X],
+			y,
+			_vbo[idx + VBO_W],
+			_vbo[idx + VBO_U],
+			_vbo[idx + VBO_V]))
 		if y<miny then mini,miny=i,y end
 		if y>maxy then maxy=y end
+		-- copy 
 	end
 	if maxy<0 or miny>269 then
 		return
@@ -445,26 +459,29 @@ function polytex(p,np,sky)
   	end
 	i=flr(i)+1
 	local polys_at_line=_polys[i] or {}
-	polys_at_line[_poly_id]=setmetatable({lj=mini,rj=mini,ly=miny,ry=miny,lx=0,lu=0,lv=0,lw=0,ldx=0,ldu=0,ldv=0,ldw=0,rx=0,ru=0,rv=0,rw=0,rdx=0,rdu=0,rdv=0,rdw=0,p=p,np=np,maxy=flr(maxy),texinfo=_texture,mip=_mip},{__index=_G})
+	poly_env.lj=mini
+	poly_env.rj=mini
+	poly_env.ly=miny
+	poly_env.ry=miny
+	poly_env.maxy=flr(maxy)
+	polys_at_line[#polys_at_line+1]=setmetatable(poly_env,{__index=_G})
 	_polys[i]=polys_at_line
 	_poly_id = _poly_id + 1
+
+	_profilepolytex:stop()
 end
 
-local function draw_line(y)
+local function draw_line(p,y)
 	if y>maxy then return end
 
 	-- layout
-	local VBO_1 = 0
-	local VBO_2 = 1
-	local VBO_3 = 2
-	local VBO_X = 3
-	local VBO_Y = 4
-	local VBO_W = 5
-	local VBO_OUTCODE = 6
-	local VBO_U = 7
-	local VBO_V = 8
+	local VBO_X = 0
+	local VBO_Y = 1
+	local VBO_W = 2
+	local VBO_U = 3
+	local VBO_V = 4
 	
-	local vbo=_vbo
+	local vbo=_gbo
 	--maybe update to next vert
 	while ly<y do
 		local v0=p[lj]
@@ -529,7 +546,7 @@ local function draw_line(y)
 
 	--print(y..":"..x0.." -> "..x1)
 	--line(flr(x0),y,flr(x1)-1,y)
-	push_texture(texinfo,mip)
+	bind_texture(texinfo,mip)
 	-- spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
 	tline3d(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
 
@@ -545,21 +562,27 @@ local function draw_line(y)
 	return true
 end
 
+local _profileend_frame
 function end_frame()	
-	local apl,vbo={},_vbo
+	_profileend_frame = appleCake.profileFunc(nil, _profileend_frame)
+	local apl={}
 	for y=0,269 do
 		-- add active polys
-		for id,poly in pairs(_polys[y] or {}) do
-			apl[id]=poly
+		local polys=_polys[y]
+		if polys then
+			for i=1,#polys do
+				apl[#apl+1]=polys[i]
+			end
 		end
-		-- draw active polygons		
-		for id,poly in pairs(apl) do
-			push_color(id+16)
+		-- draw active polygons				
+		for i=#apl,1,-1 do
+			-- push_color(i+16)
 
 			-- unpack data for left & right edges:
+			local poly=apl[i]
 			setfenv(draw_line,poly)			
-			if not draw_line(y) then
-				apl[id]=nil
+			if not draw_line(poly,y) then
+				del(apl,i)
 			end			
 		end
 		-- reclaim all spans
@@ -572,6 +595,8 @@ function end_frame()
 		_polys[k]=nil
 	end
 	_poly_id = 0
+	_gbo:reset()
+	_profileend_frame:stop()
 end
 
 return renderer

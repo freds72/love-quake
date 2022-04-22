@@ -1,14 +1,13 @@
-local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
 local ffi=require('ffi')
-local nfs = require( "nativefs" )
 local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
-local fb = require('fblove_strip')
-local renderer = require( "renderer" )
+local fb = require('lib.fblove_strip')
+local renderer = require( "span_renderer" )
 local math3d = require( "math3d")
 local progs = require("progs.main")
 local logging = require("logging")
@@ -807,14 +806,14 @@ function make_cam()
   local VBO_V = 8
     
   -- vertex buffer "cache"
-  local vbo = require("pool")("v_cache",9,2500)
-  -- geometry buffer "cache"
-  local gbo = require("pool")("poly",9,2500)
+  local vbo = require("pool")("vertex_cache",9,2500)
   -- share with rasterizer
   push_vbo(vbo)
 
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
+
+  local h_ratio,v_ratio=(480-480/2)/270,(270-270/2)/270
   -- pre-computed normals for alias models
   local _normals={
     {-0.525731, 0.000000, 0.850651}, 
@@ -1052,10 +1051,10 @@ function make_cam()
         -- znear=8
         if az<8 then code=2 end
         --if az>2048 then code|=1 end
-        if ax>az then code = code + 4
-        elseif ax<-az then code = code + 8 end
-        if ay>az then code = code + 16
-        elseif ay<-az then code = code + 32 end
+        if ax>h_ratio*az then code = code + 4
+        elseif ax<-h_ratio*az then code = code + 8 end
+        if ay>v_ratio*az then code = code + 16
+        elseif ay<-v_ratio*az then code = code + 32 end
         -- save world space coords for clipping
         -- to screen space
         local w=1/az
@@ -1179,7 +1178,7 @@ function make_cam()
       v_cache:init(m_x_m(m,ent.m))
 
       local cam_pos=v_add(self.origin,ent.origin,-1)
-      local f_cache,styles,bright_style={},{0,0,0,0},{0.5,0.5,0.5,0.5}
+      local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
       for i=lstart,lend do
         local leaf = leaves[i]
         for j=1,#leaf do
@@ -1190,7 +1189,6 @@ function make_cam()
             f_cache[face]=true
             local vertref,texinfo,outcode,clipcode=face.verts,face.texinfo,0xffff,0            
             local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset          
-            local poly={}
             for k=1,#vertref do
               local v=verts[vertref[k]]
               local a=v_cache:transform(v)
