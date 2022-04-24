@@ -1,4 +1,4 @@
-local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
@@ -1027,8 +1027,8 @@ function make_cam()
   end    
   collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(node[side],pos)
     collect_leaf(node[not side],pos)
+    collect_leaf(node[side],pos)
   end
 
   local v_cache={
@@ -1059,7 +1059,7 @@ function make_cam()
         -- to screen space
         local w=1/az
         idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
-        --self.cache[v]=idx
+        self.cache[v]=idx
       end
       return idx
     end

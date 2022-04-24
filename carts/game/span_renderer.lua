@@ -464,15 +464,18 @@ function polytex(p,np,sky)
 	poly_env.ly=miny
 	poly_env.ry=miny
 	poly_env.maxy=flr(maxy)
-	polys_at_line[#polys_at_line+1]=setmetatable(poly_env,{__index=_G})
+	polys_at_line[#polys_at_line+1]=poly_env
 	_polys[i]=polys_at_line
 	_poly_id = _poly_id + 1
 
 	_profilepolytex:stop()
 end
 
+local _sorted_spans={}
+local _sorted_x={}
+
 local function draw_line(p,y)
-	if y>maxy then return end
+	if y>p.maxy then return end
 
 	-- layout
 	local VBO_X = 0
@@ -482,6 +485,11 @@ local function draw_line(p,y)
 	local VBO_V = 4
 	
 	local vbo=_gbo
+	-- unpack local variables
+	local np=p.np
+	local lj,rj,ly,ry=p.lj,p.rj,p.ly,p.ry
+	local lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=p.lx,p.lu,p.lv,p.lw,p.ldx,p.ldu,p.ldv,p.ldw,p.rx,p.ru,p.rv,p.rw,p.rdx,p.rdu,p.rdv,p.rdw
+
 	--maybe update to next vert
 	while ly<y do
 		local v0=p[lj]
@@ -491,7 +499,6 @@ local function draw_line(p,y)
 		local y0,y1=vbo[v0+VBO_Y],vbo[v1+VBO_Y]
 		local dy=y1-y0
 		ly=flr(y1)
-
 		lx=vbo[v0 + VBO_X]
 		lw=vbo[v0 + VBO_W]
 		lu=vbo[v0 + VBO_U]*lw
@@ -546,18 +553,23 @@ local function draw_line(p,y)
 
 	--print(y..":"..x0.." -> "..x1)
 	--line(flr(x0),y,flr(x1)-1,y)
-	bind_texture(texinfo,mip)
-	-- spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
-	tline3d(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
+	--bind_texture(p.texinfo,p.mip)
+	--spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
+	--tline3d(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
+	--register_span(flr(x0),p.zorder,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,p.texinfo,p.mip,tline3d)
+	p.x0=flr(x0)
+	p.x1=flr(x1)-1	
 
-	lx=lx+ldx
-	lu=lu+ldu
-	lv=lv+ldv
-	lw=lw+ldw
-	rx=rx+rdx
-	ru=ru+rdu
-	rv=rv+rdv
-	rw=rw+rdw
+	p.lx=lx+ldx
+	p.lu=lu+ldu
+	p.lv=lv+ldv
+	p.lw=lw+ldw
+	p.rx=rx+rdx
+	p.ru=ru+rdu
+	p.rv=rv+rdv
+	p.rw=rw+rdw
+
+	p.ldx,p.ldu,p.ldv,p.ldw,p.rdx,p.rdu,p.rdv,p.rdw=ldx,ldu,ldv,ldw,rdx,rdu,rdv,rdw
 
 	return true
 end
@@ -580,17 +592,107 @@ function end_frame()
 
 			-- unpack data for left & right edges:
 			local poly=apl[i]
-			setfenv(draw_line,poly)			
 			if not draw_line(poly,y) then
 				del(apl,i)
+			else
+				local x0=poly.x0
+				-- visible?
+				if x0<480 and poly.x1>=0 then
+					local spans=_sorted_spans[x0]
+					-- new?
+					if not spans then
+						-- capture starting point
+						_sorted_x[#_sorted_x+1] = x0
+						spans={}
+					end
+					-- add new span
+					spans[#spans+1]=poly
+					_sorted_spans[x0] = spans			
+				end
 			end			
 		end
+		-- pick first span
+		table.sort(_sorted_x)
+		local x,cur_z,cur_span=_sorted_x[1],-math.huge
+		-- anything to draw?
+		if x then
+			local spans,last_x=_sorted_spans[x]
+			for i=1,#spans do
+				local span=spans[i]
+				local z=span.zorder
+				if z>cur_z then
+					cur_z=z
+					cur_span=span
+				end
+			end
+			last_x=x
+			-- draw spans
+			for i=2,#_sorted_x do
+				local x=_sorted_x[i]
+				-- active span, check new start of span?
+				-- past current span?
+				if x>cur_span.x1 then
+					push_color(16+cur_span.zorder)
+					line(last_x,y,cur_span.x1,y)
+					-- no more active span
+					last_x = cur_span.x1+1
+					-- find potential next span
+					local maxz,maxspan=-math.huge
+					for j=1,i do
+						local x=_sorted_x[j]
+						local spans=_sorted_spans[x]
+						for k=1,#spans do
+							local span=spans[k]
+							local z=span.zorder
+							if z>maxz and
+								span.x0<=last_x and
+								span.x1>=last_x and
+								span~=cur_span then
+								maxz=z
+								maxspan=span
+							end
+						end
+					end
+					cur_span,cur_z=maxspan,maxspan and maxz or -math.huge
+				end
+				-- check if any starting span is closest				
+				local spans,maxz,maxspan=_sorted_spans[x],cur_z
+				for j=1,#spans do
+					local span=spans[j]
+					if span.zorder>maxz then
+						maxz=span.zorder
+						maxspan=span
+					end
+				end
+				-- new closer segment?
+				-- draw last span until overlap point
+				if maxspan then
+					push_color(16+cur_span.zorder)
+					line(last_x,y,x-1,y)
+					-- replace active span
+					cur_span,cur_z,last_x=maxspan,maxz,x
+				end				
+			end
+			-- remaining unfinished segment?
+			if cur_span then
+				push_color(16+cur_span.zorder)
+				line(last_x,y,cur_span.x1,y)
+			end
+		end
+
 		-- reclaim all spans
 		_pool:reset()
 		-- reset 
-		_spans=nil
+		--_spans=nil
+		for k in pairs(_sorted_x) do
+			_sorted_x[k]=nil
+		end
+		for k in pairs(_sorted_spans) do
+			_sorted_spans[k]=nil
+		end
 	end
 	
+
 	for k in pairs(_polys) do
 		_polys[k]=nil
 	end
