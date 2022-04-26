@@ -587,17 +587,15 @@ function end_frame()
 			end
 		end
 		-- draw active polygons				
-		for i=#apl,1,-1 do
-			-- push_color(i+16)
-
+		for i,poly in pairs(apl) do
 			-- unpack data for left & right edges:
-			local poly=apl[i]
+			--local poly=apl[i]
 			if not draw_line(poly,y) then
-				del(apl,i)
+				apl[i]=nil
 			else
-				local x0=poly.x0
+				local x0,x1=poly.x0,poly.x1
 				-- visible?
-				if x0<480 and poly.x1>=0 then
+				if x0<480 and x1>=0 and x1>=x0 then
 					local spans=_sorted_spans[x0]
 					-- new?
 					if not spans then
@@ -611,6 +609,16 @@ function end_frame()
 				end
 			end			
 		end
+		-- guard span?
+		--[[
+		if not _sorted_spans[479] then
+			-- capture starting point
+			_sorted_x[#_sorted_x+1] = 479
+			-- add new span
+			_sorted_spans[479] = {x0=479,x1=479,zorder=-1}			
+		end	
+		]]
+
 		-- pick first span
 		table.sort(_sorted_x)
 		local x,cur_z,cur_span=_sorted_x[1],-math.huge
@@ -634,9 +642,9 @@ function end_frame()
 				if x>cur_span.x1 then
 					push_color(16+cur_span.zorder)
 					line(last_x,y,cur_span.x1,y)
-					-- no more active span
 					last_x = cur_span.x1+1
-					-- find potential next span
+					-- no more active span
+					-- find potential next span?
 					local maxz,maxspan=-math.huge
 					for j=1,i do
 						local x=_sorted_x[j]
@@ -676,7 +684,49 @@ function end_frame()
 			-- remaining unfinished segment?
 			if cur_span then
 				push_color(16+cur_span.zorder)
+				--[[
+				if cur_span.x1<479 then 
+					print(y..":"..last_x.." > "..cur_span.x1.." @"..cur_span.zorder)					
+					for i=1,#_sorted_x do
+						local x=_sorted_x[i]
+						local spans=_sorted_spans[x]
+						for j=1,#spans do
+							local span=spans[j]
+							print(span.x0.." > "..span.x1.." @"..span.zorder)
+						end
+					end
+					-- assert(false)
+				end
+				]]
 				line(last_x,y,cur_span.x1,y)
+				-- any remaining spans?
+				last_x = cur_span.x1+1
+				while last_x<480 do
+					-- no more active span
+					-- find potential next span?
+					local maxz,maxspan=-math.huge
+					for j=1,#_sorted_x do
+						local x=_sorted_x[j]
+						local spans=_sorted_spans[x]
+						for k=1,#spans do
+							local span=spans[k]
+							local z=span.zorder
+							if z>maxz and
+								span.x0<=last_x and
+								span.x1>=last_x and
+								span~=cur_span then
+								maxz=z
+								maxspan=span
+							end
+						end
+					end
+					-- guards against infinite loop
+					if not maxspan then break end
+					cur_span=maxspan
+					push_color(16+cur_span.zorder)
+					line(last_x,y,cur_span.x1,y,cur_span.zorder)
+					last_x = cur_span.x1+1
+				end				
 			end
 		end
 
