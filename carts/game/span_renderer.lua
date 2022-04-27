@@ -422,6 +422,7 @@ local _profilepolytex
 local _polys={}
 local _ymin,_ymax=32000,-32000
 local _gbo=require("pool")("poly vertex cache",5,2500)
+--local _scans=require("pool")("scan vertex cache",5,500)
 function polytex(p,np,sky)
 	_profilepolytex = appleCake.profileFunc(nil, _profilepolytex)
 	-- layout
@@ -470,9 +471,6 @@ function polytex(p,np,sky)
 
 	_profilepolytex:stop()
 end
-
-local _sorted_spans={}
-local _sorted_x={}
 
 local function draw_line(p,y)
 	if y>p.maxy then return end
@@ -559,6 +557,12 @@ local function draw_line(p,y)
 	--register_span(flr(x0),p.zorder,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,p.texinfo,p.mip,tline3d)
 	p.x0=flr(x0)
 	p.x1=flr(x1)-1	
+	p.u=u
+	p.v=v
+	p.w=w
+	p.du=du
+	p.dv=dv
+	p.dw=dw
 
 	p.lx=lx+ldx
 	p.lu=lu+ldu
@@ -578,6 +582,9 @@ local _profileend_frame
 function end_frame()	
 	_profileend_frame = appleCake.profileFunc(nil, _profileend_frame)
 	local apl={}
+	local active_spans={}
+	local sorted_x={}
+
 	for y=0,269 do
 		-- add active polys
 		local polys=_polys[y]
@@ -586,7 +593,8 @@ function end_frame()
 				apl[#apl+1]=polys[i]
 			end
 		end
-		-- draw active polygons				
+		-- draw active polygons	
+		local starting_points={}			
 		for i,poly in pairs(apl) do
 			-- unpack data for left & right edges:
 			--local poly=apl[i]
@@ -596,80 +604,82 @@ function end_frame()
 				local x0,x1=poly.x0,poly.x1
 				-- visible?
 				if x0<480 and x1>=0 and x1>=x0 then
-					local spans=_sorted_spans[x0]
 					-- new?
-					if not spans then
+					if not starting_points[x0] then
+						starting_points[x0]=true
 						-- capture starting point
-						_sorted_x[#_sorted_x+1] = x0
-						spans={}
+						sorted_x[#sorted_x+1] = x0
 					end
 					-- add new span
-					spans[#spans+1]=poly
-					_sorted_spans[x0] = spans			
+					active_spans[poly]=x0
 				end
 			end			
 		end
 		-- guard span?
 		--[[
-		if not _sorted_spans[479] then
+		if not active_spans[479] then
 			-- capture starting point
-			_sorted_x[#_sorted_x+1] = 479
+			sorted_x[#sorted_x+1] = 479
 			-- add new span
-			_sorted_spans[479] = {x0=479,x1=479,zorder=-1}			
+			active_spans[479] = {x0=479,x1=479,zorder=-1}			
 		end	
 		]]
 
 		-- pick first span
-		table.sort(_sorted_x)
-		local x,cur_z,cur_span=_sorted_x[1],-math.huge
+		table.sort(sorted_x)
+		local x,cur_z,cur_span=sorted_x[1],-math.huge
 		-- anything to draw?
 		if x then
-			local spans,last_x=_sorted_spans[x]
-			for i=1,#spans do
-				local span=spans[i]
-				local z=span.zorder
-				if z>cur_z then
-					cur_z=z
-					cur_span=span
+			local spans,last_x=active_spans[x]
+			for span,x0 in pairs(active_spans) do
+				if x0==x then
+					local z=span.zorder
+					if z>cur_z then
+						cur_z=z
+						cur_span=span
+					end
 				end
 			end
 			last_x=x
 			-- draw spans
-			for i=2,#_sorted_x do
-				local x=_sorted_x[i]
+			for i=2,#sorted_x do
+				local x=sorted_x[i]
 				-- active span, check new start of span?
 				-- past current span?
 				if x>cur_span.x1 then
 					push_color(16+cur_span.zorder)
 					line(last_x,y,cur_span.x1,y)
+					-- remove cur_span from active spans
+					active_spans[cur_span]=nil
+
+					--bind_texture(cur_span.texinfo,cur_span.mip)
+					--local dx=last_x-cur_span.x0
+					--tline3d(last_x,y,x-1,y,cur_span.u+dx*cur_span.du,cur_span.v+dx*cur_span.dv,cur_span.w+dx*cur_span.dw,cur_span.du,cur_span.dv,cur_span.dw)
+
 					last_x = cur_span.x1+1
 					-- no more active span
 					-- find potential next span?
 					local maxz,maxspan=-math.huge
-					for j=1,i do
-						local x=_sorted_x[j]
-						local spans=_sorted_spans[x]
-						for k=1,#spans do
-							local span=spans[k]
-							local z=span.zorder
-							if z>maxz and
-								span.x0<=last_x and
-								span.x1>=last_x and
-								span~=cur_span then
-								maxz=z
-								maxspan=span
-							end
-						end
-					end
+					for span,x0 in pairs(active_spans) do
+						local z=span.zorder
+						if z>maxz and
+							x0<=last_x and
+							span.x1>=last_x then
+							maxz=z
+							maxspan=span
+						end	
+					end			
 					cur_span,cur_z=maxspan,maxspan and maxz or -math.huge
 				end
 				-- check if any starting span is closest				
-				local spans,maxz,maxspan=_sorted_spans[x],cur_z
-				for j=1,#spans do
-					local span=spans[j]
-					if span.zorder>maxz then
-						maxz=span.zorder
-						maxspan=span
+				local maxz,maxspan=cur_z
+				for span,x0 in pairs(active_spans) do
+					if x0==x then
+						local z=span.zorder
+						if z>maxz then
+							maxz=span.zorder
+							maxspan=span
+						end
 					end
 				end
 				-- new closer segment?
@@ -677,19 +687,22 @@ function end_frame()
 				if maxspan then
 					push_color(16+cur_span.zorder)
 					line(last_x,y,x-1,y)
+					--bind_texture(cur_span.texinfo,cur_span.mip)
+					--local dx=last_x-cur_span.x0
+					--tline3d(last_x,y,x-1,y,cur_span.u+dx*cur_span.du,cur_span.v+dx*cur_span.dv,cur_span.w+dx*cur_span.dw,cur_span.du,cur_span.dv,cur_span.dw)
+
 					-- replace active span
 					cur_span,cur_z,last_x=maxspan,maxz,x
 				end				
 			end
 			-- remaining unfinished segment?
 			if cur_span then
-				push_color(16+cur_span.zorder)
 				--[[
 				if cur_span.x1<479 then 
 					print(y..":"..last_x.." > "..cur_span.x1.." @"..cur_span.zorder)					
-					for i=1,#_sorted_x do
-						local x=_sorted_x[i]
-						local spans=_sorted_spans[x]
+					for i=1,#sorted_x do
+						local x=sorted_x[i]
+						local spans=active_spans[x]
 						for j=1,#spans do
 							local span=spans[j]
 							print(span.x0.." > "..span.x1.." @"..span.zorder)
@@ -698,33 +711,39 @@ function end_frame()
 					-- assert(false)
 				end
 				]]
+				push_color(16+cur_span.zorder)
 				line(last_x,y,cur_span.x1,y)
+				active_spans[cur_span]=nil
+
+				--bind_texture(cur_span.texinfo,cur_span.mip)
+				--local dx=last_x-cur_span.x0
+				--tline3d(last_x,y,cur_span.x1,y,cur_span.u+dx*cur_span.du,cur_span.v+dx*cur_span.dv,cur_span.w+dx*cur_span.dw,cur_span.du,cur_span.dv,cur_span.dw)
+
 				-- any remaining spans?
 				last_x = cur_span.x1+1
 				while last_x<480 do
 					-- no more active span
 					-- find potential next span?
 					local maxz,maxspan=-math.huge
-					for j=1,#_sorted_x do
-						local x=_sorted_x[j]
-						local spans=_sorted_spans[x]
-						for k=1,#spans do
-							local span=spans[k]
-							local z=span.zorder
-							if z>maxz and
-								span.x0<=last_x and
-								span.x1>=last_x and
-								span~=cur_span then
-								maxz=z
-								maxspan=span
-							end
+					for span,x0 in pairs(active_spans) do
+						local z=span.zorder
+						if z>maxz and
+							x0<=last_x and
+							span.x1>=last_x then							
+							maxz=z
+							maxspan=span
 						end
 					end
 					-- guards against infinite loop
 					if not maxspan then break end
 					cur_span=maxspan
 					push_color(16+cur_span.zorder)
-					line(last_x,y,cur_span.x1,y,cur_span.zorder)
+					line(last_x,y,cur_span.x1,y,cur_span.zorder)	
+					-- remove from active
+					active_spans[cur_span]=nil
+					--bind_texture(cur_span.texinfo,cur_span.mip)
+					--local dx=last_x-cur_span.x0
+					--tline3d(last_x,y,cur_span.x1,y,cur_span.u+dx*cur_span.du,cur_span.v+dx*cur_span.dv,cur_span.w+dx*cur_span.dw,cur_span.du,cur_span.dv,cur_span.dw)
 					last_x = cur_span.x1+1
 				end				
 			end
@@ -734,11 +753,11 @@ function end_frame()
 		_pool:reset()
 		-- reset 
 		--_spans=nil
-		for k in pairs(_sorted_x) do
-			_sorted_x[k]=nil
+		for k in pairs(sorted_x) do
+			sorted_x[k]=nil
 		end
-		for k in pairs(_sorted_spans) do
-			_sorted_spans[k]=nil
+		for k in pairs(active_spans) do
+			active_spans[k]=nil
 		end
 	end
 	

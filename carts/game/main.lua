@@ -1,4 +1,4 @@
-local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
@@ -564,6 +564,7 @@ function love.draw()
   _profileDraw:stop() -- By setting it to love.graphics.getStats we can see details of the draw
 
   appleCake.counter("FPS", {love.timer.getFPS()}) 
+  appleCake.countMemory()
 
   --
   -- local model = _flame.alias
