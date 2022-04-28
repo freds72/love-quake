@@ -2,6 +2,17 @@ local entities={}
 
 local sub,add=string.sub,table.insert
 
+local function split(inputstr, sep)
+    if sep == nil then
+      sep = "%s"
+    end
+    local t={}
+    for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+      table.insert(t, str)
+    end
+    return t
+end
+  
 -- quake "object notation" parser
 -- loosely based of : https://gist.github.com/tylerneylon/59f4bcf316be525b30ab
 local function parse_str(str, pos, val)

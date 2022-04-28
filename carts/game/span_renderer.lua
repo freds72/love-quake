@@ -422,6 +422,7 @@ local _profilepolytex
 local _polys={}
 local _ymin,_ymax=32000,-32000
 local _gbo=require("pool")("poly vertex cache",5,2500)
+local _scanlines=require("object_pool")("scanline cache",250)
 --local _scans=require("pool")("scan vertex cache",5,500)
 function polytex(p,np,sky)
 	_profilepolytex = appleCake.profileFunc(nil, _profilepolytex)
@@ -435,17 +436,38 @@ function polytex(p,np,sky)
 	-- polygon
 	local miny,maxy,mini=math.huge,-math.huge
 	-- find extent + copy poly
-	local poly_env={lx=0,lu=0,lv=0,lw=0,ldx=0,ldu=0,ldv=0,ldw=0,rx=0,ru=0,rv=0,rw=0,rdx=0,rdu=0,rdv=0,rdw=0,np=np,texinfo=_texture,mip=_mip,zorder=_poly_id}
+	local idx,poly_env=_scanlines:pop()	
+	poly_env.lx=0
+	poly_env.lu=0
+	poly_env.lv=0
+	poly_env.lw=0
+	poly_env.ldx=0
+	poly_env.ldu=0
+	poly_env.ldv=0
+	poly_env.ldw=0
+	poly_env.rx=0
+	poly_env.ru=0
+	poly_env.rv=0
+	poly_env.rw=0
+	poly_env.rdx=0
+	poly_env.rdu=0
+	poly_env.rdv=0
+	poly_env.rdw=0
+	poly_env.np=np
+	poly_env.texinfo=_texture
+	poly_env.mip=_mip
+	poly_env.zorder=_poly_id
+	poly_env.verts=poly_env.verts or {}
 	for i=1,np do
 		local idx=p[i] 
 		local y=_vbo[idx + VBO_Y]
 		-- copy coords
-		add(poly_env,_gbo:pop(
+		poly_env.verts[i]=_gbo:pop(
 			_vbo[idx + VBO_X],
 			y,
 			_vbo[idx + VBO_W],
 			_vbo[idx + VBO_U],
-			_vbo[idx + VBO_V]))
+			_vbo[idx + VBO_V])
 		if y<miny then mini,miny=i,y end
 		if y>maxy then maxy=y end
 		-- copy 
@@ -465,7 +487,7 @@ function polytex(p,np,sky)
 	poly_env.ly=miny
 	poly_env.ry=miny
 	poly_env.maxy=flr(maxy)
-	polys_at_line[#polys_at_line+1]=poly_env
+	polys_at_line[#polys_at_line+1]=idx
 	_polys[i]=polys_at_line
 	_poly_id = _poly_id + 1
 
@@ -484,16 +506,16 @@ local function draw_line(p,y)
 	
 	local vbo=_gbo
 	-- unpack local variables
-	local np=p.np
+	local np,verts=p.np,p.verts
 	local lj,rj,ly,ry=p.lj,p.rj,p.ly,p.ry
 	local lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=p.lx,p.lu,p.lv,p.lw,p.ldx,p.ldu,p.ldv,p.ldw,p.rx,p.ru,p.rv,p.rw,p.rdx,p.rdu,p.rdv,p.rdw
 
 	--maybe update to next vert
 	while ly<y do
-		local v0=p[lj]
+		local v0=verts[lj]
 		lj=lj+1
 		if lj>np then lj=1 end
-		local v1=p[lj]
+		local v1=verts[lj]
 		local y0,y1=vbo[v0+VBO_Y],vbo[v1+VBO_Y]
 		local dy=y1-y0
 		ly=flr(y1)
@@ -513,10 +535,10 @@ local function draw_line(p,y)
 		lw=lw+cy*ldw
 	end  
 	while ry<y do
-		local v0=p[rj]
+		local v0=verts[rj]
 		rj=rj-1
 		if rj<1 then rj=np end
-		local v1=p[rj]
+		local v1=verts[rj]
 		local y0,y1=vbo[v0 + VBO_Y],vbo[v1 + VBO_Y]
 		local dy=y1-y0
 		ry=flr(y1)
@@ -590,12 +612,13 @@ function end_frame()
 		local polys=_polys[y]
 		if polys then
 			for i=1,#polys do
-				apl[#apl+1]=polys[i]
+				-- convert to live objects
+				apl[#apl+1]=_scanlines[polys[i]]
 			end
 		end
 		-- draw active polygons	
 		local starting_points={}			
-		for i,poly in pairs(apl) do
+		for i,poly in pairs(apl) do			
 			-- unpack data for left & right edges:
 			--local poly=apl[i]
 			if not draw_line(poly,y) then
@@ -761,12 +784,12 @@ function end_frame()
 		end
 	end
 	
-
 	for k in pairs(_polys) do
 		_polys[k]=nil
 	end
 	_poly_id = 0
 	_gbo:reset()
+	_scanlines:reset()
 	_profileend_frame:stop()
 end
 

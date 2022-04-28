@@ -1,4 +1,4 @@
-local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
@@ -30,17 +30,6 @@ end
 
 local scale=2
 local _memory_thinktime=-1
-
-function split(inputstr, sep)
-  if sep == nil then
-    sep = "%s"
-  end
-  local t={}
-  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
-    table.insert(t, str)
-  end
-  return t
-end
 
 function format(str, ...)
   local args={...}
