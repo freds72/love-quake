@@ -1,4 +1,4 @@
-local appleCake = require("lib.AppleCake")(false) -- Set to false will remove the profiling tool from the project
+local appleCake = require("lib.AppleCake")(true) -- Set to false will remove the profiling tool from the project
 appleCake.beginSession() --Will write to "profile.json" by default in the save directory
 appleCake.setName("Love Quake")
 
@@ -7,7 +7,7 @@ local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
 local fb = require('lib.fblove_strip')
-local renderer = require( "span_renderer" )
+local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs.main")
 local logging = require("logging")
@@ -315,50 +315,6 @@ function love.load(args)
   --end
 end
 
-function love.run()
-	if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
-
-	-- We don't want the first frame's dt to include time taken by love.load.
-	if love.timer then love.timer.step() end
-
-	local dt = 0
-
-	-- Main loop time.
-	return function()
-		-- Process events.
-		if love.event then
-			love.event.pump()
-			for name, a,b,c,d,e,f in love.event.poll() do
-				if name == "quit" then
-					if not love.quit or not love.quit() then
-						return a or 0
-					end
-				end
-				love.handlers[name](a,b,c,d,e,f)
-			end
-		end
-
-    appleCake.mark("Frame")
-
-		-- Update dt, as we'll be passing it to update
-		if love.timer then dt = love.timer.step() end
-
-		-- Call update and draw
-		if love.update then love.update(dt) end -- will pass 0 if love.timer is disabled
-
-		if love.graphics and love.graphics.isActive() then
-			love.graphics.origin()
-			love.graphics.clear(love.graphics.getBackgroundColor())
-
-			if love.draw then love.draw() end
-      
-			love.graphics.present()
-		end
-
-		if love.timer then love.timer.sleep(0.001) end
-	end
-end
-
 mx,my=0,0
 diffx,diffy=0,0
 camx,camy=0,0
@@ -524,7 +480,7 @@ function love.draw()
   --print(collectgarbage("count")-m0.."kb")
 
   local visents = _cam:collect_entities(_entities)
-  --[[
+
   for i=1,#visents do
     local ent=visents[i]
     local m = ent.model
@@ -545,7 +501,7 @@ function love.draw()
   for _,system in pairs(_components) do
     system:render(_cam,rectfill)
   end
-  ]]
+
 
   end_frame()
 
@@ -1017,8 +973,8 @@ function make_cam()
   end    
   collect_bsp=function(node,pos)
     local side=plane_isfront(node.plane,pos)
-    collect_leaf(node[not side],pos)
     collect_leaf(node[side],pos)
+    collect_leaf(node[not side],pos)
   end
 
   local v_cache={

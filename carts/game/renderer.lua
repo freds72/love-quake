@@ -34,7 +34,7 @@ function start_frame(buf)
 	_backbuffer = buf
 end
 -- "vbo" cache
-local _pool=require("pool")("spans",5,5000)
+local _pool=require("pool")("spans",5,12500)
 local _spans={}
 local _poly_id=0
 function end_frame()	
@@ -83,7 +83,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 		return
 	end
 
-	while span>0 do		
+	while span>=0 do		
 		local s0,s1=_pool[span],_pool[span+1]
 
 		if s0>x0 then
@@ -115,13 +115,14 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			else
 				_spans[y]=n
 			end
+			old=n
+
 			x0=s0
 			--assert(x1-x0>=0,"empty right seg")
 			u=u+dx*du
 			v=v+dx*dv
 			w=w+dx*dw
 			-- check remaining segment
-			old=n
 			goto continue
 		elseif s1>=x0 then
 			--     ??nnnn????
@@ -164,7 +165,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					-- new first
 					_spans[y]=n
 				end
-				
+				old=n
+
 				-- any remaining "right" from current span?
 				local dx=s1-x1-1
 				if dx>0 then
@@ -173,8 +175,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
 				else
 					-- drop current span
-					_pool[n+4]=_pool[span+4]
-					span=n
+					_pool[old+4]=_pool[span+4]
+					span=old
 				end					
 			end
 
@@ -205,7 +207,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	-- new last?
 	if x1-x0>=0 then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
-		-- end of spans
+		-- end of spans		
 		_pool[old+4]=_pool:pop5(x0,x1,w,dw,-1)
 	end
 end
@@ -283,7 +285,7 @@ function tline3d(x0,y0,x1,_,u,v,w,du,dv,dw)
 	local shade=63-flr(mid(_lbase[1] * 63,0,63))
 	for x=y0*480+x0,y0*480+x1 do
 		local uw,vw=u/w,v/w
-		if _lightptr then
+		if false then --_lightptr then
 			shade=0
 			local s,t=(uw - _lightx)/16,(vw - _lighty)/16
 			local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
