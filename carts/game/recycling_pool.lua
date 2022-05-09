@@ -25,9 +25,9 @@ local recycling_pool=function(name,stride,size)
             end
             -- pick from the free list                
             local idx=del(free)
-            local args={...}
-            for i=0,#args-1 do
-                pool[idx+i]=args[i+1]
+            local n=select("#",...)
+            for i=0,n-1 do
+                pool[idx+i]=select(i+1,...)
             end
             return idx
         end,
