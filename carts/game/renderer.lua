@@ -83,6 +83,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 		return
 	end
 
+	-- loop while valid address
 	while span>=0 do		
 		local s0,s1=_pool[span],_pool[span+1]
 
@@ -504,9 +505,10 @@ function polytex(p,np,sky)
 			lu=vbo[v0 + VBO_U]*lw
 			lv=vbo[v0 + VBO_V]*lw
 			ldx=(vbo[v1 + VBO_X]-lx)/dy
-			ldu=(vbo[v1 + VBO_U] * vbo[v1 + VBO_W]-lu)/dy
-			ldv=(vbo[v1 + VBO_V] * vbo[v1 + VBO_W]-lv)/dy
-			ldw=(vbo[v1 + VBO_W]-lw)/dy
+			local w1=vbo[v1 + VBO_W]
+			ldu=(vbo[v1 + VBO_U] * w1 - lu)/dy
+			ldv=(vbo[v1 + VBO_V] * w1 - lv)/dy
+			ldw=(w1-lw)/dy
 			--sub-pixel correction
 			local cy=y-y0
 			lx=lx+cy*ldx
@@ -527,9 +529,10 @@ function polytex(p,np,sky)
 			ru=vbo[v0 + VBO_U]*rw
 			rv=vbo[v0 + VBO_V]*rw
 			rdx=(vbo[v1 + VBO_X]-rx)/dy
-			rdu=(vbo[v1 + VBO_U]*vbo[v1 + VBO_W]-ru)/dy
-			rdv=(vbo[v1 + VBO_V]*vbo[v1 + VBO_W]-rv)/dy
-			rdw=(vbo[v1 + VBO_W]-rw)/dy
+			local w1=vbo[v1 + VBO_W]
+			rdu=(vbo[v1 + VBO_U]*w1 - ru)/dy
+			rdv=(vbo[v1 + VBO_V]*w1 - rv)/dy
+			rdw=(w1-rw)/dy
 			--sub-pixel correction
 			local cy=y-y0
 			rx=rx+cy*rdx
