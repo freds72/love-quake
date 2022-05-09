@@ -1,25 +1,12 @@
 local PoolCls=function(name,stride,size)
     local ffi=require("ffi")
     local logging = require("logging")
-    -- p8 compat
-    local add,del=table.insert,table.remove
-    local flr=math.floor
 
-    size=size or 100
-    local pool,cursor,total={},0,0
-    local function reserve()
-        assert(total==0,"cannot expand ffi pool")
-        pool = ffi.new("float[?]", size*stride)
-        total = total + size
-        logging.debug(name.." - new pool#: "..total.."("..stride*size..")")
-    end
+    local cursor,total=0,size
+    local pool=ffi.new("float[?]", size*stride)
     return setmetatable({
         -- reserve an entry in pool
         pop=function(self,...)
-            -- no more entries?
-            if cursor==total then    
-                reserve()
-            end
             -- init values
             local idx=cursor*stride
             cursor = cursor + 1
@@ -30,10 +17,6 @@ local PoolCls=function(name,stride,size)
             return idx
         end,
         pop5=function(self,a,b,c,d,e)
-            -- no more entries?
-            if cursor==total then    
-                reserve()
-            end
             -- init values
             local idx=cursor*stride
             cursor = cursor + 1
@@ -45,10 +28,6 @@ local PoolCls=function(name,stride,size)
             return idx
         end,
         pop6=function(self,a,b,c,d,e,f)
-            -- no more entries?
-            if cursor==total then    
-                reserve()
-            end
             -- init values
             local idx=cursor*stride
             cursor = cursor + 1
