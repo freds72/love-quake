@@ -1,6 +1,6 @@
 local fonts=function(root_path)
     local ffi=require 'ffi'
-    local nfs = require( "nativefs" )
+    local nfs = require( "lib/nativefs" )
     local palette = require("palette")()
     
     -- p8 compat

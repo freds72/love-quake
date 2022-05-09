@@ -3,11 +3,10 @@ appleCake.beginSession() --Will write to "profile.json" by default in the save d
 appleCake.setName("Love Quake")
 
 local ffi=require('ffi')
-local nfs = require( "nativefs" )
 local modelfs = require( "modelfs" )
 -- local lick = require "lick"
 -- lick.reset = true -- reload the love.load everytime you save
-local fb = require('fblove_strip')
+local fb = require('lib.fblove_strip')
 local renderer = require( "renderer" )
 local math3d = require( "math3d")
 local progs = require("progs.main")
@@ -31,17 +30,6 @@ end
 
 local scale=2
 local _memory_thinktime=-1
-
-function split(inputstr, sep)
-  if sep == nil then
-    sep = "%s"
-  end
-  local t={}
-  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
-    table.insert(t, str)
-  end
-  return t
-end
 
 function format(str, ...)
   local args={...}
@@ -327,50 +315,6 @@ function love.load(args)
   --end
 end
 
-function love.run()
-	if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
-
-	-- We don't want the first frame's dt to include time taken by love.load.
-	if love.timer then love.timer.step() end
-
-	local dt = 0
-
-	-- Main loop time.
-	return function()
-		-- Process events.
-		if love.event then
-			love.event.pump()
-			for name, a,b,c,d,e,f in love.event.poll() do
-				if name == "quit" then
-					if not love.quit or not love.quit() then
-						return a or 0
-					end
-				end
-				love.handlers[name](a,b,c,d,e,f)
-			end
-		end
-
-    appleCake.mark("Frame")
-
-		-- Update dt, as we'll be passing it to update
-		if love.timer then dt = love.timer.step() end
-
-		-- Call update and draw
-		if love.update then love.update(dt) end -- will pass 0 if love.timer is disabled
-
-		if love.graphics and love.graphics.isActive() then
-			love.graphics.origin()
-			love.graphics.clear(love.graphics.getBackgroundColor())
-
-			if love.draw then love.draw() end
-      
-			love.graphics.present()
-		end
-
-		if love.timer then love.timer.sleep(0.001) end
-	end
-end
-
 mx,my=0,0
 diffx,diffy=0,0
 camx,camy=0,0
@@ -558,12 +502,14 @@ function love.draw()
     system:render(_cam,rectfill)
   end
 
+
   end_frame()
 
   -- appleCake.countMemory()
   _profileDraw:stop() -- By setting it to love.graphics.getStats we can see details of the draw
 
   appleCake.counter("FPS", {love.timer.getFPS()}) 
+  appleCake.countMemory()
 
   --
   -- local model = _flame.alias
@@ -804,13 +750,16 @@ function make_cam()
   local VBO_OUTCODE = 6
   local VBO_U = 7
   local VBO_V = 8
-  
-  local vbo = require("pool")("v_cache",9,2500)
+    
+  -- vertex buffer "cache"
+  local vbo = require("pool")("vertex_cache",9,2500)
   -- share with rasterizer
   push_vbo(vbo)
 
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
+
+  local h_ratio,v_ratio=(480-480/2)/270,(270-270/2)/270
   -- pre-computed normals for alias models
   local _normals={
     {-0.525731, 0.000000, 0.850651}, 
@@ -1014,7 +963,7 @@ function make_cam()
   local function collect_leaf(child,pos)
     if child.visframe==visframe then
       if child.contents then       
-        if child.contents~=-2 and _cam:is_visible(child.mins,child.maxs) then
+        if _cam:is_visible(child.mins,child.maxs) then
           visleaves[#visleaves+1]=child
         end
       else
@@ -1048,10 +997,10 @@ function make_cam()
         -- znear=8
         if az<8 then code=2 end
         --if az>2048 then code|=1 end
-        if ax>az then code = code + 4
-        elseif ax<-az then code = code + 8 end
-        if ay>az then code = code + 16
-        elseif ay<-az then code = code + 32 end
+        if ax>h_ratio*az then code = code + 4
+        elseif ax<-h_ratio*az then code = code + 8 end
+        if ay>v_ratio*az then code = code + 16
+        elseif ay<-v_ratio*az then code = code + 32 end
         -- save world space coords for clipping
         -- to screen space
         local w=1/az

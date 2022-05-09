@@ -34,7 +34,7 @@ function start_frame(buf)
 	_backbuffer = buf
 end
 -- "vbo" cache
-local _pool=require("pool")("spans",5,5000)
+local _pool=require("pool")("spans",5,12500)
 local _spans={}
 local _poly_id=0
 function end_frame()	
@@ -67,7 +67,6 @@ local function rectfill(x0,y,x1,y)
 end
 ]]
 
-local _profilespanfill
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	local _pool=_pool
 	if x1<0 or x0>480 or x1-x0<0 then
@@ -84,7 +83,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 		return
 	end
 
-	while span>0 do		
+	-- loop while valid address
+	while span>=0 do		
 		local s0,s1=_pool[span],_pool[span+1]
 
 		if s0>x0 then
@@ -116,13 +116,14 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			else
 				_spans[y]=n
 			end
+			old=n
+
 			x0=s0
 			--assert(x1-x0>=0,"empty right seg")
 			u=u+dx*du
 			v=v+dx*dv
 			w=w+dx*dw
 			-- check remaining segment
-			old=n
 			goto continue
 		elseif s1>=x0 then
 			--     ??nnnn????
@@ -165,7 +166,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					-- new first
 					_spans[y]=n
 				end
-				
+				old=n
+
 				-- any remaining "right" from current span?
 				local dx=s1-x1-1
 				if dx>0 then
@@ -174,8 +176,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
 				else
 					-- drop current span
-					_pool[n+4]=_pool[span+4]
-					span=n
+					_pool[old+4]=_pool[span+4]
+					span=old
 				end					
 			end
 
@@ -206,7 +208,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	-- new last?
 	if x1-x0>=0 then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
-		-- end of spans
+		-- end of spans		
 		_pool[old+4]=_pool:pop5(x0,x1,w,dw,-1)
 	end
 end
@@ -482,14 +484,13 @@ function polytex(p,np,sky)
 
 	--data for left & right edges:
 	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
-	--step through scanlines.
 	if maxy>=270 then
     	maxy=270-1
   	end
 	if miny<0 then
 	    miny=-1
   	end
-	for y=1+flr(miny),maxy do
+	for y=flr(miny)+1,maxy do
 		--maybe update to next vert
 		while ly<y do
 			local v0=p[lj]
@@ -504,9 +505,10 @@ function polytex(p,np,sky)
 			lu=vbo[v0 + VBO_U]*lw
 			lv=vbo[v0 + VBO_V]*lw
 			ldx=(vbo[v1 + VBO_X]-lx)/dy
-			ldu=(vbo[v1 + VBO_U] * vbo[v1 + VBO_W]-lu)/dy
-			ldv=(vbo[v1 + VBO_V] * vbo[v1 + VBO_W]-lv)/dy
-			ldw=(vbo[v1 + VBO_W]-lw)/dy
+			local w1=vbo[v1 + VBO_W]
+			ldu=(vbo[v1 + VBO_U] * w1 - lu)/dy
+			ldv=(vbo[v1 + VBO_V] * w1 - lv)/dy
+			ldw=(w1-lw)/dy
 			--sub-pixel correction
 			local cy=y-y0
 			lx=lx+cy*ldx
@@ -527,9 +529,10 @@ function polytex(p,np,sky)
 			ru=vbo[v0 + VBO_U]*rw
 			rv=vbo[v0 + VBO_V]*rw
 			rdx=(vbo[v1 + VBO_X]-rx)/dy
-			rdu=(vbo[v1 + VBO_U]*vbo[v1 + VBO_W]-ru)/dy
-			rdv=(vbo[v1 + VBO_V]*vbo[v1 + VBO_W]-rv)/dy
-			rdw=(vbo[v1 + VBO_W]-rw)/dy
+			local w1=vbo[v1 + VBO_W]
+			rdu=(vbo[v1 + VBO_U]*w1 - ru)/dy
+			rdv=(vbo[v1 + VBO_V]*w1 - rv)/dy
+			rdw=(w1-rw)/dy
 			--sub-pixel correction
 			local cy=y-y0
 			rx=rx+cy*rdx
@@ -552,6 +555,7 @@ function polytex(p,np,sky)
 		end
 
 		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
+		--tline(flr(x0),y,flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw)
 
 		lx=lx+ldx
 		lu=lu+ldu
