@@ -7,4 +7,16 @@ function love.conf(t)
     t.window.vsync = 1                  -- Vertical sync mode (number)
     t.window.msaa = 0                   -- The number of samples to use with multi-sampled antialiasing (number)
     t.window.display = 1                -- Index of the monitor to show the window in (number)
+
+    -- game key bindings
+    t.keys = {
+        up = {'w','up'},
+        down = {'s','down'},
+        left = {'a','left'},
+        right = {'d','right'},
+        action = {'space'}
+    }
+
+    -- alias to global for further use
+    _conf = t
 end

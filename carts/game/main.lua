@@ -74,6 +74,8 @@ function love.load(args)
   -- ECS
   _components["particles"] = require("particles")(_ramp_styles)
 
+  _input = require("input_system")(_conf)
+
   local precache_models = {}
   local level = modelfs.load(_pak, "maps/"..args[2])
   _world_model = level.model
@@ -373,6 +375,7 @@ function love.update(dt)
   _profileUpdate = appleCake.profileFunc(nil, _profileUpdate)
 
   -- update ECS
+  _input:update()
   for _,system in pairs(_components) do
     system:update(1/60)
   end
@@ -1443,17 +1446,17 @@ function make_player(pos,a)
       velocity[2]=velocity[2]*0.8      
 
       -- move
-      local keys={
-        ["z"]={0,1,0},
-        ["s"]={0,-1,0},
-        ["q"]={1,0,0},
-        ["d"]={-1,0,0},
-        ["space"]={0,0,6.2}
+      local inputs={
+        up={0,1,0},
+        down={0,-1,0},
+        left={1,0,0},
+        right={-1,0,0},
+        action={0,0,6.2}
       }
 
       local acc={0,0,0}
-      for k,move in pairs(keys) do
-        if love.keyboard.isDown(k) then
+      for action,move in pairs(inputs) do
+        if _input:is_down(action) then
           acc=v_add(acc, move)
         end
       end
@@ -1509,8 +1512,8 @@ function make_player(pos,a)
       local cur_lmb_down = love.mouse.isDown(1)
       if not lmb_down and cur_lmb_down then
         if fire_ttl<love.frame then
-          fire_ttl = love.frame + 5
-          -- hitscan
+            fire_ttl = love.frame + 5
+            -- hitscan
             local fwd,up=m_fwd(self.m),m_up(self.m)
             local eye_pos = v_add(self.origin,up,24)
             local aim_pos = v_add(eye_pos,fwd,1024)

@@ -1,11 +1,12 @@
 local recycling_pool=function(name,stride,size)
     local logging = require("logging")
+    local ffi = require("ffi")
     
     -- p8 compat
     local add,del=table.insert,table.remove
 
     size=size or 100
-    local pool,free={},{}
+    local pool,free,cursor={},{},1
     local function reserve()
         for i=1,size do
             -- "free" index
@@ -20,11 +21,12 @@ local recycling_pool=function(name,stride,size)
         -- reserve an entry in pool
         pop=function(self,...)
             -- no more entries?
-            if #free==0 then    
+            if cursor>#free then    
                 reserve()
             end
             -- pick from the free list                
-            local idx=del(free)
+            local idx=free[cursor]
+            cursor = cursor + 1
             local n=select("#",...)
             for i=0,n-1 do
                 pool[idx+i]=select(i+1,...)
@@ -33,10 +35,12 @@ local recycling_pool=function(name,stride,size)
         end,
         -- reclaim slot
         push=function(self,idx)
-            add(free,idx)
+            cursor = cursor - 1 
+            assert(cursor>0,"invalid pop/push pairs : "..idx.." @"..cursor)
+            free[cursor]=idx
         end,
         stats=function(self)   
-            return "pool: "..name.." free: "..#free.." pool: "..#pool/stride
+            return "pool: "..name.." free: "..(#free-cursor).." pool: "..#pool/stride
         end
     },{
         -- redirect get/set to underlying array
