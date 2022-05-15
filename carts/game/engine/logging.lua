@@ -1,5 +1,5 @@
-local logging={}
-logging.level = 2
+local Logging={}
+Logging.level = 2
 
 local function array_tostring(v,...)
     if not v then
@@ -19,9 +19,9 @@ local logs = {
 }
 
 for k,v in pairs(logs) do    
-    logging[k]=function(...)        
+    Logging[k]=function(...)        
         log(v,...)
     end
 end
 
-return logging
+return Logging

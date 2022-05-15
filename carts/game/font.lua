@@ -4,40 +4,7 @@ local fonts=function(root_path)
     local palette = require("palette")()
     
     -- p8 compat
-    local sub,max=string.sub,math.max
-
-    ffi.cdef[[
-#pragma pack(1)
-typedef struct
-{
-	char		identification[4];		// should be WAD2 or 2DAW
-	int			numlumps;
-	int			infotableofs;
-} wadinfo_t;
-typedef struct
-{
-	int			filepos;
-	int			disksize;
-	int			size;					// uncompressed
-	char		type;
-	char		compression;
-	char		pad1, pad2;
-	char		name[16];				// must be null terminated
-} lumpinfo_t;
-]]    
-
-    -- reads the given struct name from the byte array
-    local function read_directory(cname, info, mem)
-        local res = {}
-        local sz,ct = ffi.sizeof(cname), ffi.typeof(cname.."*")
-        mem = mem + info.infotableofs
-        for i=0,info.numlumps-1 do
-            res[i] = ffi.cast(ct, mem)
-            mem = mem + sz
-        end
-        --return ffi.cast(cname.."["..n.."]", mem)
-        return res
-    end
+    local sub,max=string.sub,math.max   
 
     local all_chars={
         -- menu chars 1

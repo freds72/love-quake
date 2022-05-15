@@ -2,14 +2,14 @@ local PoolCls=function(name,stride,size)
     local ffi=require("ffi")
     local logging = require("logging")
 
-    local cursor,total=0,size
-    local pool=ffi.new("float[?]", size*stride)
+    local cursor,total=0,size*stride
+    local pool=ffi.new("float[?]", total)
     return setmetatable({
         -- reserve an entry in pool
         pop=function(self,...)
             -- init values
-            local idx=cursor*stride
-            cursor = cursor + 1
+            local idx=cursor
+            cursor = cursor + stride
             local n=select("#",...)
             for i=0,n-1 do
                 pool[idx+i]=select(i+1,...)
@@ -18,33 +18,21 @@ local PoolCls=function(name,stride,size)
         end,
         pop5=function(self,a,b,c,d,e)
             -- init values
-            local idx=cursor*stride
-            cursor = cursor + 1
+            local idx=cursor
+            cursor = cursor + stride
             pool[idx]  =a
             pool[idx+1]=b
             pool[idx+2]=c
             pool[idx+3]=d
             pool[idx+4]=e
             return idx
-        end,
-        pop6=function(self,a,b,c,d,e,f)
-            -- init values
-            local idx=cursor*stride
-            cursor = cursor + 1
-            pool[idx]  =a
-            pool[idx+1]=b
-            pool[idx+2]=c
-            pool[idx+3]=d
-            pool[idx+4]=e
-            pool[idx+5]=f
-            return idx
-        end,       
+        end,      
         -- reclaim everything
         reset=function(self)
             cursor = 0
         end,
         stats=function(self)   
-            return "pool:"..name.." free: "..(total-cursor).." size: "..(stride*size)
+            return "pool:"..name.." free: "..((total-cursor)/stride).." size: "..(total/stride)
         end
     },{
         -- redirect get/set to underlying array
