@@ -6,10 +6,10 @@ local input = require("picotron.emulator.input")
 -- thread sync
 local channels=require("picotron.emulator.channels")()
 
--- framebuffer
-local framebufferLen = 480*270*ffi.sizeof("uint32_t")
+-- framebuffer (1 byte per pixel)
+local framebufferLen = 480*270
 local fb = love.data.newByteData(framebufferLen)
-local vid_ptr = ffi.cast("uint32_t*",fb:getFFIPointer())
+local vid_ptr = ffi.cast("uint8_t*",fb:getFFIPointer())
 
 -- platform specific api
 local flr,ceil=math.floor,math.ceil
@@ -30,6 +30,9 @@ local activePalette,activeColormap
 -- asset id cache
 
 local api=setmetatable({
+    mid=function(x, a, b)
+        return math.max(a, math.min(b, x))
+    end,
     -- rebase angle to 0..1
     cos=function(angle)
         return math.cos(math.pi * angle)
@@ -37,7 +40,10 @@ local api=setmetatable({
     -- rebase angle to 0..1
     sin=function(angle)
         return math.sin(math.pi * angle)
-    end,    
+    end, 
+    abs=function(a)   
+        return math.abs(a)
+    end,
     time=function()
         return this_time
     end,
@@ -46,11 +52,11 @@ local api=setmetatable({
     end,
     flip=function()
         -- wait for display sync 
-        channels.events:push({"flip",fb})
+        channels.events:push({"flip",fb,activePalette})
         this_time = channels.lock:demand()
     end,
     pset=function(x,y,c)
-        vid_ptr[flr(x)+480*flr(y)]=0xff000000+c
+        vid_ptr[flr(x)+480*flr(y)]=flr(c)
     end,
     pal=function(colors)
 
@@ -59,7 +65,7 @@ local api=setmetatable({
     mmap=function(name)
         -- delegate to main thread
         channels.events:push({"load",name})
-        local img = unpack(channels.lock:demand())
+        return channels.lock:demand()
     end,
     printh=function(s)
         -- print to console
@@ -68,7 +74,7 @@ local api=setmetatable({
     print=function(s,x,y)    
     end,
     line=function(x0,y0,x1,y1,c)   
-        c = 0xff000000+c
+        c = flr(c)
         local dx,dy=x1-x0,y1-y0
         if abs(dx)>abs(dy) then
             if x0>x1 then
@@ -103,17 +109,18 @@ local api=setmetatable({
     { __index=_G })
 
 -- default values
--- activePalette=api.mmap("picotron/assets/palette.png","uint32")
+activePalette=api.mmap("picotron/assets/famicube-1x.png","uint32")
 -- activeColormap=api.mmap("picotron/assets/colormap.bmp","uint8")
 
 -- load game within the "picotron" API context
 local chunk = love.filesystem.load("game.lua") -- load the chunk
 
+print("Starting game...")
+
 -- load game within env
 setfenv(chunk, api)()
 
 -- run
-print("Starting game...")
 setfenv(function()
     local init=api._init
     if init then

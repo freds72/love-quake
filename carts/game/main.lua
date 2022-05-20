@@ -10,9 +10,9 @@ local gameThread
 -- thread sync
 local channels = require("picotron.emulator.channels")()
 
-local fb
 local width,height=480,270
 local scale,xoffset,yoffset = 2,0,0
+local imageExtensions={[".png"]=true,[".bmp"]=true}
 
 function love.load()
     love.window.setMode(width * scale, height * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
@@ -71,17 +71,30 @@ function love.run()
             local name,a,b,c,d,e,f=unpack(msg)
             if name=="flip" then
                 if love.graphics and love.graphics.isActive() then
-                    local fb = ffi.cast("uint32_t*", a:getFFIPointer())
+                    -- a: framebuffer
+                    -- b: HW palette (image)
+                    local fb = ffi.cast("uint8_t*", a:getFFIPointer())
+                    local pal = ffi.cast("uint32_t*", b:getFFIPointer())
                     -- display current backbuffer
                     love.graphics.origin()
                     love.graphics.clear(love.graphics.getBackgroundColor())
-                    framebuffer:present(xoffset, yoffset, fb, scale)
+                    framebuffer:present(xoffset, yoffset, fb, pal, scale)
                     love.graphics.present()
-                    -- wait (host)
                 end
                 -- unlock vm
                 channels.lock:push(lti.getTime())   
             elseif name=="load" then
+                -- a: filename
+                local extension=string.sub(a,#a-3,#a)
+                if imageExtensions[extension] then
+                    print("Loading image asset: "..a)
+                    local img = love.image.newImageData(a)
+                    -- print("format: "..img:getFormat( ))
+                    channels.lock:push(img)
+                else
+                    print("Loading asset: "..a)
+                    channels.lock:push(love.filesystem.newFileData(a))
+                end
             end
         end
 
