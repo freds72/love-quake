@@ -1,15 +1,15 @@
 -- picotron emulator entry point
 local lt = love.thread
+local lti = love.timer
 local ffi=require("ffi")
 local input = require("picotron.emulator.input")
 -- thread sync
-local channels=require("picotron.emulator.channels")
+local channels=require("picotron.emulator.channels")()
 
 -- framebuffer
 local framebufferLen = 480*270*ffi.sizeof("uint32_t")
 local fb = love.data.newByteData(framebufferLen)
 local vid_ptr = ffi.cast("uint32_t*",fb:getFFIPointer())
-channels.onload:push(fb)
 
 -- platform specific api
 local flr,ceil=math.floor,math.ceil
@@ -45,8 +45,9 @@ local api=setmetatable({
         ffi.fill(vid_ptr, framebufferLen, 0)
     end,
     flip=function()
-        -- wait for display sync        
-        this_time = channels.vsync:demand()
+        -- wait for display sync 
+        channels.events:push({"flip",fb})
+        this_time = channels.lock:demand()
     end,
     pset=function(x,y,c)
         vid_ptr[flr(x)+480*flr(y)]=0xff000000+c
@@ -57,8 +58,8 @@ local api=setmetatable({
     -- map an asset to memory
     mmap=function(name)
         -- delegate to main thread
-        channels.onfileRequest:push(name)
-        local img = unpack(channels.onfileResponse:demand())
+        channels.events:push({"load",name})
+        local img = unpack(channels.lock:demand())
     end,
     printh=function(s)
         -- print to console
@@ -112,19 +113,18 @@ local chunk = love.filesystem.load("game.lua") -- load the chunk
 setfenv(chunk, api)()
 
 -- run
+print("Starting game...")
 setfenv(function()
     local init=api._init
     if init then
         init()
     end
     -- 
-    while not channels.onkill:peek() do
+    while true do
         if api._update then _update() end
         if api._draw then _draw() end
         flip()
     end
-    
-    printh("Emulator stopped")
 end, api)()
 
 

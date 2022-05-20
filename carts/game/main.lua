@@ -8,7 +8,7 @@ local lti = love.timer
 local gameThread
 
 -- thread sync
-local channels = require("picotron.emulator.channels")
+local channels = require("picotron.emulator.channels")()
 
 local fb
 local width,height=480,270
@@ -20,10 +20,6 @@ function love.load()
     print("starting game thread...")
     gameThread = love.thread.newThread( lf.read("picotron/emulator/host.lua") )
     gameThread:start()
-
-    -- wait for framebuffer creation/sharing
-    fb = ffi.cast("uint32_t*", channels.onload:demand():getFFIPointer())
-    print("Got host framebuffer")
 end
 
 function love.keypressed(key)
@@ -46,34 +42,49 @@ function love.resize(w,h)
     end
 end
 
-function love.quit()
-    -- ensure buffer flip is unlocked
-    channels.vsync:push(lti.getTime())    
-    -- notify running thread
-    channels.onkill:push(true)
-    -- wait
-    gameThread:wait()    
-    gameThread=nil
-end
+function love.run()
+	if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
 
-function love.update()
-    -- handle file requests
-    --[[
-    local msg = channels.onfileRequest:pop()
-    while msg do
-        local img = love.image.newImageData(msg)
-        channels.onfileResponse:push(img)
-        -- next request?
-        msg = channels.onfileRequest:pop()
-    end
-    ]]
-end
+	-- We don't want the first frame's dt to include time taken by love.load.
+	if love.timer then love.timer.step() end
 
-function love.draw()
-    -- display current backbuffer
-    framebuffer:present(xoffset, yoffset, fb, scale)
-    -- unlock game
-    channels.vsync:push(lti.getTime())   
-    
-    -- love.graphics.print("fps: "..love.timer.getFPS())
+	local dt = 0
+
+	-- Main loop time.
+	return function()
+		-- Process events.
+		if love.event then
+			love.event.pump()
+			for name, a,b,c,d,e,f in love.event.poll() do
+				if name == "quit" then
+					if not love.quit or not love.quit() then
+						return a or 0
+					end
+				end
+				love.handlers[name](a,b,c,d,e,f)
+			end
+		end
+
+        -- process emulator events
+        local msg = channels.events:pop()
+        if msg then 
+            local name,a,b,c,d,e,f=unpack(msg)
+            if name=="flip" then
+                if love.graphics and love.graphics.isActive() then
+                    local fb = ffi.cast("uint32_t*", a:getFFIPointer())
+                    -- display current backbuffer
+                    love.graphics.origin()
+                    love.graphics.clear(love.graphics.getBackgroundColor())
+                    framebuffer:present(xoffset, yoffset, fb, scale)
+                    love.graphics.present()
+                    -- wait (host)
+                end
+                -- unlock vm
+                channels.lock:push(lti.getTime())   
+            elseif name=="load" then
+            end
+        end
+
+        if love.timer then love.timer.sleep(0.001) end
+	end
 end
