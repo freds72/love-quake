@@ -131,8 +131,32 @@ function love.run()
                 lg.setCanvas(printCanvas)
                 lg.clear(lg.getBackgroundColor())
                 lg.setColor(1/255,1/255,1/255)
-                local w,h=consoleFont:getWidth(a),consoleFont:getHeight(a)
-                lg.print(a,consoleFont,b,c)
+
+                local w,h,dh=0,0,consoleFont:getHeight() + consoleFont:getLineHeight()
+                local s,sx,sy="",b,c
+                for i=1,#a do
+                    local ch=string.sub(a,i,i)
+                    if ch=="\n" then
+                        local sw=consoleFont:getWidth(s)
+                        lg.print(s,consoleFont,sx,sy)
+                        w = w + sw
+                        h = h + dh
+                        -- newline
+                        sy = sy + dh
+                        sx = b
+                        s = ""
+                    elseif ch~="\b" then
+                        s = s .. ch
+                    end
+                end                    
+                -- any remaining string to display?
+                if s~="" then
+                    local sw=consoleFont:getWidth(s)
+                    lg.print(s,consoleFont,sx,sy)
+                    w = w + sw
+                    h = h + dh
+                end
+
                 lg.setCanvas()
                 local img = printCanvas:newImageData()
                 -- images cannot be shared cross-thread

@@ -255,6 +255,8 @@ function _draw()
 		0,0,1,0,
 		-0.5,-0.5,-0.5,1}
 	draw_model(cube_model,m,cam)
+
+	print("tline3d DEMO\nangle:"..flr(100*cam.m[1])/10,2,2,1)
 end
 
 -->8

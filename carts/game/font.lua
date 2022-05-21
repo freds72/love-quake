@@ -79,7 +79,7 @@ local fonts=function(root_path)
                 if ch=="\n" then
                     sy = sy + 8 * scale
                     sx = 0
-                else
+                elseif ch~="\b" then
                     sx = sx + 8 * scale
                 end
                 w = max(w,sx)
