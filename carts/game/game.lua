@@ -17,5 +17,7 @@ function _draw()
         line(0,y+i,479,y+i,(t+i)%64)
     end
 
-    print("hi world!",200,270/2,1)
+    local offset=270/2+32*cos(t/128)
+    print("HI world!",offset,offset+1,8)
+    print("HI world!",offset,offset,1)
 end

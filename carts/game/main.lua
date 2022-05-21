@@ -6,20 +6,24 @@ local framebuffer = require("picotron.emulator.framebuffer")
 local lf = love.filesystem
 local lti = love.timer
 local lg = love.graphics
+local min,max=math.min,math.max
 local gameThread
 
 -- thread sync
 local channels = require("picotron.emulator.channels")()
 
-local width,height=480,270
+-- logical screen size
+local displayWidth,displayHeight=480,270
 local scale,xoffset,yoffset = 2,0,0
 local imageExtensions={[".png"]=true,[".bmp"]=true}
 
 function love.load()
-    love.window.setMode(width * scale, height * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
+    love.window.setMode(displayWidth * scale, displayHeight * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
 
     -- print canvas
-    printCanvas = lg.newCanvas( width, height, {format="r8"})
+    printCanvas = lg.newCanvas( displayWidth, displayHeight, {format="r8"})
+    -- exchange buffer
+    canvasBytes = love.data.newByteData(displayWidth * displayHeight)
     -- console font
     consoleFont = lg.newFont("picotron/assets/console.fnt")
 
@@ -35,8 +39,8 @@ function love.keypressed(key)
 end
 
 function love.resize(w,h)   
-    -- new width
-    width,height=w,h
+    -- new displayWidth
+    displayWidth,displayHeight=w,h
     scale=w/480
     xoffset=0
     yoffset=h/2-scale*270/2
@@ -110,11 +114,16 @@ function love.run()
                 lg.setCanvas(printCanvas)
                 lg.clear(lg.getBackgroundColor())
                 lg.setColor(1/255,1/255,1/255)
+                local w,h=consoleFont:getWidth(a),consoleFont:getHeight(a)
                 lg.print(a,consoleFont,b,c)
                 lg.setCanvas()
                 local img = printCanvas:newImageData()
-                local data = love.data.newByteData(img,0,480*270)
-                channels.lock:push({data,480,270,0,0})
+                -- images cannot be shared cross-thread
+                ffi.copy(canvasBytes:getFFIPointer(),img:getFFIPointer(),displayWidth*displayHeight)
+                img:release()
+                local x,y=max(0,b),max(0,c)
+                -- compute rectangle to capture
+                channels.lock:push({canvasBytes,x,y,min(x+w,displayWidth),min(y+h,displayHeight)})
             end
             -- next message
             msg = channels.events:pop()

@@ -73,13 +73,19 @@ local api=setmetatable({
     end,
     print=function(s,x,y,c)
         c=flr(c)%64
+        x=flr(x)
+        y=flr(y)
         channels.events:push({"print",s,x,y})
-        local img,w,h,x,y = unpack(channels.lock:demand())
+        local img,x0,y0,x1,y1 = unpack(channels.lock:demand())
         local src=ffi.cast('uint8_t*', img:getFFIPointer())
-        for j=y,y+h-1 do
-            for i=x,x+w-1 do
-                local idx=i+480*j
-                vid_ptr[idx]=flr(c*src[idx])
+        for y=y0,y1-1 do
+            for x=x0,x1-1 do
+                local idx=x+480*y
+                -- masking and merging
+                local s=src[idx]
+                if s~=0 then
+                    vid_ptr[idx]=flr(c*s)
+                end
             end
         end
     end,
