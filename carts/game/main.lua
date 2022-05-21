@@ -1,3 +1,8 @@
+if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
+    _dont_grab_mouse = true
+    require("lldebugger").start()
+end
+
 -- current platform is Löve
 local ffi=require("ffi")
 local input = require("picotron.emulator.input")
@@ -16,9 +21,15 @@ local channels = require("picotron.emulator.channels")()
 local displayWidth,displayHeight=480,270
 local scale,xoffset,yoffset = 2,0,0
 local imageExtensions={[".png"]=true,[".bmp"]=true}
-
+  
 function love.load()
     love.window.setMode(displayWidth * scale, displayHeight * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
+
+    if not _dont_grab_mouse then
+        love.mouse.setGrabbed(true)
+        love.mouse.setRelativeMode( true )
+        love.mouse.setVisible(false)
+    end
 
     -- print canvas
     printCanvas = lg.newCanvas( displayWidth, displayHeight, {format="r8"})
@@ -73,13 +84,14 @@ function love.run()
 				end
 				love.handlers[name](a,b,c,d,e,f)
 			end
-		end
-
+		end        
         -- process emulator events
         local msg = channels.events:pop()
         while msg do
             local name,a,b,c,d,e,f=unpack(msg)
             if name=="flip" then
+                if love.timer then dt = love.timer.step() end
+
                 if lg and lg.isActive() then
                     -- a: framebuffer
                     -- b: HW palette (image)
@@ -88,8 +100,10 @@ function love.run()
                     -- display current backbuffer
                     lg.origin()
                     lg.clear(lg.getBackgroundColor())
-                    lg.setColor(1,1,1,1)
+                    lg.setColor(1,1,1)
                     framebuffer:present(xoffset, yoffset, fb, pal, scale)
+                    lg.setColor(0,1,0)
+                    lg.print(love.timer.getFPS(),2,2)
                     lg.present()
                 end
                 -- unlock vm
@@ -99,13 +113,16 @@ function love.run()
                 -- a: filename
                 local extension=string.sub(a,#a-3,#a)
                 if imageExtensions[extension] then
-                    print("Loading image asset: "..a)
                     local img = love.image.newImageData(a)
-                    -- print("format: "..img:getFormat( ))
-                    channels.lock:push(img)
+                    print("Loading image asset: "..a.." format:"..img:getFormat( ))
+                    local w,h=img:getWidth(),img:getHeight()
+                    local data = love.data.newByteData(img,0,img:getSize())
+                    img:release()
+                    channels.lock:push({data,w,h})
                 else
                     print("Loading asset: "..a)
-                    channels.lock:push(love.filesystem.newFileData(a))
+                    local data = love.filesystem.newFileData(a)
+                    channels.lock:push({data, data:setSize()})
                 end
             elseif name=="print" then
                 -- a: text

@@ -12,9 +12,8 @@ local fb = love.data.newByteData(framebufferLen)
 local vid_ptr = ffi.cast("uint8_t*",fb:getFFIPointer())
 
 -- platform specific api
-local flr,ceil=math.floor,math.ceil
+local flr,ceil,abs=math.floor,math.ceil,math.abs
 local sub,add,ord,del=string.sub,table.insert,string.byte,table.remove
-local abs=math.abs
 local min,max=math.min,math.max
 local band,bor,shl,shr,bnot=bit.band,bit.bor,bit.lshift,bit.rshift,bit.bnot
 local _print=print
@@ -41,9 +40,10 @@ local api=setmetatable({
     sin=function(angle)
         return math.sin(math.pi * angle)
     end, 
-    abs=function(a)   
-        return math.abs(a)
-    end,
+    flr=math.floor,
+    ceil=math.ceil,
+    abs=math.abs,
+    sqrt=math.sqrt,
     time=function()
         return this_time
     end,
@@ -52,7 +52,7 @@ local api=setmetatable({
     end,
     flip=function()
         -- wait for display sync 
-        channels.events:push({"flip",fb,activePalette})
+        channels.events:push({"flip",fb,activePalette._data})
         this_time = channels.lock:demand()
     end,
     pset=function(x,y,c)
@@ -61,11 +61,17 @@ local api=setmetatable({
     pal=function(colors)
 
     end,
+    btn=function(id)
+        return false
+    end,
     -- map an asset to memory
-    mmap=function(name)
+    mmap=function(name,layout)
         -- delegate to main thread
         channels.events:push({"load",name})
-        return channels.lock:demand()
+        local data,w,h=unpack(channels.lock:demand())
+        -- todo: wrap with width & height
+        local ptr = data:getFFIPointer()
+        return {_data=data,ptr=layout and ffi.cast(layout.."*",ptr) or ptr,width=w,height=h}
     end,
     printh=function(s)
         -- print to console
@@ -78,15 +84,26 @@ local api=setmetatable({
         channels.events:push({"print",s,x,y})
         local img,x0,y0,x1,y1 = unpack(channels.lock:demand())
         local src=ffi.cast('uint8_t*', img:getFFIPointer())
-        for y=y0,y1-1 do
+        for y=480*y0,480*(y1-1) do
             for x=x0,x1-1 do
-                local idx=x+480*y
+                local idx=x+y
                 -- masking and merging
                 local s=src[idx]
                 if s~=0 then
                     vid_ptr[idx]=flr(c*s)
                 end
             end
+        end
+    end,
+    -- note: only horiz lines are supported
+    tline3d=function(src,x0,y0,x1,_,u,v,w,du,dv,dw)
+        local ptr,width,height=src.ptr,src.width,src.height
+        for x=x0+480*y0,x1+480*y0 do
+            local uw,vw=u/w,v/w
+            vid_ptr[x]=ptr[(flr(uw)%width)+width*(flr(vw)%height)]
+            u = u + du
+            v = v + dv
+            w = w + dw
         end
     end,
     line=function(x0,y0,x1,y1,c)   
@@ -131,7 +148,7 @@ activePalette=api.mmap("picotron/assets/famicube-1x.png")
 -- activeColormap=api.mmap("picotron/assets/colormap.bmp","uint8")
 
 -- load game within the "picotron" API context
-local chunk = love.filesystem.load("game.lua") -- load the chunk
+local chunk = love.filesystem.load("demo3d.lua") -- load the chunk
 
 print("Starting game...")
 
@@ -140,11 +157,10 @@ setfenv(chunk, api)()
 
 -- run
 setfenv(function()
-    local init=api._init
-    if init then
-        init()
-    end
-    -- 
+    -- init
+    if api._init then api._init() end
+
+    -- game loop
     while true do
         if api._update then _update() end
         if api._draw then _draw() end
