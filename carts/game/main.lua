@@ -5,6 +5,7 @@ local framebuffer = require("picotron.emulator.framebuffer")
 
 local lf = love.filesystem
 local lti = love.timer
+local lg = love.graphics
 local gameThread
 
 -- thread sync
@@ -16,6 +17,11 @@ local imageExtensions={[".png"]=true,[".bmp"]=true}
 
 function love.load()
     love.window.setMode(width * scale, height * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
+
+    -- print canvas
+    printCanvas = lg.newCanvas( width, height, {format="r8"})
+    -- console font
+    consoleFont = lg.newFont("picotron/assets/console.fnt")
 
     print("starting game thread...")
     gameThread = love.thread.newThread( lf.read("picotron/emulator/host.lua") )
@@ -67,22 +73,24 @@ function love.run()
 
         -- process emulator events
         local msg = channels.events:pop()
-        if msg then 
+        while msg do
             local name,a,b,c,d,e,f=unpack(msg)
             if name=="flip" then
-                if love.graphics and love.graphics.isActive() then
+                if lg and lg.isActive() then
                     -- a: framebuffer
                     -- b: HW palette (image)
                     local fb = ffi.cast("uint8_t*", a:getFFIPointer())
                     local pal = ffi.cast("uint32_t*", b:getFFIPointer())
                     -- display current backbuffer
-                    love.graphics.origin()
-                    love.graphics.clear(love.graphics.getBackgroundColor())
+                    lg.origin()
+                    lg.clear(lg.getBackgroundColor())
+                    lg.setColor(1,1,1,1)
                     framebuffer:present(xoffset, yoffset, fb, pal, scale)
-                    love.graphics.present()
+                    lg.present()
                 end
                 -- unlock vm
-                channels.lock:push(lti.getTime())   
+                channels.lock:push(lti.getTime())  
+                break 
             elseif name=="load" then
                 -- a: filename
                 local extension=string.sub(a,#a-3,#a)
@@ -95,9 +103,23 @@ function love.run()
                     print("Loading asset: "..a)
                     channels.lock:push(love.filesystem.newFileData(a))
                 end
+            elseif name=="print" then
+                -- a: text
+                -- b: x
+                -- c: y
+                lg.setCanvas(printCanvas)
+                lg.clear(lg.getBackgroundColor())
+                lg.setColor(1/255,1/255,1/255)
+                lg.print(a,consoleFont,b,c)
+                lg.setCanvas()
+                local img = printCanvas:newImageData()
+                local data = love.data.newByteData(img,0,480*270)
+                channels.lock:push({data,480,270,0,0})
             end
+            -- next message
+            msg = channels.events:pop()
         end
 
-        if love.timer then love.timer.sleep(0.001) end
+        if love.timer then love.timer.sleep(0) end
 	end
 end

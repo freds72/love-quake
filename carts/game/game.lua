@@ -16,4 +16,6 @@ function _draw()
     for i=0,5 do
         line(0,y+i,479,y+i,(t+i)%64)
     end
+
+    print("hi world!",200,270/2,1)
 end

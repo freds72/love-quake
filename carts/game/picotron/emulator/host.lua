@@ -71,7 +71,17 @@ local api=setmetatable({
         -- print to console
         _print(s)
     end,
-    print=function(s,x,y)    
+    print=function(s,x,y,c)
+        c=flr(c)%64
+        channels.events:push({"print",s,x,y})
+        local img,w,h,x,y = unpack(channels.lock:demand())
+        local src=ffi.cast('uint8_t*', img:getFFIPointer())
+        for j=y,y+h-1 do
+            for i=x,x+w-1 do
+                local idx=i+480*j
+                vid_ptr[idx]=flr(c*src[idx])
+            end
+        end
     end,
     line=function(x0,y0,x1,y1,c)   
         c = flr(c)
@@ -109,7 +119,9 @@ local api=setmetatable({
     { __index=_G })
 
 -- default values
-activePalette=api.mmap("picotron/assets/famicube-1x.png","uint32")
+-- credits: https://lospec.com/palette-list/famicube
+activePalette=api.mmap("picotron/assets/famicube-1x.png")
+
 -- activeColormap=api.mmap("picotron/assets/colormap.bmp","uint8")
 
 -- load game within the "picotron" API context
