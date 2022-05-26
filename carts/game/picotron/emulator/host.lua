@@ -170,10 +170,12 @@ line=function(x0,y0,x1,y1,c)
         end
         local dy=(y1-y0)/(x1-x0)
         if x0<0 then
-            y0=y0+x0*dy x0=0
+            y0=y0-x0*dy x0=0
         end
         for x=flr(x0),min(flr(x1),480)-1 do
-            vid_ptr[x+480*flr(y0)]=c
+            if y0>=0 and y0<270 then
+                vid_ptr[x+480*flr(y0)]=c
+            end
             y0 = y0 + dy
         end
     else
@@ -182,10 +184,12 @@ line=function(x0,y0,x1,y1,c)
         end
         local dx=(x1-x0)/(y1-y0)
         if y0<0 then
-            x0=x0+y0*dx y0=0
-        end
+            x0=x0-y0*dx y0=0
+        end        
         for y=flr(y0),min(flr(y1),270)-1 do
-            vid_ptr[flr(x0)+480*y]=c
+            if x0>=0 and x0<480 then
+                vid_ptr[flr(x0)+480*y]=c
+            end
             x0 = x0 + dx
         end            
     end

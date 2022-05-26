@@ -259,7 +259,7 @@ local ModelReader = function(pak)
     end  
 
     local function unpack_map(bsp)
-        local plane_offset = planes:offset()
+        local plane_offset = planes.offset()
 
         local verts,faces,leaves,nodes,models,uvs,clipnodes={},{},{},{},{},{},{}
 
@@ -273,7 +273,7 @@ local ModelReader = function(pak)
 
         -- register planes in global array
         unpack_array(function(plane)
-            planes:pop(v_rebase(plane.normal),plane.dist,plane.type)
+            planes.pop(v_rebase(plane.normal),plane.dist,plane.type)
         end, bsp.planes)
         
         unpack_array(function(f,i)      
@@ -337,7 +337,7 @@ local ModelReader = function(pak)
 
             -- !! 1-based array
             face.verts = face_verts
-            face.cp=planes:dot(face.plane, verts[face_verts[1]])
+            face.cp=planes.dot(face.plane, verts[face_verts[1]])
             add(faces, face)
         end, bsp.faces)
         

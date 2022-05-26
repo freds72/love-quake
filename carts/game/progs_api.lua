@@ -26,16 +26,12 @@ local ProgsAPI=function(modelLoader, models, entities, collisionMap)
         end,
         setmodel=function(self,ent,id,offset)
           if not id then
-            ent.origin = {0,0,0}
             ent.mins={0,0,0}
             ent.maxs={0,0,0}
             ent.size={0,0,0}        
-            ent.m={
-              1,0,0,0,
-              0,1,0,0,
-              0,0,1,0,
-              0,0,0,1
-            }
+            local angles=ent.mangles or {0,0,0}
+            ent.m=make_m_from_euler(unpack(angles))
+            m_set_pos(ent.m,ent.origin)            
             ent.model = nil
             return
           end

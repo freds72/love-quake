@@ -11,7 +11,7 @@ local PlanePool=function()
             n[type+1]=1
 
             local clipnode={
-                plane = planes:pop(n,-1,type)
+                plane = planes.pop(n,-1,type)
             }
             clipnode[side] = -1
             if i ~= 5 then
@@ -37,7 +37,7 @@ local PlanePool=function()
 
     return {
         -- reserve an entry in pool
-        pop=function(self,v,d,t)
+        pop=function(v,d,t)
             -- init values
             local idx=#_planes+1
             _planes[idx  ]=v[1]
@@ -60,17 +60,17 @@ local PlanePool=function()
             return #_planes+1
         end,
         -- planes functions (globals)
-        get=function(self,pi)
+        get=function(pi)
             return _planes[pi],_planes[pi+1],_planes[pi+2]
         end,
-        dot=function(self,pi,v)
+        dot=function(pi,v)
             local t=_planes[pi+4]
             if t<3 then    
                 return _planes[pi+t]*v[t+1],_planes[pi+3]
             end
             return _planes[pi]*v[1]+_planes[pi+1]*v[2]+_planes[pi+2]*v[3],_planes[pi+3]
         end,
-        isFront=function(self,pi,v)
+        isFront=function(pi,v)
             local t=_planes[pi+4]
             if t<3 then                 
                 return _planes[pi+t]*v[t+1]>_planes[pi+3]
@@ -78,7 +78,7 @@ local PlanePool=function()
             return _planes[pi]*v[1]+_planes[pi+1]*v[2]+_planes[pi+2]*v[3]>_planes[pi+3]
         end,
         -- mins/maxs must be absolute corners
-        classifyBBox=function(self,pi,c,e)
+        classifyBBox=function(pi,c,e)
             --local t,n=plane.type,plane.normal
             -- todo: optimize
             -- if t<3 then
@@ -106,7 +106,7 @@ local PlanePool=function()
             end
             return 3  
         end,
-        makeHull=function(self,mins,maxs)
+        makeHull=function(mins,maxs)
             if not _box_hull then
                 _box_hull = initHull()
             end

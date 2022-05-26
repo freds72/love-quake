@@ -2,7 +2,6 @@ local logging=require("engine.logging")
 local input=require("engine.input_system")
 local stateSystem = require("engine.state_system")
 
-
 return function(conf,level)
     local menu,selected={
         "Start",
@@ -20,9 +19,6 @@ return function(conf,level)
     -- load start level
     local world = require("systems.world")
     world:load(level)
-    --
-    local spawns = world.entities:find(nil,"classname","info_player_start")
-    printh("found "..#spawns.." spawn points")
 
     return     
         -- update

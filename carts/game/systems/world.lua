@@ -2,21 +2,20 @@ local WorldSystem={}
 local conf = require("game_conf")
 local entities
 local factory
-local level
 local collisionMap
 
 -- globals :(
 planes = require("engine.plane_pool")()
 
 function WorldSystem:load(level_name)
-    planes:reset()
+    planes.reset()
 
     -- create I/O classes (inc. caching)
     local pakReader=require("pak_reader")(conf.root_path)
     local modelReader=require("model_reader")(pakReader)
     
     -- load file
-    level=modelReader:load("maps/"..level_name)
+    local level=modelReader:load("maps/"..level_name)
     -- 2d/3d collision map
     collisionMap=require("collision_map")(level.model[1])
 
@@ -40,6 +39,7 @@ function WorldSystem:load(level_name)
             end
         end
     end
+    self.level = level
 end
 function WorldSystem:update()
 

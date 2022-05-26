@@ -1,6 +1,6 @@
 local PoolCls=function(name,stride,size)
     local ffi=require("ffi")
-    local logging = require("logging")
+    local logging = require("engine.logging")
 
     local cursor,total=0,size*stride
     local pool=ffi.new("float[?]", total)

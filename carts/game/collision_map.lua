@@ -85,7 +85,7 @@ local CollisionMap=function(level)
         end
     
         -- classify box
-        local sides = planes:classifyBBox(node.plane, pos, size)
+        local sides = planes.classifyBBox(node.plane, pos, size)
         -- sides or straddling?
         if band(sides,1)~=0 then
             register_bbox(node[false], ent, pos, size)
@@ -259,7 +259,7 @@ local CollisionMap=function(level)
                 local model,hull=other_ent.model
                 if not model or not model.hulls then
                     -- use local aabb - hit is computed in ent space
-                    hull = planes:make_hull(make_v(maxs,other_ent.mins),make_v(mins,other_ent.maxs))
+                    hull = planes.make_hull(make_v(maxs,other_ent.mins),make_v(mins,other_ent.maxs))
                 else
                     hull = model.hulls[hull_type]
                 end
