@@ -46,6 +46,18 @@ local world=function(progs)
 	progs:rampstyle(1,{0x6f, 0x6d, 0x6b, 0x69, 0x67, 0x65, 0x63, 0x61})
 	progs:rampstyle(2,{0x6f, 0x6e, 0x6d, 0x6c, 0x6b, 0x6a, 0x68, 0x66})
 	progs:rampstyle(3,{0x6d, 0x6b, 6, 5, 4, 3})
+    
+    progs.info_intermission=function(self)
+        self.SOLID_NOT = true
+        self.MOVETYPE_NONE = true
+        self.DRAW_NOT = true
+        -- set size and link into world
+		if self.mangle then
+			local x,y,z=unpack(split(self.mangle," "))
+			self.mangles = {x/360,y/360,z/360}
+		end
+        progs:setmodel(self, self.model)
+    end
 
     progs.worldspawn=function(self)
         progs.world={

@@ -45,7 +45,7 @@ local CameraSystem=function(world)
                     -- switch position
                     -- todo: pick a random location
                     -- try to find intermission positions
-                    local spots = world.entities:find(nil,"classname","info_player_start")
+                    local spots = world.entities:find(nil,"classname","info_intermission")
                     if #spots>0 then
                         spot=spots[flr(rnd(#spots))+1]
                         logging.info("Intermission cam - switched to: "..v_tostring(spot.origin).."/"..#spots)
@@ -53,7 +53,7 @@ local CameraSystem=function(world)
                     end
                 end
                 if spot then 
-                    track(parent,v_add(spot.origin,{0,0,24}),make_m_from_euler(0,0.2,4*time()))
+                    track(parent,v_add(spot.origin,{0,0,-24}),make_m_from_euler(unpack(spot.mangles)))
                 end
             end
         }       

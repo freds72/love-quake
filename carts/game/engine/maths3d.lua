@@ -80,9 +80,6 @@ function m_x_n(m,v)
 end
 
 function make_m_from_euler(x,y,z)
-	x=math.pi*x/180
-	y=math.pi*y/180
-	z=math.pi*z/180
 	local a,b = cos(x),-sin(x)
 	local c,d = cos(y),-sin(y)
 	local e,f = cos(z),-sin(z)
