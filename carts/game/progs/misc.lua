@@ -33,7 +33,7 @@ local misc=function(progs)
     end
 
     local function flame2_func(self)
-        self.SOLID_NOCLIP = true
+        self.SOLID_NOT = true
         self.MOVETYPE_NONE = true
         self.skin = 1
         self.frame = "flameb1"

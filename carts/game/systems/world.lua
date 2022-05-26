@@ -22,9 +22,9 @@ function WorldSystem:load(level_name)
 
     -- "private" array of entities to bind after level load
     local ents={}    
-    entities=require("entities")(ents)
+    self.entities=require("entities")(ents)
     -- context
-    local api=require("progs_api")(modelReader, level.model, entities, collisionMap)
+    local api=require("progs_api")(modelReader, level.model, self.entities, collisionMap)
     factory=require("progs_factory")(conf, api)
 
     -- bind entities and engine
@@ -43,7 +43,7 @@ function WorldSystem:load(level_name)
 end
 function WorldSystem:update()
 
-    entities:preUpdate()
+    self.entities:preUpdate()
 end
 
 return WorldSystem

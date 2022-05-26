@@ -21,6 +21,9 @@ return function(conf,level)
     local world = require("systems.world")
     world:load(level)
     --
+    local spawns = world.entities:find(nil,"classname","info_player_start")
+    printh("found "..#spawns.." spawn points")
+
     return     
         -- update
         function()
