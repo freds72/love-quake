@@ -1,6 +1,5 @@
 local InputSystem={}
-local input = require("platform").input
-local conf = require("engine.conf")
+local conf = require("game_conf")
 
 -- convert configuration into key maps
 local scancodes={}
@@ -11,6 +10,7 @@ for action,keys in pairs(conf.keys) do
 end
 -- store current frame down actions
 local down_actions={}
+local up_actions={}
 
 -- refresh input events
 function InputSystem:update()
@@ -18,18 +18,23 @@ function InputSystem:update()
     for k in pairs(down_actions) do
         down_actions[k]=nil
     end
+    for k in pairs(up_actions) do
+        up_actions[k]=nil
+    end
 
     -- refresh
     for k,action in pairs(scancodes) do
-        if input:isScancodeDown(k) then
-            down_actions[action]=true
-        end          
+        if key(k) then down_actions[action]=true end
+        if keyp(k) then up_actions[action]=true end
     end
 end
 
 -- returns true if key has been pressed in frame
-function InputSystem:btnp(action)
-    return down_actions[action]~=nil
+function InputSystem:pressed(action)
+    return down_actions[action]==true
+end
+function InputSystem:released(action)
+    return up_actions[action]==true
 end
 
 return InputSystem

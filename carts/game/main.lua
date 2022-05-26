@@ -1,11 +1,11 @@
 if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
     _dont_grab_mouse = true
-    require("lldebugger").start()
+    -- start debugger only in 1 thread
+    -- require("lldebugger").start()
 end
 
 -- current platform is Löve
 local ffi=require("ffi")
-local input = require("picotron.emulator.input")
 local framebuffer = require("picotron.emulator.framebuffer")
 
 local lf = love.filesystem
@@ -17,12 +17,16 @@ local gameThread
 -- thread sync
 local channels = require("picotron.emulator.channels")()
 
+-- keyboards and mouse states
+local scanCodes={}
+local mouseInfo={}
+
 -- logical screen size
 local displayWidth,displayHeight=480,270
 local scale,xoffset,yoffset = 2,0,0
 local imageExtensions={[".png"]=true,[".bmp"]=true}
   
-function love.load()
+function love.load(args)    
     love.window.setMode(displayWidth * scale, displayHeight * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
 
     if not _dont_grab_mouse then
@@ -40,13 +44,28 @@ function love.load()
 
     print("starting game thread...")
     gameThread = love.thread.newThread( lf.read("picotron/emulator/host.lua") )
-    gameThread:start()
+    gameThread:start(unpack(args))
 end
 
-function love.keypressed(key)
+function love.keypressed( key, scancode, isrepeat )
     if key == "escape" then
         love.event.quit(0)
     end
+    scanCodes[scancode] = true
+end
+
+function love.mousepressed( x, y, button, istouch, presses )
+    mouseInfo.btn = button
+end
+function love.wheelmoved( x, y )
+    mouseInfo.wheel = y
+end
+
+function love.mousemoved( x, y, dx, dy, istouch )
+    mouseInfo.x = math.floor(x/scale)
+    mouseInfo.y = math.floor(y/scale)
+    mouseInfo.dx = math.floor(dx/scale)
+    mouseInfo.dy = math.floor(dy/scale)
 end
 
 function love.resize(w,h)   
@@ -86,7 +105,7 @@ function love.run()
 			end
 		end        
         -- process emulator events
-        local msg = channels.events:pop()
+        local msg = channels:pop()
         while msg do
             local name,a,b,c,d,e,f=unpack(msg)
             if name=="flip" then
@@ -103,11 +122,11 @@ function love.run()
                     lg.setColor(1,1,1)
                     framebuffer:present(xoffset, yoffset, fb, pal, scale)
                     lg.setColor(0,1,0)
-                    lg.print(love.timer.getFPS(),2,2)
+                    lg.print(love.timer.getFPS(),2,scale * displayHeight - 20)
                     lg.present()
                 end
                 -- unlock vm
-                channels.lock:push(lti.getTime())  
+                channels:response(lti.getTime())
                 break 
             elseif name=="load" then
                 -- a: filename
@@ -118,11 +137,11 @@ function love.run()
                     local w,h=img:getWidth(),img:getHeight()
                     local data = love.data.newByteData(img,0,img:getSize())
                     img:release()
-                    channels.lock:push({data,w,h})
+                   channels:response({data,w,h})
                 else
                     print("Loading asset: "..a)
                     local data = love.filesystem.newFileData(a)
-                    channels.lock:push({data, data:setSize()})
+                   channels:response({data, data:setSize()})
                 end
             elseif name=="print" then
                 -- a: text
@@ -164,10 +183,16 @@ function love.run()
                 img:release()
                 local x,y=max(0,b),max(0,c)
                 -- compute rectangle to capture
-                channels.lock:push({canvasBytes,x,y,min(x+w,displayWidth),min(y+h,displayHeight)})
+               channels:response({canvasBytes,x,y,min(x+w,displayWidth),min(y+h,displayHeight)})
+            elseif name=="keys" then
+               channels:response(scanCodes)
+                scanCodes={}
+            elseif name=="mouse" then
+               channels:response(mouseInfo)
+                mouseInfo={}
             end
-            -- next message
-            msg = channels.events:pop()
+        -- next message
+            msg = channels:pop()
         end
 
         if love.timer then love.timer.sleep(0) end

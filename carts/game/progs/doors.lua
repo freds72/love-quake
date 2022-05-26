@@ -1,6 +1,6 @@
 local doors=function(progs)
     local subs = require("progs/subs")(progs)
-    local maths = require("math3d")
+    local maths = require("engine.maths3d")
     -- p8 compat
     local abs,band=math.abs,bit.band
     local add=table.insert

@@ -9,13 +9,18 @@
           "command": "C:\\Program Files\\LOVE\\love.exe"
         },
         "args": [
-          "carts/game",
-          "D:\\Games\\quake\\id1",
+          "game",
+          "q8k",
           "e1m1.bsp"
         ],
+        "cwd": "${workspaceFolder}\\carts",
         "scriptRoots": [
           "${workspaceFolder}\\carts\\game",
-          "${workspaceFolder}\\carts\\game\\progs"
+          "${workspaceFolder}\\carts\\game\\progs",
+          "${workspaceFolder}\\carts\\game\\engine",
+          "${workspaceFolder}\\carts\\game\\lib",
+          "${workspaceFolder}\\carts\\game\\systems",
+          "${workspaceFolder}\\carts\\game\\picotron\\emulator"
         ]
       }
     ]

@@ -1,6 +1,6 @@
 local buttons=function(progs)
-    local subs = require("progs/subs")(progs)
-    local maths = require("math3d")
+    local subs = require("progs.subs")(progs)
+    local maths = require("engine.maths3d")
     -- p8 compat
     local abs=math.abs
 

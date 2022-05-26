@@ -8,7 +8,7 @@ local modelfs = require( "modelfs" )
 -- lick.reset = true -- reload the love.load everytime you save
 local fb = require('lib.fblove_strip')
 local renderer = require( "renderer" )
-local math3d = require( "math3d")
+local maths3d = require( "engine.maths3d")
 local progs = require("progs.main")
 local logging = require("logging")
 local world = require("world")
@@ -1268,65 +1268,6 @@ function make_cam()
       profileDrawAlias:stop()
     end  
   }
-end
-
--- returns first hit along a ray
--- note: world is an entity like any other (sort of!)
-function hitscan(mins,maxs,p0,p1,triggers,ents,ignore_ent)
-  local size=make_v(mins,maxs)
-  local radius=max(size[1],size[2])
-  local hull_type = 1
-  if radius>=64 then
-    hull_type = 3
-  elseif radius>=32 then
-    hull_type = 2
-  end
-
-  -- collect triggers
-  local hits
-  for k=1,#ents do
-    local other_ent = ents[k]
-    -- skip "hollow" entities
-    if not (other_ent.SOLID_NOT or ignore_ent==other_ent or triggers[other_ent]) then
-      -- convert into model's space (mostly zero except moving brushes)
-      local model,hull=other_ent.model
-      if not model or not model.hulls then
-        -- use local aabb - hit is computed in ent space
-        hull = modelfs.make_hull(make_v(maxs,other_ent.mins),make_v(mins,other_ent.maxs))
-      else
-        hull = model.hulls[hull_type]
-      end
-      
-      local tmphits={
-        t=1,
-        all_solid=true,
-        ent=other_ent
-      } 
-      -- rebase ray in entity origin
-      bsp.intersect(hull,make_v( other_ent.origin,p0),make_v( other_ent.origin,p1),tmphits)
-
-      -- "invalid" location
-      if tmphits.start_solid or tmphits.all_solid then
-        if not other_ent.SOLID_TRIGGER then
-          return tmphits
-        end
-        -- damage or other actions
-        triggers[other_ent] = true
-      end
-
-      if tmphits.n then
-        -- closest hit?
-        -- print(other_ent.classname.." @ "..tmphits.t)
-        if other_ent.SOLID_TRIGGER then
-          -- damage or other actions
-          triggers[other_ent] = true
-        elseif tmphits.t<(hits and hits.t or 32000) then
-          hits = tmphits
-        end
-      end
-    end
-  end  
-  return hits
 end
 
 -- slide on wall move (players, npc...)

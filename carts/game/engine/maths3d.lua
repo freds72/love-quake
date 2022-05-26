@@ -1,8 +1,4 @@
-local math3d={}
-
-local abs,flr,sqrt=math.abs,math.floor,math.sqrt
-local cos,sin=math.cos,math.sin
-local min,max=math.min,math.max
+local maths3d={}
 
 -- maths & cam
 function lerp(a,b,t)
@@ -192,4 +188,4 @@ function v_max(a,b)
 end
 
 
-return math3d
+return maths3d

@@ -1,98 +1,33 @@
-local entities={}
-
-local sub,add=string.sub,table.insert
-
-local function split(inputstr, sep)
-    if sep == nil then
-      sep = "%s"
-    end
-    local t={}
-    for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
-      table.insert(t, str)
-    end
-    return t
-end
-  
--- quake "object notation" parser
--- loosely based of : https://gist.github.com/tylerneylon/59f4bcf316be525b30ab
-local function parse_str(str, pos, val)
-    val=val or ''
-    if pos>#str then
-        assert'end of input found while parsing string.'
-    end
-    local c=sub(str,pos,pos)
-    -- end of string
-    if c=='"' then
-        return val,pos
-    end
-    return parse_str(str,pos+1,val..c)
-end
-
-local value_factory={
-    angle=tonumber,
-    wait=tonumber,
-    delay=tonumber,
-    spawnflags = tonumber,
-    health = tonumber,
-    message = function(value)
-        -- fixes \n into real \n!
-        local msg = string.gsub(value, "\\n", "\n")
-        return msg
-    end,
-    origin=function(value)
-        local coords=split(value," ")
-        -- conver to numbers
-        for k,v in pairs(coords) do
-            coords[k]=tonumber(v)          
+-- helper class to store and find entities
+local Entities=function(entities)
+    local new_entities={}
+        -- transfer new entities to active list     
+    function entities:preUpdate()
+        -- any entities to create?
+        for i=1,#new_entities do
+            add(entities, new_entities[i])
         end
-        return coords
+        new_entities = {}            
     end
-}
 
--- public values and functions.
-function unpack_entities(str)
-    pos=pos or 1
-    if pos>#str then
-        assert'reached unexpected end of input.'
+    -- delayed add to list of active entities
+    function entities:add(ent) 
+        return add(new_entities, ent) 
     end
-    local json,obj={}
-    while pos<=#str do
-        local first=sub(str,pos,pos)
-        -- end of stream
-        if not first then
-            if stack or obj then
-                assert'unclosed block'
-            end
-            break
-        end
 
-        if first=="{" then
-            -- push
-            obj={}
-            stack={}
-        elseif first=="\"" then
-            local key
-            key,pos=parse_str(str,pos+1)
-            if not key then
-                assert"invalid key/value pair"
+    function entities:find(ent,property,value,filter)
+        local matches={}
+        for i=1,#entities do
+            local other=entities[i]
+            -- filter out "to be removed entities"
+            if not other.free and ent~=other and other[property]==value then
+            if not filter or other[filter] then
+                add(matches, other)
             end
-            add(stack,key)
-            if #stack==2 then
-                local k,v=stack[1],stack[2]      
-                -- convert values to lua objects/numbers          
-                local fn=value_factory[k]
-                obj[k]=fn and fn(v) or v
-                stack={}
             end
-        elseif first=="}" then
-            add(json,obj)
-            obj=nil
-            stack=nil
         end
-        -- skip
-        pos=pos+1	     
+        return matches
     end
-    return json
+    return entities
 end
-
-return entities
+return Entities

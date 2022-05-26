@@ -1,17 +1,11 @@
 local bsp={}
 -- BSP functions
-local math3d=require("math3d")
+local maths3d=require("engine.maths3d")
 
--- p8 compat
-local min,max=math.min,math.max
-local function mid(x, a, b)
-    return max(a, min(b, x))
-end
-  
 -- find node/leaf the given position is in
 function bsp.locate(node,pos)
     while not node.contents do
-        node=node[plane_isfront(node.plane,pos)]
+        node=node[planes:isFront(node.plane,pos)]
     end
     return node
 end
@@ -38,8 +32,8 @@ local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
         -- empty space
         return true
     end
-    local dist,node_dist=plane_dot(node.plane,p0)
-    local otherdist=plane_dot(node.plane,p1)
+    local dist,node_dist=planes:dot(node.plane,p0)
+    local otherdist=planes:dot(node.plane,p1)
     local side,otherside=dist>node_dist,otherdist>node_dist
     if side==otherside then
         -- go down this side
@@ -69,7 +63,7 @@ local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     end
 
     local scale=side and 1 or -1
-    local nx,ny,nz=plane_get(node.plane)
+    local nx,ny,nz=planes:get(node.plane)
     out.n = {scale*nx,scale*ny,scale*nz,node_dist}
     out.t = tmid
     out.pos = pmid
@@ -79,4 +73,5 @@ end
 function bsp.intersect(node,p0,p1,out)
     return ray_bsp_intersect(node,p0,p1,0,1,out)
 end
+
 return bsp

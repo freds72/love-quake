@@ -8,7 +8,7 @@ local function array_tostring(v,...)
     return tostring(v).." "..array_tostring(...)
 end
 local function log(sev, ...)
-    print(sev.." - "..array_tostring(...))
+    printh(sev.." - "..array_tostring(...))
 end
 local logs = {
     debug="DEBUG",

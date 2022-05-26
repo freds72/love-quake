@@ -1,8 +1,5 @@
 local subs=function(progs)
-    local math3d=require("math3d")
-    -- p8 compat
-    local ceil,flr=math.ceil,math.floor
-    local rnd = math.random
+    local maths3d=require("engine.maths3d")
 
     function set_move_dir(self)
         local angle = self.angle or 0

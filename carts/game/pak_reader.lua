@@ -1,7 +1,7 @@
-local pak=function(root_path)    
-    local ffi=require 'ffi'
+local PakReader=function(root_path)    
+    local ffi=require("ffi")
     local nfs = require( "lib.nativefs" )
-    local logging = require( "logging" )
+    local logging = require("engine.logging")
 
     ffi.cdef[[
         #pragma pack(1)
@@ -88,4 +88,4 @@ local pak=function(root_path)
         end
     }
 end
-return pak
+return PakReader
