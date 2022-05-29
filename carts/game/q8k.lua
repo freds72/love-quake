@@ -8,7 +8,7 @@ local rasterizer=require("renderer.wireframe_rasterizer")
 local renderer=require("renderer.bsp_renderer")(world, rasterizer)
 
 function _init()
-    local menuState = require("screens.menu")
+    local menuState = require("screens.play")
     local arg1, arg2 = args()
     stateSystem:next(menuState, gameConf, arg1, arg2)
 end
@@ -23,9 +23,10 @@ end
 function _draw()
     cls()
         
-    rasterizer.beginFrame()
+    -- something to display?
+    rasterizer:beginFrame()
     renderer:draw(camera)
-    rasterizer.endFrame()
+    rasterizer:endFrame()
 
     stateSystem:draw()
 end

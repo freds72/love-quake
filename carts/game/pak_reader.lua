@@ -1,26 +1,26 @@
+local ffi=require("ffi")
+local nfs = require( "lib.nativefs" )
+local logging = require("engine.logging")
+ffi.cdef[[
+    #pragma pack(1)
+    
+    // pack file structure
+    typedef struct
+    {
+        char	name[56];
+        int		filepos, filelen;
+    } dpackfile_t;
+
+    typedef struct
+    {
+        char	identification[4];
+        int		infotableofs;
+        int		numlumps;
+    } dpackheader_t;
+]]
+
+
 local PakReader=function(root_path)    
-    local ffi=require("ffi")
-    local nfs = require( "lib.nativefs" )
-    local logging = require("engine.logging")
-
-    ffi.cdef[[
-        #pragma pack(1)
-        
-        // pack file structure
-        typedef struct
-        {
-            char	name[56];
-            int		filepos, filelen;
-        } dpackfile_t;
-
-        typedef struct
-        {
-            char	identification[4];
-            int		infotableofs;
-            int		numlumps;
-        } dpackheader_t;
-    ]]
-
     -- reads the given struct name from the byte array
     local function read_directory(cname, info, mem)
         local res = {}

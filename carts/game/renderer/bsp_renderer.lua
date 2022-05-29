@@ -239,10 +239,10 @@ local BSPRenderer=function(world,rasterizer)
       -- znear=8
       if az<8 then code=2 end
       --if az>2048 then code|=1 end
-      if ax>az then code = code + 4
-      elseif ax<-az then code = code + 8 end
-      if ay>az then code = code + 16
-      elseif ay<-az then code = code + 32 end
+      if ax>h_ratio*az then code = code + 4
+      elseif ax<-h_ratio*az then code = code + 8 end
+      if ay>v_ratio*az then code = code + 16
+      elseif ay<-v_ratio*az then code = code + 32 end
       outcode = band(outcode, code)
       if outcode == 0 then
         return true
@@ -304,23 +304,23 @@ local BSPRenderer=function(world,rasterizer)
   }
 
     local function collect_entities(entities)
-        local ents={}
-        -- skip world
-        for i=2,#entities do
-          local ent = entities[i]
-          if not ent.DRAW_NOT and ent.nodes then
-            -- find if touching a visible leaf?
-            for node,_ in pairs(ent.nodes) do
-              if node.visframe==visframe then              
-                add(ents,ent)
-                -- break at first visible node
-                break
-              end
+      local ents={}
+      -- skip world
+      for i=2,#entities do
+        local ent = entities[i]
+        if not ent.DRAW_NOT and ent.nodes then
+          -- find if touching a visible leaf?
+          for node,_ in pairs(ent.nodes) do
+            if node.visframe==visframe then              
+              add(ents,ent)
+              -- break at first visible node
+              break
             end
           end
         end
-        return ents
       end
+      return ents
+    end
     local function collect_leaves(cam,root,leaves)
         local current_leaf=bsp.locate(root,cam.origin)
         
@@ -392,10 +392,10 @@ local BSPRenderer=function(world,rasterizer)
                     if outcode==0 then
                         local n=#face.verts
                         if clipcode>0 then
-                            poly,n = z_poly_clip(poly,n,true)
+                            poly,n = z_poly_clip(poly,n)
                         end
                         if n>2 then
-                            rasterizer.addSurface(poly,n)       
+                            rasterizer.addSurface(poly,n)      
                         end
                     end
                 end
@@ -404,20 +404,36 @@ local BSPRenderer=function(world,rasterizer)
     end
     
     return {
-        update=function()
-        end,
-        draw=function(self,cam)
-            -- nothing to draw (eg. no scene/world)
-            if not world.entities then
-                return
+      update=function()
+      end,
+      draw=function(self,cam)
+          -- nothing to draw (eg. no scene/world)
+          if not cam.ready then
+              return
+          end
+          -- refresh visible set
+          local world_entity = world.entities[1]
+          local main_model = world_entity.model
+          local resources = world.level.model
+          local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
+          -- world entity
+          drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves)
+
+          -- visible entities
+          local visents = collect_entities(world.entities)
+
+          for i=1,#visents do
+            local ent=visents[i]
+            local m = ent.model
+            -- todo: find out a better way to detect type
+            if m.nodes then
+              local resources = ent.resources
+              drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+            else
+              -- todo
             end
-            -- refresh visible set
-            local main_model = world.entities[1].model
-            local resources = world.level.model
-            local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
-            -- world entity
-            drawModel(cam,world.entities[1],resources.textures,resources.verts,leaves,1,#leaves)
-        end
+          end            
+      end
     }
 end
 return BSPRenderer

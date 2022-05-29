@@ -77,7 +77,7 @@ local subs=function(progs)
                     return
                 end
                 local i = flr(rnd(1,#targets))
-                print("picking entity: "..i.."/"..#targets)
+                printh("picking entity: "..i.."/"..#targets)
                 targets[i].use(other)
             else
                 for i=1,#targets do

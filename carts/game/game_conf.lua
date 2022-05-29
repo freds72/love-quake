@@ -1,7 +1,7 @@
 local GameConf={
     -- temporary
     root_path="D:\\Games\\quake\\id1",
-    start_level="e1m1",    
+    start_level="start.bsp",    
     -- game key bindings
     keys = {
         up = {'w','up'},

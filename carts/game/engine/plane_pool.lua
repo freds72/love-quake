@@ -1,5 +1,16 @@
 local PlanePool=function()
     local _planes,_box_hull={}
+    -- shared content leaves
+    local content_types={}
+    for i=1,6 do
+        -- -1: ordinary leaf
+        -- -2: the leaf is entirely inside a solid (nothing is displayed).
+        -- -3: Water, the vision is troubled.
+        -- -4: Slime, green acid that hurts the player.
+        -- -5: Lava, vision turns red and the player is badly hurt.   
+        -- -6: sky 
+        add(content_types,{contents=-i})
+    end  
 
     -- temp hull for slidebox
     local function initHull()

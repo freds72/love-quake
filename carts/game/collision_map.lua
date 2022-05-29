@@ -1,6 +1,7 @@
 local maths3d = require("engine.maths3d")
 local bsp = require("bsp")
-local CollisionMap=function(level)
+local CollisionMap=function(world)
+    local level = world.level.model[1]
     -- init the root of the 2d BSP (for collision)
     local _root
     -- collision map (2d)
@@ -154,36 +155,7 @@ local CollisionMap=function(level)
     end
 
     function this:set_size(ent,mins,maxs)
-    end
-
-    function this:move(ent)
-        -- player move
-        -- query player position (water/ground/...)
-        local origin = v_add(_player.origin, make_v(player_mins, _player.mins))
-        local pmove = {
-            origin = origin,
-            velocity = v_clone(_player.velocity),
-            angles = v_clone(_player.angles),
-            physents = {_world.model},
-            mins = v_add(origin, {-256,-256,-256}),
-            maxs = v_add(origin, {256,256,256})
-        }
-
-        -- collect all physical entities during the move
-        local blocking={
-            world
-        }
-        query_entities(pmove, blocking)
-
-
-        --  
-        for i=1,#touchables do
-            local other=touchables[i]
-            if other.touch then
-                --             
-            end
-        end
-    end
+    end    
 
     function this:unregister(ent)
         -- nothing to unregister
@@ -197,7 +169,6 @@ local CollisionMap=function(level)
             ent.nodes[node] = nil
         end    
     end
-
 
     function this:register(ent)
         -- unlink first
@@ -259,7 +230,7 @@ local CollisionMap=function(level)
                 local model,hull=other_ent.model
                 if not model or not model.hulls then
                     -- use local aabb - hit is computed in ent space
-                    hull = planes.make_hull(make_v(maxs,other_ent.mins),make_v(mins,other_ent.maxs))
+                    hull = planes.makeHull(make_v(maxs,other_ent.mins),make_v(mins,other_ent.maxs))
                 else
                     hull = model.hulls[hull_type]
                 end
@@ -296,6 +267,97 @@ local CollisionMap=function(level)
         return hits
     end
 
+    -- slide on wall move (players, npc...)
+    function this:slide(ent,origin,velocity)
+        local vel2d = {velocity[1],velocity[2],0}
+        local vl = v_len(vel2d)
+        local vl0 = vl
+        local next_pos=v_add(origin,velocity)
+        local on_ground,blocked = false,false
+        local invalid=false
+    
+        -- avoid touching the same non-solid multiple times (ex: triggers)
+        local touched = {}
+        -- collect all potential touching entities (done only once)
+        -- todo: smaller box
+        local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
+        -- always add world
+        add(ents,1,world.entities[1])  
+        -- check current to target pos
+        for i=1,4 do
+            local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
+            if not hits then
+                goto clear
+            end
+            if hits.n then            
+                local fix=v_dot(hits.n,velocity)
+                -- not separating?
+                if fix<0 then  
+                    vl = vl + v_dot(vel2d,hits.n)
+                    local old_vel = v_clone(velocity)
+                    velocity=v_add(velocity,hits.n,-fix)
+                    -- print("fix pos:"..fix.." before: "..v_tostring(old_vel).." after: "..v_tostring(velocity))      
+                    -- floor?
+                    if hits.n[3]>0.7 then
+                        on_ground=true
+                    end
+                    -- wall hit?
+                    if not hits.ent.SOLID_SLIDEBOX and hits.n[3]==0 then
+                        blocked=true
+                    end
+                end
+                next_pos=v_add(origin,velocity)
+            end
+        end
+    ::blocked::
+        invalid = true
+        velocity={0,0,0}
+    ::clear::
+    
+        return {
+            pos=v_add(origin,velocity),
+            velocity=velocity,
+            on_ground=on_ground,
+            on_wall=blocked,
+            fraction=max(0,vl/vl0),
+            touched=touched,
+            invalid=invalid}
+    end
+    
+    -- missile type move (no course correction)
+    function this:fly(ent,origin,velocity)
+        local next_pos=v_add(origin,velocity)
+        local invalid,hit_ent=false
+    
+        -- avoid touching the same non-solid multiple times (ex: triggers)
+        local touched = {}
+        -- collect all potential touching entities (done only once)
+        -- todo: smaller box
+        local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
+        -- always add world
+        add(ents,1,world.entities[1])  
+        -- check current to target pos
+        local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)        
+        if hits then
+            -- invalid move
+            if hits.start_solid or hits.all_solid then
+                next_pos = origin
+                invalid = true
+            else
+                -- position at impact
+                -- report closest hit
+                next_pos=v_add(hits.pos, hits.ent.origin)
+                hit_ent = hits.ent
+            end
+        end
+    
+        return {
+            pos=next_pos,
+            ent=hit_ent,
+            touched=touched,
+            invalid=invalid}
+    end
+        
     return this
 end
 return CollisionMap

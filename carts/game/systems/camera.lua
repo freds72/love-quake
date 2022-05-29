@@ -26,7 +26,7 @@ local CameraSystem=function(world)
                 if not player or player.dead then
                     return 1
                 end
-                -- track(parent,player.origin,
+                track(parent,v_add(player.origin,player.model.eyepos,-1),make_m_from_euler(0,0,0))
             end
         }
     end
@@ -34,6 +34,7 @@ local CameraSystem=function(world)
     local function makeMissionCamera(parent)
         -- switch every 10s
         local ttl,spot=-1
+
         return {
             update=function(self)
                 local player=world.player
@@ -52,8 +53,13 @@ local CameraSystem=function(world)
                         ttl=time() + 5
                     end
                 end
-                if spot then 
-                    track(parent,v_add(spot.origin,{0,0,-24}),make_m_from_euler(unpack(spot.mangles)))
+                if spot then
+                    local x,y,z=0,0,0
+                    if spot.mangles then
+                        x,y,z=unpack(spot.mangles)
+                    end
+                    local m=make_m_from_euler(x,0,z+0.1*cos(time()/16))
+                    track(parent,v_add(spot.origin,{0,0,0}),m)
                 end
             end
         }       
@@ -61,13 +67,18 @@ local CameraSystem=function(world)
 
     local activeCam
     return {
+        ready=false,
         update=function(self)
+            if not world.loaded then
+                return
+            end
             -- create an active cam if none
             if not activeCam then
                 activeCam=makeMissionCamera(self)
             end
 
             if activeCam then
+                self.ready = true
                 local res=activeCam:update()
                 if res==0 then
                     activeCam = makeFPSCamera(self)

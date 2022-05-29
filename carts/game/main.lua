@@ -26,7 +26,7 @@ local displayWidth,displayHeight=480,270
 local scale,xoffset,yoffset = 2,0,0
 local imageExtensions={[".png"]=true,[".bmp"]=true}
   
-function love.load(args)    
+function love.load(args)  
     love.window.setMode(displayWidth * scale, displayHeight * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
 
     if not _dont_grab_mouse then
@@ -52,6 +52,10 @@ function love.keypressed( key, scancode, isrepeat )
         love.event.quit(0)
     end
     scanCodes[scancode] = true
+end
+
+function love.keyreleased( key, scancode )
+    scanCodes[scancode] = nil
 end
 
 function love.mousepressed( x, y, button, istouch, presses )
@@ -185,10 +189,13 @@ function love.run()
                 -- compute rectangle to capture
                channels:response({canvasBytes,x,y,min(x+w,displayWidth),min(y+h,displayHeight)})
             elseif name=="keys" then
-               channels:response(scanCodes)
-                scanCodes={}
+                local keys={}
+                for k in pairs(scanCodes) do
+                    keys[k] = love.keyboard.isScancodeDown(k)
+                end
+                channels:response(keys)            
             elseif name=="mouse" then
-               channels:response(mouseInfo)
+                channels:response(mouseInfo)
                 mouseInfo={}
             end
         -- next message

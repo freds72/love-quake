@@ -10,6 +10,7 @@ local PoolCls=function(name,stride,size)
             -- init values
             local idx=cursor
             cursor = cursor + stride
+            assert(cursor<total,"Pool full: "..cursor.."/"..total)
             local n=select("#",...)
             for i=0,n-1 do
                 pool[idx+i]=select(i+1,...)
@@ -20,6 +21,7 @@ local PoolCls=function(name,stride,size)
             -- init values
             local idx=cursor
             cursor = cursor + stride
+            assert(cursor<total,"Pool full: "..cursor.."/"..total)
             pool[idx]  =a
             pool[idx+1]=b
             pool[idx+2]=c

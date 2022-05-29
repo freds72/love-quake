@@ -1,224 +1,223 @@
-local ModelReader = function(pak)
-    local ffi=require 'ffi'
-    local logging = require("engine.logging")
-    local maths = require("engine.maths3d")
-    local entityReader = require("entity_reader")
+local ffi=require 'ffi'
+local logging = require("engine.logging")
+local maths = require("engine.maths3d")
+local entityReader = require("entity_reader")
 
+ffi.cdef[[
+    #pragma pack(1)
+    
+    typedef float vec3_t[3];
+    typedef struct { unsigned char r,g,b; } color_t;
+    
+    typedef short dvertexshort_t[3];
+    
+    typedef struct
+    {
+        int		fileofs, filelen;
+    } lump_t;
+    
+    typedef struct
+    {
+    int	   version;	
+    lump_t entities;
+    lump_t planes;
+    lump_t textures;
+    lump_t vertices;
+    lump_t visibility;
+    lump_t nodes;
+    lump_t texinfo;
+    lump_t faces;
+    lump_t lighting;
+    lump_t clipnodes;
+    lump_t leaves;
+    lump_t marksurfaces;
+    lump_t edges;
+    lump_t surfedges;
+    lump_t models;
+    } dheader_t;
+    
+    typedef struct
+    {
+        vec3_t	mins, maxs;
+        float		origin[3];
+        int			headnode[4];
+        int			visleafs;		// not including the solid leaf 0
+        int			firstface, numfaces;
+    } dmodel_t;
+    
+    typedef struct
+    {
+        int			nummiptex;
+        int			dataofs[4];		// [nummiptex]
+    } dmiptexlump_t;
+    
+    static const int MIPLEVELS	= 4;
+    typedef struct miptex_s
+    {
+        char		name[16];
+        unsigned	width, height;
+        unsigned	offsets[MIPLEVELS];		// four mip maps stored
+    } miptex_t;
+    
+    typedef struct
+    {
+        vec3_t	normal;
+        float	dist;
+        int		type;		// PLANE_X - PLANE_ANYZ ?remove? trivial to regenerate
+    } dplane_t;
+    
+    typedef struct
+    {
+        int			planenum;
+        short		children[2];	// negative numbers are -(leafs+1), not nodes
+        dvertexshort_t		mins;		// for sphere culling
+        dvertexshort_t		maxs;
+        unsigned short	firstface;
+        unsigned short	numfaces;	// counting both sides
+    } dnode_t;
+    
+    typedef struct
+    {
+        int			planenum;
+        short		children[2];	// negative numbers are contents
+    } dclipnode_t;
+    
+    typedef struct texinfo_s
+    {
+        // [s/t][xyz offset]
+        vec3_t   s;
+        float       s_offset;
+        vec3_t   t;
+        float       t_offset;
+        int			miptex;
+        int			flags;
+    } texinfo_t;
+    
+    typedef struct
+    {
+        unsigned short	v[2];		// vertex numbers
+    } dedge_t;
+    
+    static const int	MAXLIGHTMAPS = 4;
+    typedef struct
+    {
+        short		planenum;
+        short		side;
+    
+        int			firstedge;		// we must support > 64k edges
+        short		numedges;	
+        short		texinfo;
+    
+        unsigned char		styles[MAXLIGHTMAPS];  // lighting info
+        int			          lightofs;		// start of [numstyles*surfsize] samples
+    } dface_t;
+    
+    // #define	AMBIENT_WATER	0
+    // #define	AMBIENT_SKY		1
+    // #define	AMBIENT_SLIME	2
+    // #define	AMBIENT_LAVA	3
+    
+    static const int NUM_AMBIENTS = 4;
+    
+    // leaf 0 is the generic CONTENTS_SOLID leaf, used for all solid areas
+    // all other leafs need visibility info
+    typedef struct
+    {
+        int			contents;
+        int			visofs;				// -1 = no visibility info
+    
+        dvertexshort_t		mins;			// for frustum culling
+        dvertexshort_t		maxs;
+    
+        unsigned short		firstmarksurface;
+        unsigned short		nummarksurfaces;
+    
+        unsigned char		  ambient_level[NUM_AMBIENTS];
+    } dleaf_t;
+
+    // alias models (eg. non geometry)
+    // must match definition in spritegn.h
+    typedef enum {ST_SYNC=0, ST_RAND } synctype_t;
+
+    typedef enum { ALIAS_SINGLE=0, ALIAS_GROUP } aliasframetype_t;
+
+    typedef enum { ALIAS_SKIN_SINGLE=0, ALIAS_SKIN_GROUP } aliasskintype_t;
+
+    typedef struct {
+        int			ident;
+        int			version;
+        vec3_t		scale;
+        vec3_t		scale_origin;
+        float		boundingradius;
+        vec3_t		eyeposition;
+        int			numskins;
+        int			skinwidth;
+        int			skinheight;
+        int			numverts;
+        int			numtris;
+        int			numframes;
+        synctype_t	synctype;
+        int			flags;
+        float		size;
+    } mdl_t;
+
+    // TODO: could be shorts
+
+    typedef struct {
+        int		onseam;
+        int		s;
+        int		t;
+    } stvert_t;
+
+    typedef struct dtriangle_s {
+        int					facesfront;
+        int					vertindex[3];
+    } dtriangle_t;
+
+    // This mirrors trivert_t in trilib.h, is present so Quake knows how to
+    // load this data
+
+    typedef struct {
+        unsigned char	v[3];
+        unsigned char   lightnormalindex;
+    } trivertx_t;
+
+    typedef struct {
+        trivertx_t	bboxmin;	// lightnormal isn't used
+        trivertx_t	bboxmax;	// lightnormal isn't used
+        char		name[16];	// frame name from grabbing
+    } daliasframe_t;
+
+    typedef struct {
+        int			numframes;
+        trivertx_t	bboxmin;	// lightnormal isn't used
+        trivertx_t	bboxmax;	// lightnormal isn't used
+    } daliasgroup_t;
+
+    typedef struct {
+        int			numskins;
+    } daliasskingroup_t;
+
+    typedef struct {
+        float	interval;
+    } daliasinterval_t;
+
+    typedef struct {
+        float	interval;
+    } daliasskininterval_t;
+
+    typedef struct {
+        aliasframetype_t	type;
+    } daliasframetype_t;
+
+    typedef struct {
+        aliasskintype_t	type;
+    } daliasskintype_t;    
+]]
+
+local ModelReader = function(pak)
     -- caches
     local _model_cache={}
-
-    ffi.cdef[[
-        #pragma pack(1)
-        
-        typedef float vec3_t[3];
-        typedef struct { unsigned char r,g,b; } color_t;
-        
-        typedef short dvertexshort_t[3];
-        
-        typedef struct
-        {
-            int		fileofs, filelen;
-        } lump_t;
-        
-        typedef struct
-        {
-        int	   version;	
-        lump_t entities;
-        lump_t planes;
-        lump_t textures;
-        lump_t vertices;
-        lump_t visibility;
-        lump_t nodes;
-        lump_t texinfo;
-        lump_t faces;
-        lump_t lighting;
-        lump_t clipnodes;
-        lump_t leaves;
-        lump_t marksurfaces;
-        lump_t edges;
-        lump_t surfedges;
-        lump_t models;
-        } dheader_t;
-        
-        typedef struct
-        {
-            vec3_t	mins, maxs;
-            float		origin[3];
-            int			headnode[4];
-            int			visleafs;		// not including the solid leaf 0
-            int			firstface, numfaces;
-        } dmodel_t;
-        
-        typedef struct
-        {
-            int			nummiptex;
-            int			dataofs[4];		// [nummiptex]
-        } dmiptexlump_t;
-        
-        static const int MIPLEVELS	= 4;
-        typedef struct miptex_s
-        {
-            char		name[16];
-            unsigned	width, height;
-            unsigned	offsets[MIPLEVELS];		// four mip maps stored
-        } miptex_t;
-        
-        typedef struct
-        {
-            vec3_t	normal;
-            float	dist;
-            int		type;		// PLANE_X - PLANE_ANYZ ?remove? trivial to regenerate
-        } dplane_t;
-        
-        typedef struct
-        {
-            int			planenum;
-            short		children[2];	// negative numbers are -(leafs+1), not nodes
-            dvertexshort_t		mins;		// for sphere culling
-            dvertexshort_t		maxs;
-            unsigned short	firstface;
-            unsigned short	numfaces;	// counting both sides
-        } dnode_t;
-        
-        typedef struct
-        {
-            int			planenum;
-            short		children[2];	// negative numbers are contents
-        } dclipnode_t;
-        
-        typedef struct texinfo_s
-        {
-            // [s/t][xyz offset]
-            vec3_t   s;
-            float       s_offset;
-            vec3_t   t;
-            float       t_offset;
-            int			miptex;
-            int			flags;
-        } texinfo_t;
-        
-        typedef struct
-        {
-            unsigned short	v[2];		// vertex numbers
-        } dedge_t;
-        
-        static const int	MAXLIGHTMAPS = 4;
-        typedef struct
-        {
-            short		planenum;
-            short		side;
-        
-            int			firstedge;		// we must support > 64k edges
-            short		numedges;	
-            short		texinfo;
-        
-            unsigned char		styles[MAXLIGHTMAPS];  // lighting info
-            int			          lightofs;		// start of [numstyles*surfsize] samples
-        } dface_t;
-        
-        // #define	AMBIENT_WATER	0
-        // #define	AMBIENT_SKY		1
-        // #define	AMBIENT_SLIME	2
-        // #define	AMBIENT_LAVA	3
-        
-        static const int NUM_AMBIENTS = 4;
-        
-        // leaf 0 is the generic CONTENTS_SOLID leaf, used for all solid areas
-        // all other leafs need visibility info
-        typedef struct
-        {
-            int			contents;
-            int			visofs;				// -1 = no visibility info
-        
-            dvertexshort_t		mins;			// for frustum culling
-            dvertexshort_t		maxs;
-        
-            unsigned short		firstmarksurface;
-            unsigned short		nummarksurfaces;
-        
-            unsigned char		  ambient_level[NUM_AMBIENTS];
-        } dleaf_t;
-
-        // alias models (eg. non geometry)
-        // must match definition in spritegn.h
-        typedef enum {ST_SYNC=0, ST_RAND } synctype_t;
-
-        typedef enum { ALIAS_SINGLE=0, ALIAS_GROUP } aliasframetype_t;
-
-        typedef enum { ALIAS_SKIN_SINGLE=0, ALIAS_SKIN_GROUP } aliasskintype_t;
-
-        typedef struct {
-            int			ident;
-            int			version;
-            vec3_t		scale;
-            vec3_t		scale_origin;
-            float		boundingradius;
-            vec3_t		eyeposition;
-            int			numskins;
-            int			skinwidth;
-            int			skinheight;
-            int			numverts;
-            int			numtris;
-            int			numframes;
-            synctype_t	synctype;
-            int			flags;
-            float		size;
-        } mdl_t;
-
-        // TODO: could be shorts
-
-        typedef struct {
-            int		onseam;
-            int		s;
-            int		t;
-        } stvert_t;
-
-        typedef struct dtriangle_s {
-            int					facesfront;
-            int					vertindex[3];
-        } dtriangle_t;
-
-        // This mirrors trivert_t in trilib.h, is present so Quake knows how to
-        // load this data
-
-        typedef struct {
-            unsigned char	v[3];
-            unsigned char   lightnormalindex;
-        } trivertx_t;
-
-        typedef struct {
-            trivertx_t	bboxmin;	// lightnormal isn't used
-            trivertx_t	bboxmax;	// lightnormal isn't used
-            char		name[16];	// frame name from grabbing
-        } daliasframe_t;
-
-        typedef struct {
-            int			numframes;
-            trivertx_t	bboxmin;	// lightnormal isn't used
-            trivertx_t	bboxmax;	// lightnormal isn't used
-        } daliasgroup_t;
-
-        typedef struct {
-            int			numskins;
-        } daliasskingroup_t;
-
-        typedef struct {
-            float	interval;
-        } daliasinterval_t;
-
-        typedef struct {
-            float	interval;
-        } daliasskininterval_t;
-
-        typedef struct {
-            aliasframetype_t	type;
-        } daliasframetype_t;
-
-        typedef struct {
-            aliasskintype_t	type;
-        } daliasskintype_t;    
-    ]]
-
     -- reads the given struct name from the byte array
     local function read_all(cname, lump, mem)
         local res = {}
@@ -649,15 +648,19 @@ local ModelReader = function(pak)
         local header = ffi.cast('mdl_t*', mem)
         assert(header.version==6, "Unsupported MDL file version: "..header.version)
 
+        local scale = {header.scale[0],header.scale[1],header.scale[2]}
+        local origin = {header.scale_origin[0],header.scale_origin[1],header.scale_origin[2]}
         local mod={
             flags = header.flags,
             skins = {},
             uvs = {},
             faces = {},
-            frames = {}
+            frames = {},
+            eyepos = {
+                header.eyeposition[0],
+                header.eyeposition[1],
+                header.eyeposition[2]}
         }
-        local scale = {header.scale[0],header.scale[1],header.scale[2]}
-        local origin = {header.scale_origin[0],header.scale_origin[1],header.scale_origin[2]}
         
         local ptr = ffi.cast("unsigned char*",mem)
         -- skip header

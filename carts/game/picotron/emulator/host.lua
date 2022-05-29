@@ -59,8 +59,10 @@ add=table.insert
 del=table.remove
 sub=string.sub
 ord=string.byte
-rnd=function(range)
-    return (range or 1) * math.random()
+rnd=function(start_range, end_range)
+    start_range = start_range or 0
+    end_range = end_range or 1
+    return start_range + (end_range - start_range) * math.random()
 end    
 time=function()
     return this_time
@@ -173,7 +175,7 @@ line=function(x0,y0,x1,y1,c)
             y0=y0-x0*dy x0=0
         end
         for x=flr(x0),min(flr(x1),480)-1 do
-            if y0>=0 and y0<270 then
+            if y0>=0 and y0<270 then                
                 vid_ptr[x+480*flr(y0)]=c
             end
             y0 = y0 + dy

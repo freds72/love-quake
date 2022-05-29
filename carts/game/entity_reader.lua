@@ -38,7 +38,7 @@ local value_factory={
 
 -- public values and functions.
 function EntityReader:unpack(str)
-    pos=pos or 1
+    local pos=1
     if pos>#str then
         assert'reached unexpected end of input.'
     end

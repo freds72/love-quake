@@ -10,11 +10,11 @@ local VBO_OUTCODE = 6
 local VBO_U = 7
 local VBO_V = 8
 
-local vbo = require("engine.pool")("vertex_cache",9,2500)
+local vbo = require("engine.pool")("vertex_cache",9,7500)
 local WireframeRasterizer={
     -- shared "memory" with renderer
     vbo = vbo,
-    beginFrame=function()
+    beginFrame=function(self)
         frame = frame + 1
     end,
     -- push a surface to rasterize

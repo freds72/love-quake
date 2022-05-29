@@ -1,5 +1,5 @@
 -- programmatic contract between "programs" and the game engine
-local ProgsAPI=function(modelLoader, models, entities, collisionMap)
+local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local logging = require("engine.logging")
     local lightStyles = require("systems.lightstyles")
     local rampStyles = require("systems.rampstyles")
@@ -92,10 +92,7 @@ local ProgsAPI=function(modelLoader, models, entities, collisionMap)
           ent.absmaxs=v_add(ent.origin,ent.maxs)
           m_set_pos(ent.m,ent.origin)
     
-          -- todo: wargh remove!!
-          if ent.classname~="player" then
-            collisionMap:register(ent)
-          end
+          collisionMap:register(ent)
         end,
         time=function()
           return time() / 60
@@ -106,21 +103,10 @@ local ProgsAPI=function(modelLoader, models, entities, collisionMap)
         -- find all entities with a property matching the given value
         -- if filter is given, only returns entities with an additional "filter" field
         find=function(_,...)
-          return entities:find(...)
+          return world.entities:find(...)
         end,
-        spawn=function(_)
-          -- don't add new entities in this frame
-          local ent={
-            nodes={},
-            m={
-              1,0,0,0,
-              0,1,0,0,
-              0,0,1,0,
-              0,0,0,1
-            }        
-          }   
-          entities:add(ent)    
-          return ent
+        spawn=function(self)
+          return world:spawn(ent)
         end,
         remove=function(_,ent)
           -- mark entity for deletion
@@ -148,7 +134,7 @@ local ProgsAPI=function(modelLoader, models, entities, collisionMap)
         end,
         drop_to_floor=function(self,ent)
           -- find "ground"
-          local hits = collisionMap:hitscan(ent.mins,ent.maxs,v_add(ent.origin,{0,0,8}),v_add(ent.origin,{0,0,-256}),{},{entities[1]},ent)
+          local hits = collisionMap:hitscan(ent.mins,ent.maxs,v_add(ent.origin,{0,0,8}),v_add(ent.origin,{0,0,-256}),{},{world.entities[1]},ent)
           if not hits or hits.t==1 or hits.all_solid then
             logging.critical("Entity: "..ent.classname.." unable to find resting ground")
             return
@@ -156,6 +142,11 @@ local ProgsAPI=function(modelLoader, models, entities, collisionMap)
           self:setorigin(ent,hits.pos)
         end,
         attach=function(self,ent,system,args)
+          if not _components then
+            -- todo: fix!!!
+            return
+          end
+
           local c=_components[system]
           if not c then
             logging.error("Unknown system: "..system)

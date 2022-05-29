@@ -76,7 +76,7 @@ local triggers=function(progs)
             if self.nextthink>progs:time() then
                 return
             end
-            print("touched by: "..other.classname)
+            printh("touched by: "..other.classname)
             if self.message then
                 progs:print(self.message)
             end

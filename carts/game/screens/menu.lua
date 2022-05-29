@@ -2,21 +2,31 @@ local logging=require("engine.logging")
 local input=require("engine.input_system")
 local stateSystem = require("engine.state_system")
 
-return function(conf,level)
+-- start menu screen/state
+return function(conf, level)
     local menu,selected={
         "Start",
+        "E1M1",
+        "E1M3",
+        "----------",
         "Options..."
     },0
     local actions={
         function()
-            stateSystem:next(require("screen.play"),conf)
+            stateSystem:next(require("screens.play"),conf,"start.bsp")
+        end,
+        function()
+            stateSystem:next(require("screens.play"),conf,"e1m1.bsp")
+        end,
+        function()
+            stateSystem:next(require("screens.play"),conf,"e1m3.bsp")
         end,
         function()
             -- todo: open option menu
         end
     }
 
-    -- load start level
+    -- load level
     local world = require("systems.world")
     world:load(level)
 
