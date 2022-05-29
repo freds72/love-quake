@@ -22,7 +22,7 @@ local items=function(progs)
             progs:remove(self)
             
             -- todo:    
-            print("got shells")        
+            printh("got shells")        
         end
     end
 
@@ -52,7 +52,7 @@ local items=function(progs)
         self.touch=function()
             progs:remove(self)
             -- todo:     
-            print("got health: "..self.healamount)               
+            printh("got health: "..self.healamount)               
         end
     end
 end

@@ -32,7 +32,12 @@ local player=function(progs)
             action={0,0,6.2}
         }
 
+        local angle,dangle={0,0,0},{0,0,0}
         self.prethink=function(input)
+            -- damping      
+            angle[2]=angle[2]*0.8
+            dangle = v_scale(dangle,0.6)
+
             self.velocity[1]=self.velocity[1]*0.8
             self.velocity[2]=self.velocity[2]*0.8      
       
@@ -43,9 +48,13 @@ local player=function(progs)
               end
             end
       
-            local a,dx,dz=0,acc[2],acc[1]
-            local c,s=cos(2*3.1415*a/360),sin(2*3.1415*a/360)
+            dangle=v_add(dangle,{input.mdy/8,acc[1]/32,input.mdx/8})
+            angle=v_add(angle,dangle,1/24)
+          
+            local a,dx,dz=angle[3],acc[2],acc[1]
+            local c,s=cos(a),sin(a)            
             self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,(self.on_ground and acc[3] or 0)-0.5})
+            self.mangles = angle
         end
 
         self.postthink=function(input)

@@ -64,7 +64,7 @@ local subs=function(progs)
     function use_targets(self,other,random)
         if self.killtarget then
             local targets = progs:find(self,"targetname", self.killtarget)
-            print("killing:"..self.killtarget.." matches: "..#targets)
+            printh("killing:"..self.killtarget.." matches: "..#targets)
             for i=1,#targets do
                 progs:remove(targets[i])
             end

@@ -1,7 +1,7 @@
 local ffi=require 'ffi'
 local logging = require("engine.logging")
 local maths = require("engine.maths3d")
-local entityReader = require("entity_reader")
+local entityReader = require("io.entity_reader")
 
 ffi.cdef[[
     #pragma pack(1)

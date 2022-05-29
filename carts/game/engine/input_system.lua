@@ -27,6 +27,9 @@ function InputSystem:update()
         if key(k) then down_actions[action]=true end
         if keyp(k) then up_actions[action]=true end
     end
+
+    self.mx,self.my=mouse()
+    self.mdx,self.mdy=dmouse()
 end
 
 -- returns true if key has been pressed in frame

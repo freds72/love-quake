@@ -15,7 +15,7 @@ function MessageSystem:say(msg,...)
     if txt==self.msg then
       return
     end
-    logging.debug("MESSAGE - "..tostring(txt))
+    logging.info("MESSAGE - "..tostring(txt))
     self.msg = txt
     -- keep 3s on screen
     ttl = time() + 3

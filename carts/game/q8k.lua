@@ -4,8 +4,12 @@ local stateSystem = require("engine.state_system")
 local input=require("engine.input_system")
 local world=require("systems.world")
 local camera=require("systems.camera")(world)
+local messages=require("systems.message")
 local rasterizer=require("renderer.wireframe_rasterizer")
 local renderer=require("renderer.bsp_renderer")(world, rasterizer)
+
+-- some globals (temp)
+_components={}
 
 function _init()
     local menuState = require("screens.play")
@@ -15,6 +19,7 @@ end
 
 function _update()
     input:update()
+    messages:update()
     world:update()
     camera:update()
     stateSystem:update()

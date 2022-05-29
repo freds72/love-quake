@@ -93,6 +93,8 @@ local function refreshInputs()
         -- sync 
         local keys = channels:wait({"keys"})
         _previousKeys,_keys = _keys,keys
+
+        _mouse = channels:wait({"mouse"})
         _lastInputFrame = _frame
     end 
 end
@@ -110,6 +112,17 @@ keyp=function(id)
     refreshInputs()
     -- was pressed but not anymore
     return _previousKeys[id] and not _keys[id]
+end
+
+-- returns mouse coords
+mouse=function()
+    refreshInputs()
+    return _mouse.x,_mouse.y
+end
+-- returns mouse mouve
+dmouse=function()
+    refreshInputs()
+    return _mouse.dx,_mouse.dy
 end
 
 -- text

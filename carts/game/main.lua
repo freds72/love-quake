@@ -19,7 +19,10 @@ local channels = require("picotron.emulator.channels")()
 
 -- keyboards and mouse states
 local scanCodes={}
-local mouseInfo={}
+local mouseInfo={
+    dx=0,
+    dy=0
+}
 
 -- logical screen size
 local displayWidth,displayHeight=480,270
@@ -66,10 +69,8 @@ function love.wheelmoved( x, y )
 end
 
 function love.mousemoved( x, y, dx, dy, istouch )
-    mouseInfo.x = math.floor(x/scale)
-    mouseInfo.y = math.floor(y/scale)
-    mouseInfo.dx = math.floor(dx/scale)
-    mouseInfo.dy = math.floor(dy/scale)
+    mouseInfo.dx = mouseInfo.dx + math.floor(dx/scale)
+    mouseInfo.dy = mouseInfo.dy + math.floor(dy/scale)
 end
 
 function love.resize(w,h)   
@@ -195,8 +196,15 @@ function love.run()
                 end
                 channels:response(keys)            
             elseif name=="mouse" then
-                channels:response(mouseInfo)
-                mouseInfo={}
+                channels:response({
+                    -- return mouse position when requested
+                    x=math.floor(love.mouse.getX()/scale),
+                    y=math.floor(love.mouse.getY()/scale),        
+                    dx=mouseInfo.dx,
+                    dy=mouseInfo.dy
+                })
+                mouseInfo.dx=0
+                mouseInfo.dy=0
             end
         -- next message
             msg = channels:pop()

@@ -11,7 +11,7 @@
         "args": [
           "game",
           "q8k",
-          "start.bsp"
+          "e1m1.bsp"
         ],
         "cwd": "${workspaceFolder}\\carts",
         "scriptRoots": [

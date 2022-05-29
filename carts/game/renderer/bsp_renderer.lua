@@ -421,13 +421,13 @@ local BSPRenderer=function(world,rasterizer)
 
           -- visible entities
           local visents = collect_entities(world.entities)
-
+          
           for i=1,#visents do
             local ent=visents[i]
             local m = ent.model
             -- todo: find out a better way to detect type
-            if m.nodes then
-              local resources = ent.resources
+            if m.leaf_start then
+              local resources = ent.resources or resources
               drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
             else
               -- todo

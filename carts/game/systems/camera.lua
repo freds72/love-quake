@@ -26,7 +26,14 @@ local CameraSystem=function(world)
                 if not player or player.dead then
                     return 1
                 end
-                track(parent,v_add(player.origin,player.model.eyepos,-1),make_m_from_euler(0,0,0))
+                local angle=player.mangles
+                local m=m_x_m(
+                    m_x_m(
+                      make_m_from_euler(0,0,angle[3]),
+                      make_m_from_euler(angle[1],0,0)),
+                      make_m_from_euler(0,angle[2],0))
+          
+                track(parent,v_add(player.origin,player.model.eyepos,-1),m)
             end
         }
     end

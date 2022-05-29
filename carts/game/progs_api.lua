@@ -1,6 +1,6 @@
 -- programmatic contract between "programs" and the game engine
+local logging = require("engine.logging")
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
-    local logging = require("engine.logging")
     local lightStyles = require("systems.lightstyles")
     local rampStyles = require("systems.rampstyles")
     local messages = require("systems.message")
@@ -41,7 +41,6 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
             m = models[tonumber(sub(id,2)) + 1]
             -- bind to model "owner"
             -- todo: yargh!!! to be changed
-            ent.resources = models[1]
           else        
             local cached_model = precache_models[id]
             if cached_model.alias then
@@ -95,7 +94,7 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           collisionMap:register(ent)
         end,
         time=function()
-          return time() / 60
+          return time()
         end,
         print=function(self,msg,...)
           messages:say(msg,...)

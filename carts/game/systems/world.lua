@@ -15,8 +15,8 @@ function WorldSystem:load(level_name)
     active_entities={}    
 
     -- create I/O classes (inc. caching)
-    local pakReader=require("pak_reader")(conf.root_path)
-    local modelReader=require("model_reader")(pakReader)
+    local pakReader=require("io.pak_reader")(conf.root_path)
+    local modelReader=require("io.model_reader")(pakReader)
     
     -- load file
     local level=modelReader:load("maps/"..level_name)
@@ -148,15 +148,8 @@ function WorldSystem:update()
             end
 
             -- todo: force origin changes via function
-            -- todo: apply angles
             if ent.m then
-                -- not a physic entity
-                local m=ent.m
-                if ent.mangles then
-                    m=make_m_from_euler(unpack(ent.mangles))
-                end
-                m_set_pos(m, ent.origin)
-                ent.m=m
+                m_set_pos(ent.m, ent.origin)
             end
         end
     end
