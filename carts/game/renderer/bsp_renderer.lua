@@ -1,5 +1,6 @@
 -- collect and send BSP geometry to rasterizer
 local bsp=require("bsp")
+local lights=require("systems.lightstyles")
 local BSPRenderer=function(world,rasterizer)
 -- "vertex buffer" layout:
   -- 0: x (cam)
@@ -354,12 +355,45 @@ local BSPRenderer=function(world,rasterizer)
         return visleaves  
     end
 
+    -- todo: bounded queue
+    local _textureCache={}
+    local function makeTextureProxy(textures,ent,face,mip)
+      local cached_tex=_textureCache[face]
+      if cached_tex and cached_tex.mips[mip] then
+          return cached_tex.mips[mip]
+      end
+      -- missing cache or missing mip
+      if not cached_tex then
+        cached_tex={mips={}}
+        _textureCache[face] = cached_tex
+      end
+
+      local texture = textures[face.texinfo.miptex]                
+      -- animated?
+      if texture.sequence then
+        -- texture animation id are between 0-9 (lua counts between 0-8)
+        local frames = ent.sequence==2 and texture.sequence.alt or texture.sequence.main
+        local frame = flr(rasterizer.frame/15) % (#frames+1)
+        texture = frames[frame]
+      end
+          
+      local texscale=shl(1,mip)
+      cached_tex.mips[mip] = {
+        scale=texscale,
+        width=texture.width/texscale,
+        height=texture.height/texscale,
+        ptr=texture.mips[mip+1]
+      }
+      return cached_tex.mips[mip]
+    end
+
     local function drawModel(cam,ent,textures,verts,leaves,lstart,lend)
         if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
           return 
         end
   
         local m=cam.m
+        -- todo: actually entity matrix is overkill as brush models never rotate
         v_cache:init(m_x_m(m,ent.m))
   
         local cam_pos=v_add(cam.origin,ent.origin,-1)
@@ -371,8 +405,8 @@ local BSPRenderer=function(world,rasterizer)
                 if not f_cache[face] and planes.dot(face.plane,cam_pos)>face.cp~=face.side then
                     -- mark visited
                     f_cache[face]=true
-                    local vertref,texinfo,outcode,clipcode=face.verts,face.texinfo,0xffff,0            
-                    local maxw,s,s_offset,t,t_offset=-32000,texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset          
+                    local vertref,texinfo,outcode,clipcode,maxw=face.verts,face.texinfo,0xffff,0,-math.huge
+                    local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset          
                     for k=1,#vertref do
                         local v=verts[vertref[k]]
                         local a=v_cache:transform(v)
@@ -384,7 +418,7 @@ local BSPRenderer=function(world,rasterizer)
                         vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
                         vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
                         if w>maxw then
-                            maxw = w
+                          maxw=w
                         end
                         poly[k] = a
                     end
@@ -395,13 +429,16 @@ local BSPRenderer=function(world,rasterizer)
                             poly,n = z_poly_clip(poly,n)
                         end
                         if n>2 then
-                            rasterizer.addSurface(poly,n)      
+                          -- texture mip
+                          local mip=3-mid(flr(2048*maxw),0,3)
+                          rasterizer.addSurface(poly,n,makeTextureProxy(textures,ent,face,mip))      
                         end
                     end
                 end
             end
         end
     end
+  
     
     return {
       update=function()
@@ -411,6 +448,8 @@ local BSPRenderer=function(world,rasterizer)
           if not cam.ready then
               return
           end
+
+
           -- refresh visible set
           local world_entity = world.entities[1]
           local main_model = world_entity.model

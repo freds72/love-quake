@@ -30,7 +30,7 @@ local this_time = 0
 -- local fontManager=require("picotron.emulator.fontmanager")()
 
 -- active assets
-local activePalette,activeColormap
+local activeColormap
 
 -- misc convenient functions
 mid=function(x, a, b)
@@ -82,7 +82,6 @@ end
 mmap=function(name,layout)
     -- delegate to main thread
     local data,w,h=unpack(channels:wait({"load",name}))
-    -- todo: wrap with width & height
     local ptr = data:getFFIPointer()
     return {_data=data,size=w*h,ptr=layout and ffi.cast(layout.."*",ptr) or ptr,width=w,height=h}
 end
@@ -133,7 +132,7 @@ printh=function(s)
 end
 -- print on screen
 print=function(s,x,y,c)
-    c=flr(c)%activePalette.size
+    c=flr(c)%activeColormap.width
     x=flr(x)
     y=flr(y)
     local img,x0,y0,x1,y1 = unpack(channels:wait({"print",s,x,y}))
@@ -156,14 +155,17 @@ cls=function(color)
 end
 flip=function()
     -- wait for display sync 
-    this_time = channels:wait({"flip",fb,activePalette._data})
+    this_time = channels:wait({"flip",fb,activeColormap._data, activeColormapRow * activeColormap.width})
     _frame = _frame + 1
 end
 pset=function(x,y,c)
     vid_ptr[flr(x)+480*flr(y)]=flr(c)
 end
-pal=function(colors)
-
+blend=function(colors,row,screen)
+    row = row or 0
+    activeColormap = colors
+    assert(row<64,"Invalid colormap row")
+    activeColormapRow = row
 end
 -- note: only horiz lines are supported
 tline3d=function(src,x0,y0,x1,_,u,v,w,du,dv,dw)
@@ -177,7 +179,7 @@ tline3d=function(src,x0,y0,x1,_,u,v,w,du,dv,dw)
     end
 end
 line=function(x0,y0,x1,y1,c)   
-    c = flr(c)%activePalette.size
+    c = flr(c)%activeColormap.width
     local dx,dy=x1-x0,y1-y0
     if abs(dx)>abs(dy) then
         if x0>x1 then
@@ -216,9 +218,7 @@ args=function()
 end
 
 -- default values
-activePalette=mmap("picotron/assets/quake-1x.png")
-
--- activeColormap=api.mmap("picotron/assets/colormap.bmp","uint8")
+blend(mmap("gfx/colormap.png"),31)
 
 -- load game within the "picotron" API context
 local chunk,err = love.filesystem.load(_arg0..".lua") -- load the chunk

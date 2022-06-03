@@ -119,8 +119,9 @@ function love.run()
                 if lg and lg.isActive() then
                     -- a: framebuffer
                     -- b: HW palette (image)
+                    -- c: selected colormap row
                     local fb = ffi.cast("uint8_t*", a:getFFIPointer())
-                    local pal = ffi.cast("uint32_t*", b:getFFIPointer())
+                    local pal = ffi.cast("uint32_t*", b:getFFIPointer()) + c
                     -- display current backbuffer
                     lg.origin()
                     lg.clear(lg.getBackgroundColor())

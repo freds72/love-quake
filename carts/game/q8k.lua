@@ -5,13 +5,17 @@ local input=require("engine.input_system")
 local world=require("systems.world")
 local camera=require("systems.camera")(world)
 local messages=require("systems.message")
-local rasterizer=require("renderer.wireframe_rasterizer")
+local rasterizer=require("renderer.span_rasterizer")
 local renderer=require("renderer.bsp_renderer")(world, rasterizer)
 
 -- some globals (temp)
 _components={}
 
 function _init()
+    -- blend table
+    _colormap=mmap("gfx/colormap.png")
+    blend(_colormap,31)
+
     local menuState = require("screens.play")
     local arg1, arg2 = args()
     stateSystem:next(menuState, gameConf, arg1, arg2)

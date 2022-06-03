@@ -1,5 +1,7 @@
 local LightStylesSystem={}
 local light_styles={}
+local current_lights={}
+-- update light style
 function LightStylesSystem:set(id, lightstyle)
     local style,min_light,max_light={},ord("a"),ord("z")
     for frame=0,#lightstyle-1 do
@@ -10,6 +12,17 @@ function LightStylesSystem:set(id, lightstyle)
         add(style,scale)
     end
     light_styles[id] = style
+end
+
+-- return lights styles at given frame
+function LightStylesSystem:get(frame)
+    -- change light every 0.1s
+    for i,lightstyle in pairs(light_styles) do
+        local frame = flr(frame/6) % #lightstyle
+        --print("light style @"..lightstyle.."["..frame.."]")
+        current_lights[i] = lightstyle[frame + 1]
+    end
+    return current_lights
 end
 
 return LightStylesSystem
