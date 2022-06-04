@@ -3,6 +3,8 @@ local light_styles={}
 local current_lights={}
 -- update light style
 function LightStylesSystem:set(id, lightstyle)
+    assert(id~=255,"Invalid lightstyle id: "..id)
+
     local style,min_light,max_light={},ord("a"),ord("z")
     for frame=0,#lightstyle-1 do
         local ch = sub(lightstyle,frame,frame+1)

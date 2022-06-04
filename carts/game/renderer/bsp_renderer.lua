@@ -1,5 +1,6 @@
 -- collect and send BSP geometry to rasterizer
 local bsp=require("bsp")
+local ffi=require("ffi")
 local lights=require("systems.lightstyles")
 local BSPRenderer=function(world,rasterizer)
 -- "vertex buffer" layout:
@@ -25,6 +26,9 @@ local BSPRenderer=function(world,rasterizer)
   -- vertex buffer "cache"
   local vbo = rasterizer.vbo
 
+  -- active lights
+  local _activeLights
+  local colormap=mmap("gfx/colormap.lmp","uint8_t")
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
@@ -358,9 +362,25 @@ local BSPRenderer=function(world,rasterizer)
     -- todo: bounded queue
     local _textureCache={}
     local function makeTextureProxy(textures,ent,face,mip)
+      -- test
+      mip = 0
+      
+      -- create texture key
+      local texture = textures[face.texinfo.miptex]                
+      local key=mip
+      if texture.sequence and ent.sequence then
+        key=bor(key,ent.sequence*4)
+      end
+      for i=0,3 do
+        local style=_activeLights[face.lightstyles[i+1]]
+        if style then
+          key=bor(key,shl(flr(255*style),i*8+8))
+        end
+      end
+
       local cached_tex=_textureCache[face]
-      if cached_tex and cached_tex.mips[mip] then
-          return cached_tex.mips[mip]
+      if cached_tex and cached_tex.mips[key] then
+          return cached_tex.mips[key]
       end
       -- missing cache or missing mip
       if not cached_tex then
@@ -368,7 +388,6 @@ local BSPRenderer=function(world,rasterizer)
         _textureCache[face] = cached_tex
       end
 
-      local texture = textures[face.texinfo.miptex]                
       -- animated?
       if texture.sequence then
         -- texture animation id are between 0-9 (lua counts between 0-8)
@@ -376,15 +395,61 @@ local BSPRenderer=function(world,rasterizer)
         local frame = flr(rasterizer.frame/15) % (#frames+1)
         texture = frames[frame]
       end
-          
+      
       local texscale=shl(1,mip)
-      cached_tex.mips[mip] = {
+      cached_tex.mips[key] = setmetatable({
         scale=texscale,
-        width=texture.width/texscale,
-        height=texture.height/texscale,
-        ptr=texture.mips[mip+1]
-      }
-      return cached_tex.mips[mip]
+        width=(face.width and face.width or texture.width)/texscale,
+        height=(face.height and face.height or texture.height)/texscale        
+      },{
+        __index=function(t,k)
+          local ptr=texture.mips[mip+1] 
+          if face.lightofs then
+            -- compute lightmap
+            local w,h=face.lightwidth,face.lightheight
+            local lightmap = ffi.new("unsigned char[?]", w*h)
+            for y=0,h-1 do
+              for x=0,w-1 do
+                local sample,idx=0,x + y*w
+                for i=0,3 do
+                  local scale = _activeLights[face.lightstyles[i+1]]
+				          if scale and scale>0 then
+					          local src = face.lightofs + i*w*h
+                    sample = sample + scale * src[idx]
+                  end
+                end
+                -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]
+                lightmap[x+y*w]=mid(63-flr(sample/4),0,63)
+              end
+            end
+            -- mix with texture map
+            local tw,th=texture.width,texture.height
+            local img=ffi.new("unsigned char[?]", face.width*face.height)
+            for y=0,face.height-1 do
+              for x=0,face.width-1 do
+                -- local s,t=(w*x)/face.width,(h*y)/face.height
+                local s,t=x/16,y/16
+                local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
+                local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
+                s=s%1
+                t=t%1
+                -- todo: cache lightmaps when needed
+                --print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+                local a=lightmap[s0t0] * (1-s) + lightmap[s1t0] * s
+                local b=lightmap[s0t1] * (1-s) + lightmap[s1t1] * s
+                local lexel = a*(1-t) + b*t
+                -- img[x+y*(w*16)]=colormap.ptr[8 + flr(lightmap[s0t0]*256)]--ptr[(x-face.umin)%tw+((y-face.vmin)%th)*tw]  -- colormap.ptr[8 + flr(lightmap[s0t0]*256)]
+                local tx,ty=(x+face.umin)%tw,(y+face.vmin)%th
+                img[x+y*face.width]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
+              end
+            end
+            ptr = img
+          end
+          t.ptr=ptr
+          return ptr
+        end
+      })
+      return cached_tex.mips[key]
     end
 
     local function drawModel(cam,ent,textures,verts,leaves,lstart,lend)
@@ -415,8 +480,13 @@ local BSPRenderer=function(world,rasterizer)
                         clipcode=clipcode + band(code,2)
                         -- compute uvs
                         local x,y,z,w=v[1],v[2],v[3],vbo[a+VBO_W]
-                        vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
-                        vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
+                        if face.lightofs then
+                          vbo[a+VBO_U] = (x*s[0]+y*s[1]+z*s[2]+s_offset-face.umin)
+                          vbo[a+VBO_V] = (x*t[0]+y*t[1]+z*t[2]+t_offset-face.vmin)
+                        else
+                          vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
+                          vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
+                        end
                         if w>maxw then
                           maxw=w
                         end
@@ -448,7 +518,8 @@ local BSPRenderer=function(world,rasterizer)
           if not cam.ready then
               return
           end
-
+          -- update active light styles
+          _activeLights = lights:get(rasterizer.frame)
 
           -- refresh visible set
           local world_entity = world.entities[1]

@@ -282,6 +282,7 @@ local ModelReader = function(pak)
                 plane=5*f.planenum + plane_offset       
             }
 
+            local lightmap_scale = 16
             local face_verts = {}
             for i=0,f.numedges-1 do
                 local edge_id = bsp.surfedges[f.firstedge + i]
@@ -306,7 +307,6 @@ local ModelReader = function(pak)
 
                 -- light info?
                 if f.lightofs~=-1 then
-                    local lightmap_scale = 16
                     local u_min=32000
                     local u_max=-32000
                     local v_min=32000
@@ -320,16 +320,20 @@ local ModelReader = function(pak)
                         u_max=max(u_max,u)
                         v_max=max(v_max,v)
                     end
+                    --local s=u_min.." > "..u_max.." x "..v_min.." > "..v_max.." = "..flr(u_max-u_min).." x "..flr(v_max-v_min)
                     face.umin = u_min
-                    face.vmin = v_min
+                    face.vmin = v_min                    
+                    face.width = flr(u_max-u_min)
+                    face.height = flr(v_max-v_min)
                     u_min=flr(u_min / lightmap_scale)
                     v_min=flr(v_min / lightmap_scale)
                     u_max=ceil(u_max / lightmap_scale)
                     v_max=ceil(v_max / lightmap_scale)
-                    
                     -- lightmap size
-                    face.width = u_max-u_min+1
-                    face.height = v_max-v_min+1 
+                    face.lightwidth = u_max-u_min+1
+                    face.lightheight = v_max-v_min+1 
+                    --printh(s.." lightmap: "..face.lightwidth.." x "..face.lightheight)
+
                     face.lightofs = bsp.lightmaps[f.lightofs]
                 end
             end

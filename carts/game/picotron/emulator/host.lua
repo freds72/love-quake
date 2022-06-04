@@ -82,6 +82,8 @@ end
 mmap=function(name,layout)
     -- delegate to main thread
     local data,w,h=unpack(channels:wait({"load",name}))
+    -- 1d assets
+    h=h or 1
     local ptr = data:getFFIPointer()
     return {_data=data,size=w*h,ptr=layout and ffi.cast(layout.."*",ptr) or ptr,width=w,height=h}
 end
@@ -159,7 +161,7 @@ flip=function()
     _frame = _frame + 1
 end
 pset=function(x,y,c)
-    vid_ptr[flr(x)+480*flr(y)]=flr(c)
+    vid_ptr[flr(x)+480*flr(y)]=flr(c)%256
 end
 blend=function(colors,row,screen)
     row = row or 0

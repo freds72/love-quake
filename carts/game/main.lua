@@ -147,7 +147,7 @@ function love.run()
                 else
                     print("Loading asset: "..a)
                     local data = love.filesystem.newFileData(a)
-                   channels:response({data, data:setSize()})
+                    channels:response({data, data:getSize()})
                 end
             elseif name=="print" then
                 -- a: text
