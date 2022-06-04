@@ -362,9 +362,6 @@ local BSPRenderer=function(world,rasterizer)
     -- todo: bounded queue
     local _textureCache={}
     local function makeTextureProxy(textures,ent,face,mip)
-      -- test
-      mip = 0
-      
       -- create texture key
       local texture = textures[face.texinfo.miptex]                
       local key=mip
@@ -397,10 +394,11 @@ local BSPRenderer=function(world,rasterizer)
       end
       
       local texscale=shl(1,mip)
+      local imgw,imgh=(face.width and face.width or texture.width)/texscale,(face.height and face.height or texture.height)/texscale
       cached_tex.mips[key] = setmetatable({
         scale=texscale,
-        width=(face.width and face.width or texture.width)/texscale,
-        height=(face.height and face.height or texture.height)/texscale        
+        width=imgw,
+        height=imgh     
       },{
         __index=function(t,k)
           local ptr=texture.mips[mip+1] 
@@ -423,12 +421,12 @@ local BSPRenderer=function(world,rasterizer)
               end
             end
             -- mix with texture map
-            local tw,th=texture.width,texture.height
-            local img=ffi.new("unsigned char[?]", face.width*face.height)
-            for y=0,face.height-1 do
-              for x=0,face.width-1 do
-                -- local s,t=(w*x)/face.width,(h*y)/face.height
-                local s,t=x/16,y/16
+            local tw,th=texture.width/texscale,texture.height/texscale
+            local img=ffi.new("unsigned char[?]", imgw*imgh)
+            for y=0,imgh-1 do
+              for x=0,imgw-1 do
+                --local s,t=(w*x)/imgw,(h*y)/imgh
+                local s,t=texscale*x/16,texscale*y/16
                 local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
                 local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
                 s=s%1
@@ -439,8 +437,8 @@ local BSPRenderer=function(world,rasterizer)
                 local b=lightmap[s0t1] * (1-s) + lightmap[s1t1] * s
                 local lexel = a*(1-t) + b*t
                 -- img[x+y*(w*16)]=colormap.ptr[8 + flr(lightmap[s0t0]*256)]--ptr[(x-face.umin)%tw+((y-face.vmin)%th)*tw]  -- colormap.ptr[8 + flr(lightmap[s0t0]*256)]
-                local tx,ty=(x+face.umin)%tw,(y+face.vmin)%th
-                img[x+y*face.width]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
+                local tx,ty=(x+face.umin/texscale)%tw,(y+face.vmin/texscale)%th
+                img[x+y*imgw]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
               end
             end
             ptr = img
