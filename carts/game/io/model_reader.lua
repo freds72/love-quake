@@ -323,11 +323,8 @@ local ModelReader = function(pak)
                 --local s=u_min.." > "..u_max.." x "..v_min.." > "..v_max.." = "..flr(u_max-u_min).." x "..flr(v_max-v_min)
                 face.umin = u_min
                 face.vmin = v_min                    
-                face.width = flr(u_max-u_min)
-                face.height = flr(v_max-v_min)
-                if face.width%2~=0 or face.height%2~=0 then
-                    logging.error("Face size must be a multiple of 2: "..face.width.." x"..face.height)
-                end
+                face.width = ceil(u_max)-flr(u_min)
+                face.height = ceil(v_max)-flr(v_min)
                 u_min=flr(u_min / lightmap_scale)
                 v_min=flr(v_min / lightmap_scale)
                 u_max=ceil(u_max / lightmap_scale)
@@ -683,10 +680,14 @@ local ModelReader = function(pak)
             ptr = ptr + ffi.sizeof("daliasskintype_t")
             if skintype == 0 then            
                 add(mod.skins, {
+                    -- single mip
+                    scale = 1,
                     width = header.skinwidth,
                     height = header.skinheight,
+                    umin=0,
+                    vmin=0,
                     -- single mips
-                    mips = {ptr}
+                    ptr=ptr
                 })
             else
                 logging.critical("not supported - skin type: "..skintype)

@@ -378,12 +378,7 @@ local BSPRenderer=function(world,rasterizer)
                     f_cache[face]=true
                     local vertref,texinfo,outcode,clipcode,maxw=face.verts,face.texinfo,0xffff,0,-math.huge
                     local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset   
-                    local texture=textures[texinfo.miptex]   
-                    -- non moving textures are shifted in place
-                    if not texture.swirl then
-                      s_offset = s_offset-face.umin
-                      t_offset = t_offset-face.vmin
-                    end
+                    local texture=textures[texinfo.miptex]
                     for k=1,#vertref do
                         local v=verts[vertref[k]]
                         local a=v_cache:transform(v)
@@ -408,7 +403,7 @@ local BSPRenderer=function(world,rasterizer)
                         end
                         if n>2 then
                           -- texture mip
-                          local mip=3-mid(flr(2048*maxw),0,3)
+                          local mip=3-mid(flr(1536*maxw),0,3)
                           rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(textures,ent,face,mip))      
                         end
                     end
@@ -417,6 +412,62 @@ local BSPRenderer=function(world,rasterizer)
         end
     end
   
+    local function drawAliasModel(cam,ent,model,skin,frame_name)      
+      -- check bounding box
+      if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
+        return 
+      end
+
+      local skin = model.skins[skin]
+      local frame = model.frames[frame_name]
+      local uvs = model.uvs
+      local faces = model.faces
+      -- positions + normals are in the frame
+      local verts, normals = frame.verts, frame.normals
+      
+      v_cache:init(m_x_m(cam.m,ent.m))
+      local origin=ent.origin
+      if ent.offset then
+        -- visual offset?
+        origin = v_add(origin,ent.offset)
+      end
+      local cam_pos=v_add(cam.origin,origin,-1)
+
+      -- transform light vector into model space
+      local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
+      local baselight={1}
+
+      for i=1,#faces,4 do    
+        -- read vertex references
+        local is_front,v0,v1,v2=faces[i],faces[i+1],faces[i+2],faces[i+3]
+        local a0,a1,a2=v_cache:transform(verts[v0]),v_cache:transform(verts[v1]),v_cache:transform(verts[v2])
+        local outcode=band(0xffff,band(band(vbo[a0+VBO_OUTCODE],vbo[a1+VBO_OUTCODE]),vbo[a2+VBO_OUTCODE]))
+        local clipcode=band(vbo[a0+VBO_OUTCODE],2)+band(vbo[a1+VBO_OUTCODE],2)+band(vbo[a2+VBO_OUTCODE],2)
+        local uv0,uv1,uv2=uvs[v0],uvs[v1],uvs[v2]
+        vbo[a0 + VBO_U] = uv0.u + ((not is_front and uv0.onseam) and (skin.width / 2) or 0)
+        vbo[a0 + VBO_V] = uv0.v     
+        vbo[a1 + VBO_U] = uv1.u + ((not is_front and uv1.onseam) and (skin.width / 2) or 0)
+        vbo[a1 + VBO_V] = uv1.v     
+        vbo[a2 + VBO_U] = uv2.u + ((not is_front and uv2.onseam) and (skin.width / 2) or 0)
+        vbo[a2 + VBO_V] = uv2.v     
+        local poly={a0,a1,a2}
+
+        if outcode==0 then
+          -- ccw?
+          local ax,ay=vbo[a1 + VBO_X]-vbo[a0 + VBO_X],vbo[a1 + VBO_Y]-vbo[a0 + VBO_Y]
+          local bx,by=vbo[a1 + VBO_X]-vbo[a2 + VBO_X],vbo[a1 + VBO_Y]-vbo[a2 + VBO_Y]
+          if ax*by - ay*bx<=0 then
+            local n=3
+            if clipcode>0 then
+              poly,n = z_poly_clip(poly,n)
+            end
+            if n>2 then
+              rasterizer.addSurface(poly,n,skin)    
+            end
+          end
+        end
+      end
+    end      
     
     return {
       beginFrame=function()
@@ -449,7 +500,12 @@ local BSPRenderer=function(world,rasterizer)
               local resources = ent.resources or resources
               drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
             else
-              -- todo
+              drawAliasModel(
+                cam,
+                ent, 
+                m,
+                ent.skin,
+                ent.frame)        
             end
           end            
       end

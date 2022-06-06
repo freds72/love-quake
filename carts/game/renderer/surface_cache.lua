@@ -23,6 +23,8 @@ local SurfaceCache=function(rasterizer)
             scale=scale,
             width=w,
             height=h,
+            umin=flr(face.umin/scale),
+            vmin=flr(face.vmin/scale),
             ptr=ffi.new("unsigned char[?]",w*h)
           }
         end
@@ -49,7 +51,7 @@ local SurfaceCache=function(rasterizer)
           local tv=v/th
           for u=0,tw-1 do
             local tu=u/tw
-              -- 2* to make sure it rolls over the whole texture space
+            -- 2* to make sure it rolls over the whole texture space
             local s,t=flr((tu + 0.1*sin(t+2*tv))*tw)%tw,flr((tv + 0.1*sin(t+2*tu))*th)%th
             dst[u] = src[s + t*tw]
           end          
@@ -106,13 +108,16 @@ local SurfaceCache=function(rasterizer)
         end
         
         local texscale=shl(1,mip)
-        local imgw,imgh=max(face.width/texscale,1),max(face.height/texscale,1)
+        -- round up odd sized faces
+        local imgw,imgh=max(flr(face.width/texscale+0.5),1),max(flr(face.height/texscale+0.5),1)
         cached_tex.mips[key] = setmetatable({
             scale=texscale,
             width=imgw,
-            height=imgh
+            height=imgh,
+            umin=flr(face.umin/texscale),
+            vmin=flr(face.vmin/texscale)
         },{
-            __index=function(t,k)
+          __index=function(t,k)
             -- compute lightmap
             local w,h=face.lightwidth,face.lightheight  
             if face.lightofs then
@@ -141,6 +146,7 @@ local SurfaceCache=function(rasterizer)
             -- mix with texture map
             local ptr=texture.mips[mip+1] 
             local tw,th=texture.width/texscale,texture.height/texscale
+            -- texture offset to be aligned with lightmap
             local xmin,ymin=flr(face.umin/texscale),flr(face.vmin/texscale)
             local img=ffi.new("unsigned char[?]", imgw*imgh)
             -- backup pointer
@@ -159,6 +165,7 @@ local SurfaceCache=function(rasterizer)
                   local b=lightmap[s0t1] * (1-sfrac) + lightmap[s1t1] * sfrac
                   local lexel = a*(1-tfrac) + b*tfrac
                   local tx,ty=(x+xmin)%tw,(y+ymin)%th
+                  --dst[x]=8+8*mip
                   dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
                   --dst[x]=colormap.ptr[15 + flr(lexel)*256]
                 end

@@ -190,7 +190,7 @@ local WireframeRasterizer={
         local VBO_V = 8
     
         local tline=tline3d   
-        local mipscale=texture.scale     
+        local mipscale,umin,vmin=texture.scale,texture.umin,texture.vmin
         local miny,maxy,mini=math.huge,-math.huge
         -- find extent
         for i=1,np do
@@ -223,12 +223,12 @@ local WireframeRasterizer={
                 ly=flr(y1)
                 lx=vbo[v0 + VBO_X]
                 lw=vbo[v0 + VBO_W]
-                lu=vbo[v0 + VBO_U]*lw/mipscale
-                lv=vbo[v0 + VBO_V]*lw/mipscale
+                lu=(vbo[v0 + VBO_U]/mipscale - umin) * lw
+                lv=(vbo[v0 + VBO_V]/mipscale - vmin) * lw
                 ldx=(vbo[v1 + VBO_X]-lx)/dy
                 local w1=vbo[v1 + VBO_W]
-                ldu=(vbo[v1 + VBO_U]/mipscale * w1 - lu)/dy
-                ldv=(vbo[v1 + VBO_V]/mipscale * w1 - lv)/dy
+                ldu=((vbo[v1 + VBO_U]/mipscale - umin) * w1 - lu)/dy
+                ldv=((vbo[v1 + VBO_V]/mipscale - vmin) * w1 - lv)/dy
                 ldw=(w1-lw)/dy
                 --sub-pixel correction
                 local cy=y-y0
@@ -247,12 +247,12 @@ local WireframeRasterizer={
                 ry=flr(y1)
                 rx=vbo[v0 + VBO_X]
                 rw=vbo[v0 + VBO_W]
-                ru=vbo[v0 + VBO_U]*rw/mipscale
-                rv=vbo[v0 + VBO_V]*rw/mipscale
+                ru=(vbo[v0 + VBO_U]/mipscale - umin)*rw 
+                rv=(vbo[v0 + VBO_V]/mipscale - vmin)*rw 
                 rdx=(vbo[v1 + VBO_X]-rx)/dy
                 local w1=vbo[v1 + VBO_W]
-                rdu=(vbo[v1 + VBO_U]*w1/mipscale - ru)/dy
-                rdv=(vbo[v1 + VBO_V]*w1/mipscale - rv)/dy
+                rdu=((vbo[v1 + VBO_U]/mipscale - umin) * w1 - ru)/dy
+                rdv=((vbo[v1 + VBO_V]/mipscale - vmin) * w1 - rv)/dy
                 rdw=(w1-rw)/dy
                 --sub-pixel correction
                 local cy=y-y0
