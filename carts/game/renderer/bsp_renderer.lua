@@ -363,9 +363,61 @@ local BSPRenderer=function(world,rasterizer)
 
     -- todo: bounded queue
     local _textureCache={}
+    local function makeSwirlTextureProxy(texture,face,mip)
+      local cache = _textureCache[texture]
+      if not cache then
+        -- create all entries
+        local mips={}
+        for i=0,3 do
+          local scale=shl(1,i)
+          local w,h=texture.width/scale,texture.height/scale
+          mips[i]={
+            scale=scale,
+            width=w,
+            height=h,
+            ptr=ffi.new("unsigned char[?]",w*h)
+          }
+        end
+        cache={
+          mips=mips,
+          -- frame time per mip
+          frame={},
+        }
+        _textureCache[texture] = cache
+      end
+      local t=rasterizer.frame
+      -- refresh image?
+      if cache.frame[mip]~=t then
+        -- update "snapshot" time
+        cache.frame[mip]=t
+  
+        -- see: https://fdossena.com/?p=quakeFluids/i.md
+        local texscale=shl(1,mip)
+        local tw,th=texture.width/texscale,texture.height/texscale  
+        local dst=cache.mips[mip].ptr
+        local src=texture.mips[mip+1]
+        t=time()*0.8
+        for u=0,tw-1 do
+          local tu=u/tw
+          for v=0,th-1 do
+            local tv=v/th
+            -- 2* to make sure it rolls over the whole texture space
+            local s,t=flr((tu + 0.1*math.sin(t+(2*3.1415*tv)))*tw)%tw,flr((tv + 0.1*math.sin(t+(2*3.1415*tu)))*th)%th
+            dst[u+v*tw] = src[s + t*tw]
+          end          
+        end
+      end
+      return cache.mips[mip]
+    end
+
     local function makeTextureProxy(textures,ent,face,mip)
       -- create texture key
-      local texture = textures[face.texinfo.miptex]                
+      local texture = textures[face.texinfo.miptex]  
+      -- swirling texture? special handling
+      if texture.swirl then
+        return makeSwirlTextureProxy(texture,face,mip)
+      end
+
       local key=mip
       if texture.sequence then
         local frames = ent.sequence==2 and texture.sequence.alt or texture.sequence.main
@@ -402,7 +454,7 @@ local BSPRenderer=function(world,rasterizer)
       cached_tex.mips[key] = setmetatable({
         scale=texscale,
         width=imgw,
-        height=imgh     
+        height=imgh
       },{
         __index=function(t,k)
           printh(time().." - generating shaded face "..imgw.." x "..imgh)
@@ -410,6 +462,7 @@ local BSPRenderer=function(world,rasterizer)
           local w,h=face.lightwidth,face.lightheight  
           assert(w<32 and h<32,"Lightmap exceeds max size: "..w.." x "..h)       
           if face.lightofs then
+            -- backup pointer
             local lm=lightmap
             for y=0,h-1 do
               for x=0,w-1 do
@@ -427,14 +480,15 @@ local BSPRenderer=function(world,rasterizer)
               lm = lm + w
             end
           else
-            local scale = _activeLights[face.lightstyles[1]] or 0
+            local scale = texture.bright and 32 or (_activeLights[face.lightstyles[1]] or 0)
             ffi.fill(lightmap,w*h,mid(63-flr(scale),0,63))
           end
           -- mix with texture map
           local ptr=texture.mips[mip+1] 
           local tw,th=texture.width/texscale,texture.height/texscale
           local img=ffi.new("unsigned char[?]", imgw*imgh)
-          local _img = img
+          -- backup pointer
+          local dst = img
           for y=0,imgh-1 do
             for x=0,imgw-1 do
               --local s,t=(w*x)/imgw,(h*y)/imgh
@@ -450,13 +504,13 @@ local BSPRenderer=function(world,rasterizer)
               local lexel = a*(1-t) + b*t
               -- img[x+y*(w*16)]=colormap.ptr[8 + flr(lightmap[s0t0]*256)]--ptr[(x-face.umin)%tw+((y-face.vmin)%th)*tw]  -- colormap.ptr[8 + flr(lightmap[s0t0]*256)]
               local tx,ty=(x+flr(face.umin/texscale))%tw,(y+flr(face.vmin/texscale))%th
-              img[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
+              dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
             end
-            img = img + imgw
+            dst = dst + imgw
           end
 
-          t.ptr=_img
-          return _img
+          t.ptr=img
+          return img
         end
       })
       return cached_tex.mips[key]
@@ -481,7 +535,13 @@ local BSPRenderer=function(world,rasterizer)
                     -- mark visited
                     f_cache[face]=true
                     local vertref,texinfo,outcode,clipcode,maxw=face.verts,face.texinfo,0xffff,0,-math.huge
-                    local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset          
+                    local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset   
+                    local texture=textures[texinfo.miptex]   
+                    -- non moving textures are shifted in place
+                    if not texture.swirl then
+                      s_offset = s_offset-face.umin
+                      t_offset = t_offset-face.vmin
+                    end
                     for k=1,#vertref do
                         local v=verts[vertref[k]]
                         local a=v_cache:transform(v)
@@ -490,8 +550,8 @@ local BSPRenderer=function(world,rasterizer)
                         clipcode=clipcode + band(code,2)
                         -- compute uvs
                         local x,y,z,w=v[1],v[2],v[3],vbo[a+VBO_W]
-                        vbo[a+VBO_U] = (x*s[0]+y*s[1]+z*s[2]+s_offset-face.umin)
-                        vbo[a+VBO_V] = (x*t[0]+y*t[1]+z*t[2]+t_offset-face.vmin)
+                        vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
+                        vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
 
                         if w>maxw then
                           maxw=w
