@@ -16,7 +16,7 @@ function _init()
     _colormap=mmap("gfx/colormap.png")
     blend(_colormap)
 
-    local menuState = require("screens.menu")
+    local menuState = require("screens.play")
     local arg1, arg2 = args()
     stateSystem:next(menuState, gameConf, arg1, arg2)
 end
