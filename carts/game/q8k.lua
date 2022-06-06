@@ -34,7 +34,9 @@ function _draw()
         
     -- something to display?
     rasterizer:beginFrame()
+    renderer:beginFrame()
     renderer:draw(camera)
+    renderer:endFrame()
     rasterizer:endFrame()
 
     stateSystem:draw()
