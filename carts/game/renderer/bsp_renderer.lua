@@ -396,15 +396,16 @@ local BSPRenderer=function(world,rasterizer)
         local tw,th=texture.width/texscale,texture.height/texscale  
         local dst=cache.mips[mip].ptr
         local src=texture.mips[mip+1]
-        t=time()*0.8
-        for u=0,tw-1 do
-          local tu=u/tw
-          for v=0,th-1 do
-            local tv=v/th
-            -- 2* to make sure it rolls over the whole texture space
-            local s,t=flr((tu + 0.1*math.sin(t+(2*3.1415*tv)))*tw)%tw,flr((tv + 0.1*math.sin(t+(2*3.1415*tu)))*th)%th
-            dst[u+v*tw] = src[s + t*tw]
+        t=time()*0.2
+        for v=0,th-1 do
+          local tv=v/th
+          for u=0,tw-1 do
+            local tu=u/tw
+              -- 2* to make sure it rolls over the whole texture space
+            local s,t=flr((tu + 0.1*sin(t+2*tv))*tw)%tw,flr((tv + 0.1*sin(t+2*tu))*th)%th
+            dst[u] = src[s + t*tw]
           end          
+          dst = dst + tw
         end
       end
       return cache.mips[mip]
@@ -457,10 +458,8 @@ local BSPRenderer=function(world,rasterizer)
         height=imgh
       },{
         __index=function(t,k)
-          printh(time().." - generating shaded face "..imgw.." x "..imgh)
           -- compute lightmap
           local w,h=face.lightwidth,face.lightheight  
-          assert(w<32 and h<32,"Lightmap exceeds max size: "..w.." x "..h)       
           if face.lightofs then
             -- backup pointer
             local lm=lightmap
