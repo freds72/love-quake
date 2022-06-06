@@ -14,7 +14,7 @@ local logs = {
     debug="DEBUG",
     info="INFO",
     warn="WARNING",
-    err="ERROR",
+    error="ERROR",
     critical="CRITICAL"
 }
 

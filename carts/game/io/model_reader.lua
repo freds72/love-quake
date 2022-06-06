@@ -305,35 +305,38 @@ local ModelReader = function(pak)
                 end
                 face.lightstyles = lightstyles
 
-                -- light info?
-                if f.lightofs~=-1 then
-                    local u_min=32000
-                    local u_max=-32000
-                    local v_min=32000
-                    local v_max=-32000
-                    for _,vi in pairs(face_verts) do
-                        local v=verts[vi]
-                        local u=v_dot(v,v_rebase(tex.s)) + tex.s_offset
-                        local v=v_dot(v,v_rebase(tex.t)) + tex.t_offset
-                        u_min=min(u_min,u)
-                        v_min=min(v_min,v)
-                        u_max=max(u_max,u)
-                        v_max=max(v_max,v)
-                    end
-                    --local s=u_min.." > "..u_max.." x "..v_min.." > "..v_max.." = "..flr(u_max-u_min).." x "..flr(v_max-v_min)
-                    face.umin = u_min
-                    face.vmin = v_min                    
-                    face.width = flr(u_max-u_min)
-                    face.height = flr(v_max-v_min)
-                    u_min=flr(u_min / lightmap_scale)
-                    v_min=flr(v_min / lightmap_scale)
-                    u_max=ceil(u_max / lightmap_scale)
-                    v_max=ceil(v_max / lightmap_scale)
-                    -- lightmap size
-                    face.lightwidth = u_max-u_min+1
-                    face.lightheight = v_max-v_min+1 
-                    --printh(s.." lightmap: "..face.lightwidth.." x "..face.lightheight)
+                -- lightmap size
+                -- note: needed for all surface to support dynamic (moving) lights
+                local u_min=32000
+                local u_max=-32000
+                local v_min=32000
+                local v_max=-32000
+                for _,vi in pairs(face_verts) do
+                    local v=verts[vi]
+                    local u=v_dot(v,v_rebase(tex.s)) + tex.s_offset
+                    local v=v_dot(v,v_rebase(tex.t)) + tex.t_offset
+                    u_min=min(u_min,u)
+                    v_min=min(v_min,v)
+                    u_max=max(u_max,u)
+                    v_max=max(v_max,v)
+                end
+                --local s=u_min.." > "..u_max.." x "..v_min.." > "..v_max.." = "..flr(u_max-u_min).." x "..flr(v_max-v_min)
+                face.umin = u_min
+                face.vmin = v_min                    
+                face.width = flr(u_max-u_min)
+                face.height = flr(v_max-v_min)
+                if face.width%2~=0 or face.height%2~=0 then
+                    logging.error("Face size must be a multiple of 2: "..face.width.." x"..face.height)
+                end
+                u_min=flr(u_min / lightmap_scale)
+                v_min=flr(v_min / lightmap_scale)
+                u_max=ceil(u_max / lightmap_scale)
+                v_max=ceil(v_max / lightmap_scale)
+                -- lightmap size
+                face.lightwidth = u_max-u_min+1
+                face.lightheight = v_max-v_min+1 
 
+                if f.lightofs~=-1 then
                     face.lightofs = bsp.lightmaps[f.lightofs]
                 end
             end

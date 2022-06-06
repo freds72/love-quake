@@ -29,6 +29,8 @@ local BSPRenderer=function(world,rasterizer)
   -- active lights
   local _activeLights
   local colormap=mmap("gfx/colormap.lmp","uint8_t")
+  -- allocate a big lightmap - to be reused
+  local lightmap = ffi.new("unsigned char[?]", 32*32)
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
@@ -365,8 +367,10 @@ local BSPRenderer=function(world,rasterizer)
       -- create texture key
       local texture = textures[face.texinfo.miptex]                
       local key=mip
-      if texture.sequence and ent.sequence then
-        key=bor(key,ent.sequence*4)
+      if texture.sequence then
+        local frames = ent.sequence==2 and texture.sequence.alt or texture.sequence.main
+        local frame = flr(rasterizer.frame/15) % (#frames+1)        
+        key=bor(key,frame*4)
       end
       for i=0,3 do
         local style=_activeLights[face.lightstyles[i+1]]
@@ -394,57 +398,65 @@ local BSPRenderer=function(world,rasterizer)
       end
       
       local texscale=shl(1,mip)
-      local imgw,imgh=(face.width and face.width or texture.width)/texscale,(face.height and face.height or texture.height)/texscale
+      local imgw,imgh=max(face.width/texscale,1),max(face.height/texscale,1)
       cached_tex.mips[key] = setmetatable({
         scale=texscale,
         width=imgw,
         height=imgh     
       },{
         __index=function(t,k)
-          local ptr=texture.mips[mip+1] 
+          printh(time().." - generating shaded face "..imgw.." x "..imgh)
+          -- compute lightmap
+          local w,h=face.lightwidth,face.lightheight  
+          assert(w<32 and h<32,"Lightmap exceeds max size: "..w.." x "..h)       
           if face.lightofs then
-            -- compute lightmap
-            local w,h=face.lightwidth,face.lightheight
-            local lightmap = ffi.new("unsigned char[?]", w*h)
+            local lm=lightmap
             for y=0,h-1 do
               for x=0,w-1 do
                 local sample,idx=0,x + y*w
                 for i=0,3 do
                   local scale = _activeLights[face.lightstyles[i+1]]
-				          if scale and scale>0 then
-					          local src = face.lightofs + i*w*h
+                  if scale and scale>0 then
+                    local src = face.lightofs + i*w*h
                     sample = sample + scale * src[idx]
                   end
                 end
                 -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]
-                lightmap[x+y*w]=mid(63-flr(sample/4),0,63)
+                lm[x]=mid(63-flr(sample/4),0,63)
               end
+              lm = lm + w
             end
-            -- mix with texture map
-            local tw,th=texture.width/texscale,texture.height/texscale
-            local img=ffi.new("unsigned char[?]", imgw*imgh)
-            for y=0,imgh-1 do
-              for x=0,imgw-1 do
-                --local s,t=(w*x)/imgw,(h*y)/imgh
-                local s,t=texscale*x/16,texscale*y/16
-                local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
-                local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
-                s=s%1
-                t=t%1
-                -- todo: cache lightmaps when needed
-                --print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-                local a=lightmap[s0t0] * (1-s) + lightmap[s1t0] * s
-                local b=lightmap[s0t1] * (1-s) + lightmap[s1t1] * s
-                local lexel = a*(1-t) + b*t
-                -- img[x+y*(w*16)]=colormap.ptr[8 + flr(lightmap[s0t0]*256)]--ptr[(x-face.umin)%tw+((y-face.vmin)%th)*tw]  -- colormap.ptr[8 + flr(lightmap[s0t0]*256)]
-                local tx,ty=(x+face.umin/texscale)%tw,(y+face.vmin/texscale)%th
-                img[x+y*imgw]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
-              end
-            end
-            ptr = img
+          else
+            local scale = _activeLights[face.lightstyles[1]] or 0
+            ffi.fill(lightmap,w*h,mid(63-flr(scale),0,63))
           end
-          t.ptr=ptr
-          return ptr
+          -- mix with texture map
+          local ptr=texture.mips[mip+1] 
+          local tw,th=texture.width/texscale,texture.height/texscale
+          local img=ffi.new("unsigned char[?]", imgw*imgh)
+          local _img = img
+          for y=0,imgh-1 do
+            for x=0,imgw-1 do
+              --local s,t=(w*x)/imgw,(h*y)/imgh
+              local s,t=texscale*x/16,texscale*y/16
+              local s0,s1,t0,t1=flr(s),ceil(s),flr(t),ceil(t)
+              local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
+              s=s%1
+              t=t%1
+              -- todo: cache lightmaps when needed
+              --print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+              local a=lightmap[s0t0] * (1-s) + lightmap[s1t0] * s
+              local b=lightmap[s0t1] * (1-s) + lightmap[s1t1] * s
+              local lexel = a*(1-t) + b*t
+              -- img[x+y*(w*16)]=colormap.ptr[8 + flr(lightmap[s0t0]*256)]--ptr[(x-face.umin)%tw+((y-face.vmin)%th)*tw]  -- colormap.ptr[8 + flr(lightmap[s0t0]*256)]
+              local tx,ty=(x+flr(face.umin/texscale))%tw,(y+flr(face.vmin/texscale))%th
+              img[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
+            end
+            img = img + imgw
+          end
+
+          t.ptr=_img
+          return _img
         end
       })
       return cached_tex.mips[key]
@@ -478,13 +490,9 @@ local BSPRenderer=function(world,rasterizer)
                         clipcode=clipcode + band(code,2)
                         -- compute uvs
                         local x,y,z,w=v[1],v[2],v[3],vbo[a+VBO_W]
-                        if face.lightofs then
-                          vbo[a+VBO_U] = (x*s[0]+y*s[1]+z*s[2]+s_offset-face.umin)
-                          vbo[a+VBO_V] = (x*t[0]+y*t[1]+z*t[2]+t_offset-face.vmin)
-                        else
-                          vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
-                          vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
-                        end
+                        vbo[a+VBO_U] = (x*s[0]+y*s[1]+z*s[2]+s_offset-face.umin)
+                        vbo[a+VBO_V] = (x*t[0]+y*t[1]+z*t[2]+t_offset-face.vmin)
+
                         if w>maxw then
                           maxw=w
                         end
