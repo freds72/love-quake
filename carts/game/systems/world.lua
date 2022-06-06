@@ -25,7 +25,7 @@ function WorldSystem:load(level_name)
     -- 2d/3d collision map
     collisionMap=require("collision_map")(self)
 
-    -- "private" array of entities to bind after level load
+    -- live entities
     self.entities=require("entities")(active_entities)
     -- context
     local api=require("progs_api")(modelReader, level.model, self, collisionMap)
@@ -176,6 +176,16 @@ function WorldSystem:connect()
             return ent
         end
     end
+end
+
+function WorldSystem:findClass(classname)
+    local ents={}
+    for _,kv in pairs(self.level.entities) do
+        if kv.classname==classname then
+            add(ents,kv)
+        end
+    end
+    return ents
 end
 
 return WorldSystem

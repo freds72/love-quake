@@ -337,7 +337,7 @@ local ModelReader = function(pak)
                 local lh=v_max-v_min+1 
                 face.lightwidth = lw
                 face.lightheight = lh
-                assert(lw<32 and lh<32,"Lightmap exceeds max 32x32 size: "..lw.." x "..lh)       
+                assert(lw<64 and lh<64,"Lightmap exceeds max 64x64 size: "..lw.." x "..lh)       
 
                 if f.lightofs~=-1 then
                     face.lightofs = bsp.lightmaps[f.lightofs]

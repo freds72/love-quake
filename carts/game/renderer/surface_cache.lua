@@ -4,7 +4,7 @@ local lights=require("systems.lightstyles")
 
 local SurfaceCache=function(rasterizer)
     -- allocate a big lightmap - to be reused
-    local lightmap = ffi.new("unsigned char[?]", 32*32)
+    local lightmap = ffi.new("unsigned char[?]", 64*64)
     -- from conf?
     local colormap=mmap("gfx/colormap.lmp","uint8_t")
     local activeLights
