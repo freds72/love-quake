@@ -160,6 +160,10 @@ flip=function()
     this_time = channels:wait({"flip",fb,activeColormap._data, activeColormapRow * activeColormap.width})
     _frame = _frame + 1
 end
+local _color=0
+color=function(c)
+    _color=c or 0
+end
 pset=function(x,y,c)
     vid_ptr[flr(x)+480*flr(y)]=flr(c)%256
 end
@@ -170,8 +174,13 @@ blend=function(colors,row,screen)
     activeColormapRow = row
 end
 -- note: only horiz lines are supported
-tline3d=function(src,x0,y0,x1,_,u,v,w,du,dv,dw)
-    local ptr,width,height=src.ptr,src.width,src.height
+local _texture
+-- set the active texture
+tput=function(src)    
+    _texture = src
+end
+tline3d=function(x0,y0,x1,_,u,v,w,du,dv,dw)
+    local ptr,width,height=_texture.ptr,_texture.width,_texture.height
     for x=x0+480*y0,x1+480*y0 do
         local uw,vw=u/w,v/w
         vid_ptr[x]=ptr[(flr(uw)%width)+width*(flr(vw)%height)]
@@ -181,7 +190,8 @@ tline3d=function(src,x0,y0,x1,_,u,v,w,du,dv,dw)
     end
 end
 line=function(x0,y0,x1,y1,c)   
-    c = flr(c)%activeColormap.width
+    c = flr(_color or c)%activeColormap.width
+    _color = c
     local dx,dy=x1-x0,y1-y0
     if abs(dx)>abs(dy) then
         if x0>x1 then

@@ -1,9 +1,10 @@
 -- programmatic contract between "programs" and the game engine
 local logging = require("engine.logging")
+local lightStyles = require("systems.lightstyles")
+local rampStyles = require("systems.rampstyles")
+local messages = require("systems.message")
+
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
-    local lightStyles = require("systems.lightstyles")
-    local rampStyles = require("systems.rampstyles")
-    local messages = require("systems.message")
     local precache_models={}
   
     return {
@@ -104,8 +105,8 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
         find=function(_,...)
           return world.entities:find(...)
         end,
-        spawn=function(self)
-          return world:spawn(ent)
+        spawn=function(_)
+          return world:spawn()
         end,
         remove=function(_,ent)
           -- mark entity for deletion

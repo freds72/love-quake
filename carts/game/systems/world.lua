@@ -47,7 +47,7 @@ function WorldSystem:load(level_name)
     self.loaded = true
 end
 
-function WorldSystem:spawn(ent)
+function WorldSystem:spawn()
     -- don't add new entities in this frame
     local ent={
         nodes={},
@@ -64,7 +64,6 @@ function WorldSystem:spawn(ent)
 end
 
 function WorldSystem:update()
-    local new_entities={}
     -- transfer new entities to active list     
     for k,ent in pairs(new_entities) do
         add(active_entities, ent)
@@ -88,7 +87,7 @@ function WorldSystem:update()
                 if ent.MOVETYPE_TOSS then
                     local move = collisionMap:fly(ent,ent.origin,v_scale(velocity,1/60))
                     ent.origin = move.pos          
-                    velocity[3] = velocity[3] - _globals.gravity_z/60          
+                    velocity[3] = velocity[3] - conf.gravity_z/60          
                     -- hit other entity?
                     if move.ent then
                         factory:call(ent,"touch",move.ent)

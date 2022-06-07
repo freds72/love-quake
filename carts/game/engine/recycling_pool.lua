@@ -1,10 +1,5 @@
+local logging = require("engine.logging")
 local recycling_pool=function(name,stride,size)
-    local logging = require("logging")
-    local ffi = require("ffi")
-    
-    -- p8 compat
-    local add,del=table.insert,table.remove
-
     size=size or 100
     local pool,free,cursor={},{},1
     local function reserve()

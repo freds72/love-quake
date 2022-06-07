@@ -1,10 +1,8 @@
-local particles=function(ramp_styles)
-    -- p8 compat
-    local add,del=table.insert,table.remove
-    local min,max,rnd,flr=math.min,math.max,math.random,math.floor
+local ramp_styles = require("systems.rampstyles")
+local ParticleSystem=function(rasterizer)
     -- components is the global registry of services
     local emitters={}
-    local pool = require("recycling_pool")("particles",9,2500)
+    local pool = require("engine.recycling_pool")("particles",9,2500)
     local active_particles = {}
     -- layout
     local VBO_X=0
@@ -55,7 +53,7 @@ local particles=function(ramp_styles)
             for emitter,owner in pairs(emitters) do
                 local next_pos=v_clone(owner.origin)
                 local params = emitter.params
-                local count = emitter.count + params.rate*dt                                
+                local count = emitter.count + params.rate*dt                            
                 if count>1 then  
                     local gravity = params.gravity or {0,0,0} 
                     local n = flr(count)
@@ -63,9 +61,9 @@ local particles=function(ramp_styles)
                         local pos=v_add(
                             v_lerp(emitter.origin,next_pos,i/n),
                             {
-                               lerp(params.mins[1],params.maxs[1],rnd()),
-                               lerp(params.mins[2],params.maxs[2],rnd()),
-                               lerp(params.mins[3],params.maxs[3],rnd())
+                                lerp(params.mins[1],params.maxs[1],rnd()),
+                                lerp(params.mins[2],params.maxs[2],rnd()),
+                                lerp(params.mins[3],params.maxs[3],rnd())
                             })
                         local ttl=lerp(params.ttl[1],params.ttl[2],rnd())                        
                         local p=pool:pop(
@@ -85,7 +83,7 @@ local particles=function(ramp_styles)
                 emitter.count = count
             end
         end,
-        render=function(self,cam)
+        draw=function(self,cam)
             for i=1,#active_particles do
                 local idx=active_particles[i]
                 local x,y,w=cam:project({
@@ -95,11 +93,11 @@ local particles=function(ramp_styles)
                 if w>0 then
                     local t=1-pool[idx + VBO_TTL]/pool[idx + VBO_MAXTTL]
                     -- ensure particles are always visible
-                    local r,ramp=max(0.5,w*128),ramp_styles[pool[idx + VBO_RAMP]]
-                    rectfill(x-r,y-r,x+r,y+r,w,ramp[min(flr(#ramp*t)+1,#ramp)])
+                    local r,ramp=max(1,w*128),ramp_styles:get(pool[idx + VBO_RAMP])
+                    rasterizer.addQuad(x-r,y-r,x+r,y+r-1,w,ramp[min(flr(#ramp*t)+1,#ramp)])
                 end
             end
         end
     }
 end
-return particles
+return ParticleSystem

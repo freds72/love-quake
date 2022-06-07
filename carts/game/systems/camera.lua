@@ -75,6 +75,11 @@ local CameraSystem=function(world)
     local activeCam
     return {
         ready=false,
+        project=function(self,pos)
+            pos=m_x_v(self.m,pos)
+            local w=1/pos[2]
+            return 480/2+270*pos[1]*w,270/2-270*pos[3]*w,w
+        end,
         update=function(self)
             if not world.loaded then
                 return

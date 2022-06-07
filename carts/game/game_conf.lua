@@ -1,4 +1,6 @@
 local GameConf={
+    -- physics
+    gravity_z = 800,
     -- temporary
     root_path="D:\\Games\\quake\\id1",
     start_level="start.bsp",    

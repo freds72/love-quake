@@ -23,7 +23,7 @@ local _testTexture = {width=4,height=4,ptr={
 
 
 -- span buffer
-local function spanfill(tex,x0,x1,y,u,v,w,du,dv,dw,fn)	
+local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
 	local _pool=_pool
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
@@ -34,7 +34,7 @@ local function spanfill(tex,x0,x1,y,u,v,w,du,dv,dw,fn)
 	local span,old=_spans[y]
 	-- empty scanline?
 	if not span then
-		fn(tex,x0,y,x1,y,u,v,w,du,dv,dw)
+		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		_spans[y]=_pool:pop5(x0,x1,w,dw,-1)
 		return
 	end
@@ -48,7 +48,7 @@ local function spanfill(tex,x0,x1,y,u,v,w,du,dv,dw,fn)
 				-- nnnn
 				--       xxxxxx	
 				-- fully visible
-				fn(tex,x0,y,x1,y,u,v,w,du,dv,dw)
+				fn(x0,y,x1,y,u,v,w,du,dv,dw)
 				local n=_pool:pop5(x0,x1,w,dw,span)
 				if old then
 					-- chain to previous
@@ -65,7 +65,7 @@ local function spanfill(tex,x0,x1,y,u,v,w,du,dv,dw,fn)
 			-- clip + display left
 			local x2=s0-1
 			local dx=x2-x0
-			fn(tex,x0,y,x2,y,u,v,w,du,dv,dw)
+			fn(x0,y,x2,y,u,v,w,du,dv,dw)
 			local n=_pool:pop5(x0,x2,w,dw,span)
 			if old then 
 				_pool[old+4]=n				
@@ -114,7 +114,7 @@ local function spanfill(tex,x0,x1,y,u,v,w,du,dv,dw,fn)
 				--     xxxxxxx			
 				-- draw only up to s1
 				local x2=s1<x1 and s1 or x1
-				fn(tex,x0,y,x2,y,u,v,w,du,dv,dw)					
+				fn(x0,y,x2,y,u,v,w,du,dv,dw)					
 				local n=_pool:pop5(x0,x2,w,dw,span)
 				if old then 
 					_pool[old+4]=n	
@@ -163,7 +163,7 @@ local function spanfill(tex,x0,x1,y,u,v,w,du,dv,dw,fn)
 	end
 	-- new last?
 	if x1-x0>=0 then
-		fn(tex,x0,y,x1,y,u,v,w,du,dv,dw)
+		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans		
 		_pool[old+4]=_pool:pop5(x0,x1,w,dw,-1)
 	end
@@ -202,6 +202,9 @@ local WireframeRasterizer={
                 maxy=y
             end
         end
+
+		-- set active texture
+		tput(texture)
 
         --data for left & right edges:
         local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
@@ -275,7 +278,7 @@ local WireframeRasterizer={
                 x1=480
             end
     
-            spanfill(texture,flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
+            spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
 
             lx=lx+ldx
             lu=lu+ldu
@@ -287,6 +290,33 @@ local WireframeRasterizer={
             rw=rw+rdw
         end
     end,
+	addQuad=function(x0,y0,x1,y1,w,c)
+		if y1>=270 then
+			y1=270-1
+		  end
+		if y0<0 then
+			y0=-1
+		  end
+		if x0<0 then
+			x0=0
+		end
+		if x1>480 then
+			x1=480
+		end
+		x0=flr(x0)
+		x1=flr(x1)-1
+		-- visible?
+		if x0>480 or x1<0 then
+			return
+		end
+		if y0>270 or y1<0 then
+			return
+		end
+		color(c)
+		for y=1+flr(y0),y1 do
+			spanfill(x0,x1,y,0,0,w,0,0,0,line)
+		end
+	end,	
     endFrame=function()
         _pool:reset()
         for y in pairs(_spans) do
