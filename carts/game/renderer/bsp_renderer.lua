@@ -24,7 +24,7 @@ local BSPRenderer=function(world,rasterizer)
     
   -- vertex buffer "cache"
   local vbo = rasterizer.vbo
-
+  local vboptr = vbo:ptr(0)
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
 
@@ -200,31 +200,34 @@ local BSPRenderer=function(world,rasterizer)
 
   local function z_poly_clip(v,nv)
     local res,v0={},v[nv]
-    local d0=vbo[v0 + VBO_3] - 8
+    local p0=vboptr + v0
+    local d0=p0[VBO_3] - 8
     for i=1,nv do
       local side=d0>0
       if side then
         res[#res+1]=v0
       end
       local v1=v[i]
-      local d1=vbo[v1 + VBO_3]-8
+      local p1=vboptr + v1
+      local d1=p1[VBO_3]-8
       -- not same sign?
       if (d1>0)~=side then
         local t = d0/(d0-d1)
         local x,y,z=
-          lerp(vbo[v0+VBO_1],vbo[v1+VBO_1],t),
-          lerp(vbo[v0+VBO_2],vbo[v1+VBO_2],t),
-          lerp(vbo[v0+VBO_3],vbo[v1+VBO_3],t)
+          lerp(p0[VBO_1],p1[VBO_1],t),
+          lerp(p0[VBO_2],p1[VBO_2],t),
+          lerp(p0[VBO_3],p1[VBO_3],t)
         res[#res+1]=vbo:pop(          
           x,y,z,
           480/2+(270*x/8),
           270/2-(270*y/8),
           1/8,
           0,
-          lerp(vbo[v0+VBO_U],vbo[v1+VBO_U],t),
-          lerp(vbo[v0+VBO_V],vbo[v1+VBO_V],t))
+          lerp(p0[VBO_U],p1[VBO_U],t),
+          lerp(p0[VBO_V],p1[VBO_V],t))
       end
       v0=v1
+      p0=p1
       d0=d1
     end
     return res,#res
@@ -382,13 +385,14 @@ local BSPRenderer=function(world,rasterizer)
                     for k=1,#vertref do
                         local v=verts[vertref[k]]
                         local a=v_cache:transform(v)
-                        local code = vbo[a+VBO_OUTCODE]
+                        local pa=vboptr + a
+                        local code = pa[VBO_OUTCODE]
                         outcode=band(outcode,code)
                         clipcode=clipcode + band(code,2)
                         -- compute uvs
-                        local x,y,z,w=v[1],v[2],v[3],vbo[a+VBO_W]
-                        vbo[a+VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
-                        vbo[a+VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
+                        local x,y,z,w=v[1],v[2],v[3],pa[VBO_W]
+                        pa[VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
+                        pa[VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
 
                         if w>maxw then
                           maxw=w
@@ -440,22 +444,31 @@ local BSPRenderer=function(world,rasterizer)
       for i=1,#faces,4 do    
         -- read vertex references
         local is_front,v0,v1,v2=faces[i],faces[i+1],faces[i+2],faces[i+3]
-        local a0,a1,a2=v_cache:transform(verts[v0]),v_cache:transform(verts[v1]),v_cache:transform(verts[v2])
-        local outcode=band(0xffff,band(band(vbo[a0+VBO_OUTCODE],vbo[a1+VBO_OUTCODE]),vbo[a2+VBO_OUTCODE]))
-        local clipcode=band(vbo[a0+VBO_OUTCODE],2)+band(vbo[a1+VBO_OUTCODE],2)+band(vbo[a2+VBO_OUTCODE],2)
-        local uv0,uv1,uv2=uvs[v0],uvs[v1],uvs[v2]
-        vbo[a0 + VBO_U] = uv0.u + ((not is_front and uv0.onseam) and (skin.width / 2) or 0)
-        vbo[a0 + VBO_V] = uv0.v     
-        vbo[a1 + VBO_U] = uv1.u + ((not is_front and uv1.onseam) and (skin.width / 2) or 0)
-        vbo[a1 + VBO_V] = uv1.v     
-        vbo[a2 + VBO_U] = uv2.u + ((not is_front and uv2.onseam) and (skin.width / 2) or 0)
-        vbo[a2 + VBO_V] = uv2.v     
+        local a0,a1,a2=
+         v_cache:transform(verts[v0]),
+         v_cache:transform(verts[v1]),
+         v_cache:transform(verts[v2])
+        -- store point addresses
         local poly={a0,a1,a2}
+        -- work with direct offsets
+        a0,a1,a2=
+         vboptr + a0,
+         vboptr + a1,
+         vboptr + a2
+        local outcode=band(0xffff,band(band(a0[VBO_OUTCODE],a1[VBO_OUTCODE]),a2[VBO_OUTCODE]))
+        local clipcode=band(a0[VBO_OUTCODE],2)+band(a1[VBO_OUTCODE],2)+band(a2[VBO_OUTCODE],2)
+        local uv0,uv1,uv2=uvs[v0],uvs[v1],uvs[v2]
+        a0[VBO_U] = uv0.u + ((not is_front and uv0.onseam) and (skin.width / 2) or 0)
+        a0[VBO_V] = uv0.v     
+        a1[VBO_U] = uv1.u + ((not is_front and uv1.onseam) and (skin.width / 2) or 0)
+        a1[VBO_V] = uv1.v     
+        a2[VBO_U] = uv2.u + ((not is_front and uv2.onseam) and (skin.width / 2) or 0)
+        a2[VBO_V] = uv2.v     
 
         if outcode==0 then
           -- ccw?
-          local ax,ay=vbo[a1 + VBO_X]-vbo[a0 + VBO_X],vbo[a1 + VBO_Y]-vbo[a0 + VBO_Y]
-          local bx,by=vbo[a1 + VBO_X]-vbo[a2 + VBO_X],vbo[a1 + VBO_Y]-vbo[a2 + VBO_Y]
+          local ax,ay=a1[VBO_X]-a0[VBO_X],a1[VBO_Y]-a0[VBO_Y]
+          local bx,by=a1[VBO_X]-a2[VBO_X],a1[VBO_Y]-a2[VBO_Y]
           if ax*by - ay*bx<=0 then
             local n=3
             if clipcode>0 then
