@@ -11,7 +11,9 @@ local VBO_U = 7
 local VBO_V = 8
 
 local vbo = require("engine.pool")("vertex_cache",9,7500)
+local _vboptr=vbo:ptr(0)
 local _pool=require("engine.pool")("spans",5,12500)
+local _ptr=_pool:ptr(0)
 local _spans={}
 
 local _testTexture = {width=4,height=4,ptr={
@@ -21,13 +23,14 @@ local _testTexture = {width=4,height=4,ptr={
 	24,19,24,19
 }}
 
+local flr=flr
 
 -- span buffer
 local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)	
-	local _pool=_pool
 	if x1<0 or x0>480 or x1-x0<0 then
 		return
 	end
+	local _pool,_ptr=_pool,_ptr
 
 	-- fn = overdrawfill
 
@@ -41,7 +44,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 
 	-- loop while valid address
 	while span>=0 do		
-		local s0,s1=_pool[span],_pool[span+1]
+		local s0,s1=_ptr[span],_ptr[span+1]
 
 		if s0>x0 then
 			if s0>x1 then
@@ -52,7 +55,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				local n=_pool:pop5(x0,x1,w,dw,span)
 				if old then
 					-- chain to previous
-					_pool[old+4]=n
+					_ptr[old+4]=n
 				else
 					-- new first
 					_spans[y]=n
@@ -68,7 +71,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			fn(x0,y,x2,y,u,v,w,du,dv,dw)
 			local n=_pool:pop5(x0,x2,w,dw,span)
 			if old then 
-				_pool[old+4]=n				
+				_ptr[old+4]=n				
 			else
 				_spans[y]=n
 			end
@@ -88,8 +91,8 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			--     ??nnnn?
 			--     xxxxxxx	
 			-- totally hidden (or not!)
-			local dx,sdw=x0-s0,_pool[span+3]
-			local sw=_pool[span+2]+dx*sdw		
+			local dx,sdw=x0-s0,_ptr[span+3]
+			local sw=_ptr[span+2]+dx*sdw		
 			
 			if sw-w<-1e-6 or (sw-w<0.00001 and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
@@ -98,11 +101,11 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 					local n=_pool:pop5(
 						s0,
 						x0-1,
-						_pool[span+2],
+						_ptr[span+2],
 						sdw,
 						span)
 					if old then
-						_pool[old+4]=n
+						_ptr[old+4]=n
 					else
 						-- new first
 						_spans[y]=n
@@ -117,7 +120,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				fn(x0,y,x2,y,u,v,w,du,dv,dw)					
 				local n=_pool:pop5(x0,x2,w,dw,span)
 				if old then 
-					_pool[old+4]=n	
+					_ptr[old+4]=n	
 				else
 					-- new first
 					_spans[y]=n
@@ -128,11 +131,11 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 				local dx=s1-x1-1
 				if dx>0 then
 					-- "shrink" current span
-					_pool[span]=x1+1
-					_pool[span+2]=_pool[span+2]+(x1+1-s0)*sdw
+					_ptr[span]=x1+1
+					_ptr[span+2]=_ptr[span+2]+(x1+1-s0)*sdw
 				else
 					-- drop current span
-					_pool[old+4]=_pool[span+4]
+					_ptr[old+4]=_ptr[span+4]
 					span=old
 				end					
 			end
@@ -165,7 +168,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	if x1-x0>=0 then
 		fn(x0,y,x1,y,u,v,w,du,dv,dw)
 		-- end of spans		
-		_pool[old+4]=_pool:pop5(x0,x1,w,dw,-1)
+		_ptr[old+4]=_pool:pop5(x0,x1,w,dw,-1)
 	end
 end
 
@@ -194,7 +197,8 @@ local WireframeRasterizer={
         local miny,maxy,mini=math.huge,-math.huge
         -- find extent
         for i=1,np do
-            local y,w=vbo[p[i] + VBO_Y],vbo[p[i] + VBO_W]
+			local pi=_vboptr + p[i]
+            local y,w=pi[VBO_Y],pi[VBO_W]
             if y<miny then
                 mini,miny=i,y
             end
@@ -221,17 +225,18 @@ local WireframeRasterizer={
                 lj=lj+1
                 if lj>np then lj=1 end
                 local v1=p[lj]
-                local y0,y1=vbo[v0+VBO_Y],vbo[v1+VBO_Y]
+				local p0,p1=_vboptr + v0,_vboptr + v1
+                local y0,y1=p0[VBO_Y],p1[VBO_Y]
                 local dy=y1-y0
                 ly=flr(y1)
-                lx=vbo[v0 + VBO_X]
-                lw=vbo[v0 + VBO_W]
-                lu=(vbo[v0 + VBO_U]/mipscale - umin) * lw
-                lv=(vbo[v0 + VBO_V]/mipscale - vmin) * lw
-                ldx=(vbo[v1 + VBO_X]-lx)/dy
+                lx=p0[VBO_X]
+                lw=p0[VBO_W]
+                lu=(p0[VBO_U]/mipscale - umin) * lw
+                lv=(p0[VBO_V]/mipscale - vmin) * lw
+                ldx=(p1[VBO_X]-lx)/dy
                 local w1=vbo[v1 + VBO_W]
-                ldu=((vbo[v1 + VBO_U]/mipscale - umin) * w1 - lu)/dy
-                ldv=((vbo[v1 + VBO_V]/mipscale - vmin) * w1 - lv)/dy
+                ldu=((p1[VBO_U]/mipscale - umin) * w1 - lu)/dy
+                ldv=((p1[VBO_V]/mipscale - vmin) * w1 - lv)/dy
                 ldw=(w1-lw)/dy
                 --sub-pixel correction
                 local cy=y-y0
@@ -245,17 +250,18 @@ local WireframeRasterizer={
                 rj=rj-1
                 if rj<1 then rj=np end
                 local v1=p[rj]
-                local y0,y1=vbo[v0 + VBO_Y],vbo[v1 + VBO_Y]
+				local p0,p1=_vboptr + v0,_vboptr + v1
+                local y0,y1=p0[VBO_Y],p1[VBO_Y]
                 local dy=y1-y0
                 ry=flr(y1)
-                rx=vbo[v0 + VBO_X]
-                rw=vbo[v0 + VBO_W]
-                ru=(vbo[v0 + VBO_U]/mipscale - umin)*rw 
-                rv=(vbo[v0 + VBO_V]/mipscale - vmin)*rw 
-                rdx=(vbo[v1 + VBO_X]-rx)/dy
+                rx=p0[VBO_X]
+                rw=p0[VBO_W]
+                ru=(p0[VBO_U]/mipscale - umin)*rw 
+                rv=(p0[VBO_V]/mipscale - vmin)*rw 
+                rdx=(p1[VBO_X]-rx)/dy
                 local w1=vbo[v1 + VBO_W]
-                rdu=((vbo[v1 + VBO_U]/mipscale - umin) * w1 - ru)/dy
-                rdv=((vbo[v1 + VBO_V]/mipscale - vmin) * w1 - rv)/dy
+                rdu=((p1[VBO_U]/mipscale - umin) * w1 - ru)/dy
+                rdv=((p1[VBO_V]/mipscale - vmin) * w1 - rv)/dy
                 rdw=(w1-rw)/dy
                 --sub-pixel correction
                 local cy=y-y0
@@ -312,9 +318,8 @@ local WireframeRasterizer={
 		if y0>270 or y1<0 then
 			return
 		end
-		color(c)
 		for y=1+flr(y0),y1 do
-			spanfill(x0,x1,y,0,0,w,0,0,0,line)
+			spanfill(x0,x1,y,c,0,w,0,0,0,line)
 		end
 	end,	
     endFrame=function()

@@ -1,4 +1,3 @@
-local frame=0
 -- layout
 local VBO_1 = 0
 local VBO_2 = 1
@@ -14,8 +13,9 @@ local vbo = require("engine.pool")("vertex_cache",9,7500)
 local WireframeRasterizer={
     -- shared "memory" with renderer
     vbo = vbo,
+    frame = 0,
     beginFrame=function(self)
-        frame = frame + 1
+        self.frame = self.frame + 1
     end,
     -- push a surface to rasterize
     addSurface=function(pts,n)
@@ -23,9 +23,12 @@ local WireframeRasterizer={
         for i=1,n do
             local p=pts[i]
             local x1,y1=vbo[p + VBO_X],vbo[p + VBO_Y]
-            line(x0,y0,x1,y1,15)
+            line(x0,y0,x1,y1,8)
             x0,y0=x1,y1
         end
+    end,
+    addQuad=function(x0,y0,x1,y1,w,c)
+        -- todo
     end,
     endFrame=function()
     end

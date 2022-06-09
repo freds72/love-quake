@@ -128,7 +128,7 @@ function love.run()
                     lg.setColor(1,1,1)
                     framebuffer:present(xoffset, yoffset, fb, pal, scale)
                     lg.setColor(0,1,0)
-                    lg.print(love.timer.getFPS(),2,scale * displayHeight - 20)
+                    lg.print("fps: "..love.timer.getFPS(),2,scale * displayHeight - 20)
                     lg.present()
                 end
                 -- unlock vm

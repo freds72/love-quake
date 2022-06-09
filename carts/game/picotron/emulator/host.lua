@@ -173,24 +173,25 @@ blend=function(colors,row,screen)
     assert(row<64,"Invalid colormap row")
     activeColormapRow = row
 end
--- note: only horiz lines are supported
+
 local _texture
 -- set the active texture
 tput=function(src)    
     _texture = src
 end
+-- draw a perspective correct textured line
+-- note: only horiz lines are supported
 tline3d=function(x0,y0,x1,_,u,v,w,du,dv,dw)
     local ptr,width,height=_texture.ptr,_texture.width,_texture.height
     for x=x0+480*y0,x1+480*y0 do
-        local uw,vw=u/w,v/w
-        vid_ptr[x]=ptr[(flr(uw)%width)+width*(flr(vw)%height)]
+        vid_ptr[x]=ptr[(flr(u/w)%width)+width*(flr(v/w)%height)]
         u = u + du
         v = v + dv
         w = w + dw
     end
 end
 line=function(x0,y0,x1,y1,c)   
-    c = flr(_color or c)%activeColormap.width
+    c = flr(c or _color or 0)%activeColormap.width
     _color = c
     local dx,dy=x1-x0,y1-y0
     if abs(dx)>abs(dy) then

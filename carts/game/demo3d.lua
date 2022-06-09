@@ -219,10 +219,11 @@ function draw_model(model,m,cam)
 	-- world to cam
 	m=m_x_m(cam.m,m)
 
+	tput(tiles)
+	local verts={}
 	for _,face in pairs(model.f) do
 		-- is face visible?
 		if v_dot(face.n,cam_pos)>face.cp then
-			local verts={}
 			for k=1,4 do
 				-- transform to world
 				local p=m_x_v(m,face[k])
@@ -232,7 +233,7 @@ function draw_model(model,m,cam)
 				verts[k]=p
 			end
 			-- transform to camera & draw			
-			polytex(cam:project(verts))
+			polytex(cam:project(verts),4)
 		end
 	end
 end
@@ -246,6 +247,7 @@ function _update()
 	cam:control(2)
 end
 
+local _mem=0
 function _draw()
 	cls()
 
@@ -256,15 +258,17 @@ function _draw()
 		-0.5,-0.5,-0.5,1}
 	draw_model(cube_model,m,cam)
 
-	print("tline3d DEMO\nangle:"..flr(100*cam.m[1])/10,2,2,1)
+	local mem=collectgarbage("count")
+	print("tline3d DEMO\nangle:"..(flr(100*cam.m[1])/10).."\nram:"..flr(mem-_mem).."kb",2,2,8)
+	_mem = mem
 end
 
 -->8
 
-function polytex(v)
- local p0,nodes=v[#v],{}
+function polytex(v,nv)
+ local p0,nodes=v[nv],{}
  local x0,y0,w0,u0,v0=p0.x,p0.y,p0.w,p0.u,p0.v
- for i=1,#v do
+ for i=1,nv do
 	local p1=v[i] 
 	local x1,y1,w1,u1,v1=p1.x,p1.y,p1.w,p1.u,p1.v
 	local _x1,_y1,_u1,_v1,_w1=x1,y1,u1,v1,w1
@@ -304,7 +308,7 @@ function polytex(v)
 				au=au+sa*dau
 				av=av+sa*dav
 				aw=aw+sa*daw
-				tline3d(tiles,flr(x0),y,flr(x1),y,au,av,aw,dau,dav,daw)				
+				tline3d(flr(x0),y,flr(x1),y,au,av,aw,dau,dav,daw)				
 			end
 		else
 			nodes[y]={x0,u0,v0,w0}

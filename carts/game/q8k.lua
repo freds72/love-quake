@@ -21,6 +21,9 @@ function _init()
     stateSystem:next(menuState, gameConf, arg1, arg2)
 
     _components["particles"] = require("systems.particles")(rasterizer)
+
+    profiler = require("lib.profile") 
+    --profiler.start()
 end
 
 function _update()
@@ -48,4 +51,8 @@ function _draw()
     rasterizer:endFrame()
 
     stateSystem:draw()
+
+    --local report = profiler.report(20)
+    --printh(report)
+    --profiler.reset()
 end

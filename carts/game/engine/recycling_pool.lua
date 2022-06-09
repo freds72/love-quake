@@ -31,7 +31,7 @@ local recycling_pool=function(name,stride,size)
         -- reclaim slot
         push=function(self,idx)
             cursor = cursor - 1 
-            assert(cursor>0,"invalid pop/push pairs : "..idx.." @"..cursor)
+            -- assert(cursor>0,"invalid pop/push pairs : "..idx.." @"..cursor)
             free[cursor]=idx
         end,
         stats=function(self)   

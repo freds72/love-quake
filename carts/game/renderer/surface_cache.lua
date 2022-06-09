@@ -83,7 +83,7 @@ local SurfaceCache=function(rasterizer)
             key=bor(key,frame*4)
         end
         for i=0,3 do
-            local style=activeLights[face.lightstyles[i+1]]
+            local style=activeLights[face.lightstyles[i+1] ]
             if style then
               key=bor(key,shl(flr(255*style),i*8+8))
             end
@@ -93,6 +93,7 @@ local SurfaceCache=function(rasterizer)
         if cached_tex and cached_tex.mips[key] then
             return cached_tex.mips[key]
         end
+
         -- missing cache or missing mip
         if not cached_tex then
             cached_tex={mips={}}
