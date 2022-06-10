@@ -182,9 +182,9 @@ end
 -- draw a perspective correct textured line
 -- note: only horiz lines are supported
 tline3d=function(x0,y0,x1,_,u,v,w,du,dv,dw)
-    local ptr,width,height=_texture.ptr,_texture.width,_texture.height
+    local ptr,width,height,imgw=_texture.ptr,_texture.width,_texture.height,_texture.imgw or _texture.width
     for x=x0+480*y0,x1+480*y0 do
-        vid_ptr[x]=ptr[(flr(u/w)%width)+width*(flr(v/w)%height)]
+        vid_ptr[x]=ptr[(flr(u/w)%width)+imgw*(flr(v/w)%height)]
         u = u + du
         v = v + dv
         w = w + dw

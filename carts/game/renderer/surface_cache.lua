@@ -21,6 +21,7 @@ local SurfaceCache=function(rasterizer)
           local w,h=texture.width/scale,texture.height/scale
           mips[i]={
             scale=scale,
+            imgw=w,
             width=w,
             height=h,
             umin=flr(face.umin/scale),
@@ -62,18 +63,17 @@ local SurfaceCache=function(rasterizer)
     end
 
     -- 
-    local function makeSkyTextureProxy(texture)  
-      -- todo: pull from cache!!
-      return {
-        -- map mip
-        scale=16,
-        w=256,
-        width=128,
-        height=texture.height,
-        umin=0,
-        vmin=0,
-        ptr=texture.mips[1] 
-      }    
+    local _skytex={
+      scale=16
+    }
+    local function makeSkyTextureProxy(texture)        
+      _skytex.imgw=texture.width
+      _skytex.width=texture.width/2
+      _skytex.height=texture.height
+      _skytex.umin=time()*4
+      _skytex.vmin=time()*3
+      _skytex.ptr=texture.mips[1] 
+      return _skytex    
     end
 
     return {
@@ -129,6 +129,7 @@ local SurfaceCache=function(rasterizer)
         local imgw,imgh=max(flr(face.width/texscale+0.5),1),max(flr(face.height/texscale+0.5),1)
         cached_tex.mips[key] = setmetatable({
             scale=texscale,
+            imgw=imgw,
             width=imgw,
             height=imgh,
             umin=flr(face.umin/texscale),
