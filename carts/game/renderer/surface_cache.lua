@@ -61,6 +61,21 @@ local SurfaceCache=function(rasterizer)
       return cache.mips[mip]
     end
 
+    -- 
+    local function makeSkyTextureProxy(texture)  
+      -- todo: pull from cache!!
+      return {
+        -- map mip
+        scale=16,
+        w=256,
+        width=128,
+        height=texture.height,
+        umin=0,
+        vmin=0,
+        ptr=texture.mips[1] 
+      }    
+    end
+
     return {
       beginFrame=function()
         -- update active light styles
@@ -68,11 +83,12 @@ local SurfaceCache=function(rasterizer)
       end,
       endFrame=function()
       end,
-      makeTextureProxy=function(self,textures,ent,face,mip)
-        local texture = textures[face.texinfo.miptex]  
+      makeTextureProxy=function(self,texture,ent,face,mip)
         -- swirling texture? special handling
         if texture.swirl then
-            return makeSwirlTextureProxy(texture,face,mip)
+          return makeSwirlTextureProxy(texture,face,mip)
+        elseif texture.sky then
+          return makeSkyTextureProxy(texture)
         end
 
         -- create texture key

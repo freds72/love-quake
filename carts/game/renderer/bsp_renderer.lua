@@ -284,7 +284,6 @@ local BSPRenderer=function(world,rasterizer)
         for k in pairs(cache) do
           cache[k]=nil
         end
-        vbo:reset()
     end,
     transform=function(self,v)
       -- find vbo (if any)
@@ -304,6 +303,83 @@ local BSPRenderer=function(world,rasterizer)
         -- to screen space
         local w=1/az
         idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
+        self.cache[v]=idx
+      end
+      return idx
+    end
+  }
+
+  function mode7(x0,y0,x1)	
+    -- sky normal in camera space
+    local n,d=_params.sky,_params.sky_distance
+    local htw,offsetx,offsety=_texw/2,_params.t*32,_params.t*24
+    local texscale = _texscale * 16
+    for x=x0,x1 do
+      -- intersection with sky plane
+      local e={-(x-480/2)/270,-1,(y0-270/2)/270}
+      local ne=v_dot(n,e)
+      if ne~=0 then
+        -- simili fisheye
+        -- ne=ne*ne
+        -- project point back into world space
+        local p=m_inv_x_v(_viewmatrix,v_scale(e,d/ne))
+        -- front 
+        local s,t=flr((p[1]+offsetx)/texscale)%htw,flr((p[2]+offsety)/texscale)%_texh
+        local coloridx=_colormap[_texptr[s+t*_texw]]
+        if coloridx==0 then
+          -- background
+          local s,t=flr((p[1]+offsetx/2)/texscale)%htw + htw,flr((p[2]+offsety/2)/texscale)%_texh
+          coloridx=_colormap[_texptr[s+t*_texw]]
+        end
+        _backbuffer[x+y0*480]=_palette[coloridx]
+      end
+    end
+  end
+    
+  local v_cache_sky={
+    cache={},
+    init=function(self,m,origin)
+      self.m = m
+      local cache=self.cache
+      for k in pairs(cache) do
+        cache[k]=nil
+      end      
+      local n=m_x_n(m,{0,0,-1})
+      local n0=m_x_v(m,{0,0,2048+origin[3]})      
+      self.sky = n
+      self.sky_distance = v_dot(n,n0)
+      self.t = time()
+      self.z = origin[3]      
+    end,
+    transform=function(self,v)
+      -- find vbo (if any)
+      local idx=self.cache[v]
+      if not idx then
+        local m,code,x,y,z=self.m,0,v[1],v[2],v[3]
+        local ax,az,ay=m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]
+
+        -- znear=8
+        if az<8 then code=2 end
+        --if az>2048 then code|=1 end
+        if ax>h_ratio*az then code = code + 4
+        elseif ax<-h_ratio*az then code = code + 8 end
+        if ay>v_ratio*az then code = code + 16
+        elseif ay<-v_ratio*az then code = code + 32 end
+        -- save world space coords for clipping
+        -- to screen space
+        local w=1/az
+
+        -- intersection with sky plane
+        local e={-ax*w,-1,-ay*w}
+        local ne,s,t=v_dot(self.sky,e),0,0
+        if ne~=0 then
+          -- project point back into world space
+          local p=m_inv_x_v(self.m,v_scale(e,self.sky_distance/ne))
+          -- front 
+          s,t=p[1],p[2]
+        end
+
+        idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code,s,t)
         self.cache[v]=idx
       end
       return idx
@@ -367,11 +443,13 @@ local BSPRenderer=function(world,rasterizer)
         end
   
         local m=cam.m
-        -- todo: actually entity matrix is overkill as brush models never rotate
+        -- todo: entity matrix is overkill as brush models never rotate
         v_cache:init(m_x_m(m,ent.m))
-  
+        v_cache_sky:init(m_x_m(m,ent.m),cam.origin)
+        vbo:reset()
+
         local cam_pos=v_add(cam.origin,ent.origin,-1)
-        local poly,f_cache,styles,bright_style={},{},{0,0,0,0},{0.5,0.5,0.5,0.5}
+        local poly,f_cache={},{}
         for i=lstart,lend do
             local leaf = leaves[i]
             for j=1,#leaf do
@@ -380,11 +458,25 @@ local BSPRenderer=function(world,rasterizer)
                     -- mark visited
                     f_cache[face]=true
                     local vertref,texinfo,outcode,clipcode,maxw=face.verts,face.texinfo,0xffff,0,-math.huge
-                    local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset   
+                    local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
                     local texture=textures[texinfo.miptex]
-                    for k=1,#vertref do
+                    if texture.sky then
+                      maxw=1
+                      for k=1,#vertref do
+                          local v=verts[vertref[k]]
+                          local a=v_cache_sky:transform(v)
+                          -- get vertex pointer
+                          local pa=vboptr + a
+                          local code = pa[VBO_OUTCODE]
+                          outcode=band(outcode,code)
+                          clipcode=clipcode + band(code,2)
+                          poly[k] = a
+                      end
+                    else
+                      for k=1,#vertref do
                         local v=verts[vertref[k]]
                         local a=v_cache:transform(v)
+                        -- get vertex pointer
                         local pa=vboptr + a
                         local code = pa[VBO_OUTCODE]
                         outcode=band(outcode,code)
@@ -398,8 +490,9 @@ local BSPRenderer=function(world,rasterizer)
                           maxw=w
                         end
                         poly[k] = a
+                      end                      
                     end
-        
+
                     if outcode==0 then
                         local n=#face.verts
                         if clipcode>0 then
@@ -408,7 +501,8 @@ local BSPRenderer=function(world,rasterizer)
                         if n>2 then
                           -- texture mip
                           local mip=3-mid(flr(1536*maxw),0,3)
-                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(textures,ent,face,mip))      
+                          local texpxy=surfaceCache:makeTextureProxy(texture,ent,face,mip)
+                          rasterizer.addSurface(poly,n,texpxy)      
                         end
                     end
                 end
@@ -439,7 +533,6 @@ local BSPRenderer=function(world,rasterizer)
 
       -- transform light vector into model space
       local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
-      local baselight={1}
 
       for i=1,#faces,4 do    
         -- read vertex references
