@@ -69,8 +69,8 @@ function love.wheelmoved( x, y )
 end
 
 function love.mousemoved( x, y, dx, dy, istouch )
-    mouseInfo.dx = mouseInfo.dx + math.floor(dx/scale)
-    mouseInfo.dy = mouseInfo.dy + math.floor(dy/scale)
+    mouseInfo.dx = mouseInfo.dx + dx/scale
+    mouseInfo.dy = mouseInfo.dy + dy/scale
 end
 
 function love.resize(w,h)   
@@ -201,8 +201,8 @@ function love.run()
                     -- return mouse position when requested
                     x=math.floor(love.mouse.getX()/scale),
                     y=math.floor(love.mouse.getY()/scale),        
-                    dx=mouseInfo.dx,
-                    dy=mouseInfo.dy
+                    dx=math.floor(mouseInfo.dx),
+                    dy=math.floor(mouseInfo.dy)
                 })
                 mouseInfo.dx=0
                 mouseInfo.dy=0
