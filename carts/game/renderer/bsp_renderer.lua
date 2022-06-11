@@ -612,7 +612,8 @@ local BSPRenderer=function(world,rasterizer)
                 ent.skin,
                 ent.frame)        
             end
-          end            
+          end  
+          --print(surfaceCache:stats(),2,2,8)          
       end
     }
 end

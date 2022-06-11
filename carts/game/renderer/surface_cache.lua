@@ -7,10 +7,32 @@ local SurfaceCache=function(rasterizer)
     local lightmap = ffi.new("unsigned char[?]", 64*64)
     -- from conf?
     local colormap=mmap("gfx/colormap.lmp","uint8_t")
+    -- contains a snapshot of the lightstlyes at given frame
     local activeLights
 
-    -- todo: bounded queue
+
+    -- keyed by face+key
     local textureCache={}
+    -- see: https://en.wikipedia.org/wiki/Region-based_memory_management
+    -- using region allocator to avoid memory fragmentation management
+    local texturesByRegion={}
+    local recyclesByRegion={}
+    local regions={
+      {block=4096, len=256},
+      {block=8192, len=32},
+      {block=16384, len=16},
+      {block=32768, len=16},
+      {block=65536, len=8}
+    }
+    -- allocate memory pages
+    local total=0
+    for k,region in pairs(regions) do
+      region.ptr=ffi.new("uint8_t[?]",region.block*region.len)
+      texturesByRegion[k]={}
+      total = total + region.block*region.len
+    end
+    logging.info("Allocated surface cache: "..flr(total/1024).."kb")
+
     local function makeSwirlTextureProxy(texture,face,mip)
       local cache = textureCache[texture]
       if not cache then
@@ -140,13 +162,13 @@ local SurfaceCache=function(rasterizer)
         end
 
         local cached_tex=textureCache[face]
-        if cached_tex and cached_tex.mips[key] then
-            return cached_tex.mips[key]
+        if cached_tex and cached_tex[key] then
+            return cached_tex[key]
         end
 
         -- missing cache or missing mip
         if not cached_tex then
-            cached_tex={mips={}}
+            cached_tex={}
             textureCache[face] = cached_tex
         end
 
@@ -161,14 +183,42 @@ local SurfaceCache=function(rasterizer)
         local texscale=shl(1,mip)
         -- round up odd sized faces
         local imgw,imgh=max(flr(face.width/texscale+0.5),1),max(flr(face.height/texscale+0.5),1)
-        cached_tex.mips[key] = setmetatable({
+        cached_tex[key] = setmetatable({
             scale=texscale,
             width=imgw,
             height=imgh,
             umin=flr(face.umin/texscale),
             vmin=flr(face.vmin/texscale)
         },{
-          __index=function(self,k)
+          __index=function(self,_)
+            -- grab memory region
+            local size = imgw * imgh
+            local img
+            for k,region in ipairs(regions) do
+              if flr(size/region.block)==0 then
+                local tbr=texturesByRegion[k]
+                if #tbr==region.len then
+                  local prev=del(tbr,1)
+                  -- kill previous texture
+                  textureCache[prev.face][prev.key]=nil
+                  -- reuse
+                  img = prev.ptr
+
+                  recyclesByRegion[k]=(recyclesByRegion[k] or 0)+1
+                else
+                  img = region.ptr + (#tbr) * region.block
+                end
+                -- track
+                add(tbr,{
+                  key=key,
+                  face=face,
+                  ptr=img
+                })
+                break
+              end
+            end
+            assert(img)
+
             -- compute lightmap
             local w,h,lightstyles=face.lightwidth,face.lightheight,face.lightstyles
             if face.lightofs then
@@ -198,7 +248,6 @@ local SurfaceCache=function(rasterizer)
             local tw,th=texture.width/texscale,texture.height/texscale
             -- texture offset to be aligned with lightmap
             local xmin,ymin=self.umin,self.vmin
-            local img=ffi.new("unsigned char[?]", imgw*imgh)
             -- backup pointer
             local dst = img
             local dt=texscale/16
@@ -228,7 +277,18 @@ local SurfaceCache=function(rasterizer)
             return img
           end
         })
-        return cached_tex.mips[key]
+        return cached_tex[key]
+      end,
+      stats=function(self)
+        local s=""
+        for i=1,#texturesByRegion do
+          local tbr=texturesByRegion[i]
+          s=s.."region: "..regions[i].block.." usage:"..(#tbr).."/"..regions[i].len.." "..(recyclesByRegion[i] or 0)
+          s=s.."\n"
+          recyclesByRegion[i]=0
+        end
+
+        return s
       end
     }
 end
