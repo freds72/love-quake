@@ -192,7 +192,6 @@ local WireframeRasterizer={
         local VBO_U = 7
         local VBO_V = 8
     
-        local tline=tline3d   
         local mipscale,umin,vmin=texture.scale,texture.umin,texture.vmin
         local miny,maxy,mini=math.huge,-math.huge
         -- find extent
@@ -284,7 +283,7 @@ local WireframeRasterizer={
                 x1=480
             end
     
-            spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
+            spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
 
             lx=lx+ldx
             lu=lu+ldu

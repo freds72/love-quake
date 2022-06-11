@@ -62,18 +62,52 @@ local SurfaceCache=function(rasterizer)
       return cache.mips[mip]
     end
 
-    -- 
-    local _skytex={
-      scale=16
+    -- sky image
+    local skymap=ffi.new("uint8_t[?]",128*128)
+    local skytex_t
+    local skytex={
+      scale=16,
+      width=128,
+      height=128
     }
-    local function makeSkyTextureProxy(texture)        
-      _skytex.imgw=texture.width
-      _skytex.width=texture.width/2
-      _skytex.height=texture.height
-      _skytex.umin=time()*4
-      _skytex.vmin=time()*3
-      _skytex.ptr=texture.mips[1] 
-      return _skytex    
+    local function makeSkyTextureProxy(texture,mip)  
+      if skytex_t==rasterizer.frame then
+        return skytex
+      end
+
+      skytex.umin=time()
+      skytex.vmin=time()*1.5
+      skytex.ptr=nil
+      return setmetatable(
+        skytex,
+        {
+          __index=function(t,k)
+            -- copy skymap to texture
+            local src,dst=texture.mips[1]+128,skymap
+            for y=0,127 do
+              ffi.copy(dst,src,128)
+              dst = dst + 128
+              src = src + 256
+            end
+            -- merge with second layer
+            local src,dst=texture.mips[1],skymap
+            for y=0,127 do
+              for x=0,127 do
+                if src[x]~=0 then
+                  dst[x] = src[x]
+                end
+              end
+              dst = dst + 128
+              src = src + 256
+            end
+
+            skytex_t=rasterizer.frame
+
+            t.ptr=skymap
+            return skymap
+          end
+        }
+      )
     end
 
     return {
@@ -84,11 +118,11 @@ local SurfaceCache=function(rasterizer)
       endFrame=function()
       end,
       makeTextureProxy=function(self,texture,ent,face,mip)
-        -- swirling texture? special handling
         if texture.swirl then
+          -- swirling texture? special handling
           return makeSwirlTextureProxy(texture,face,mip)
         elseif texture.sky then
-          return makeSkyTextureProxy(texture)
+          return makeSkyTextureProxy(texture,mip)
         end
 
         -- create texture key
@@ -192,7 +226,7 @@ local SurfaceCache=function(rasterizer)
 
             t.ptr=img
             return img
-            end
+          end
         })
         return cached_tex.mips[key]
       end

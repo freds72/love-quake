@@ -460,8 +460,8 @@ local BSPRenderer=function(world,rasterizer)
                     local vertref,texinfo,outcode,clipcode,maxw=face.verts,face.texinfo,0xffff,0,-math.huge
                     local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
                     local texture=textures[texinfo.miptex]
+                    -- select the right "vertex shader"
                     if texture.sky then
-                      maxw=1
                       for k=1,#vertref do
                           local v=verts[vertref[k]]
                           local a=v_cache_sky:transform(v)
@@ -501,8 +501,7 @@ local BSPRenderer=function(world,rasterizer)
                         if n>2 then
                           -- texture mip
                           local mip=3-mid(flr(1536*maxw),0,3)
-                          local texpxy=surfaceCache:makeTextureProxy(texture,ent,face,mip)
-                          rasterizer.addSurface(poly,n,texpxy)      
+                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip))      
                         end
                     end
                 end
