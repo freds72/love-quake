@@ -579,6 +579,7 @@ local BSPRenderer=function(world,rasterizer)
           surfaceCache:beginFrame()
       end,
       endFrame=function()
+        surfaceCache:endFrame()
       end,
       draw=function(self,cam)
           -- nothing to draw (eg. no scene/world)

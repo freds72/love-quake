@@ -18,9 +18,9 @@ local SurfaceCache=function(rasterizer)
     local texturesByRegion={}
     local recyclesByRegion={}
     local regions={
-      {block=4096, len=256},
+      {block=4096, len=128},
       {block=8192, len=32},
-      {block=16384, len=16},
+      {block=16384, len=32},
       {block=32768, len=16},
       {block=65536, len=8}
     }
@@ -137,7 +137,15 @@ local SurfaceCache=function(rasterizer)
         -- update active light styles
         activeLights = lights:get(rasterizer.frame)
       end,
-      endFrame=function()
+      endFrame=function()        
+        -- report number of regions that went full recycling in one frame
+        for i=1,#regions do
+          local usage,region=recyclesByRegion[i] or 0,regions[i]
+          if usage>=region.len then
+            logging.warn("Region: "..region.block.." overuse: "..usage.."/"..region.len)
+          end
+          recyclesByRegion[i]=0
+        end
       end,
       makeTextureProxy=function(self,texture,ent,face,mip)
         if texture.swirl then
@@ -285,7 +293,6 @@ local SurfaceCache=function(rasterizer)
           local tbr=texturesByRegion[i]
           s=s.."region: "..regions[i].block.." usage:"..(#tbr).."/"..regions[i].len.." "..(recyclesByRegion[i] or 0)
           s=s.."\n"
-          recyclesByRegion[i]=0
         end
 
         return s
