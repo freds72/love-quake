@@ -200,28 +200,30 @@ local SurfaceCache=function(rasterizer)
         },{
           __index=function(self,_)
             -- grab memory region
-            local size = imgw * imgh
-            local img
+            local size,img = imgw * imgh
             for k,region in ipairs(regions) do
               if flr(size/region.block)==0 then
                 local tbr=texturesByRegion[k]
+                local block
                 if #tbr==region.len then
-                  local prev=del(tbr,1)
+                  block=del(tbr,1)
                   -- kill previous texture
-                  textureCache[prev.face][prev.key]=nil
+                  textureCache[block.face][block.key]=nil
                   -- reuse
-                  img = prev.ptr
-
+                  block.face = face
+                  block.key = key
+                  -- debug purposes
                   recyclesByRegion[k]=(recyclesByRegion[k] or 0)+1
                 else
-                  img = region.ptr + (#tbr) * region.block
+                  block = {
+                    ptr = region.ptr + (#tbr) * region.block,
+                    face = face,
+                    key = key
+                  }
                 end
                 -- track
-                add(tbr,{
-                  key=key,
-                  face=face,
-                  ptr=img
-                })
+                add(tbr,block)
+                img = block.ptr
                 break
               end
             end
