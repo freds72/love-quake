@@ -579,6 +579,7 @@ local BSPRenderer=function(world,rasterizer)
           surfaceCache:beginFrame()
       end,
       endFrame=function()
+        surfaceCache:endFrame()
       end,
       draw=function(self,cam)
           -- nothing to draw (eg. no scene/world)
@@ -612,7 +613,8 @@ local BSPRenderer=function(world,rasterizer)
                 ent.skin,
                 ent.frame)        
             end
-          end            
+          end  
+          --print(surfaceCache:stats(),2,2,8)          
       end
     }
 end
