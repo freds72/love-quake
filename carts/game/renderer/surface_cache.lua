@@ -10,9 +10,9 @@ local SurfaceCache=function(rasterizer)
     local activeLights
 
     -- todo: bounded queue
-    local _textureCache={}
+    local textureCache={}
     local function makeSwirlTextureProxy(texture,face,mip)
-      local cache = _textureCache[texture]
+      local cache = textureCache[texture]
       if not cache then
         -- create all entries
         local mips={}
@@ -34,7 +34,7 @@ local SurfaceCache=function(rasterizer)
           -- frame time per mip
           frame={},
         }
-        _textureCache[texture] = cache
+        textureCache[texture] = cache
       end
       local t=rasterizer.frame
       -- refresh image?
@@ -139,7 +139,7 @@ local SurfaceCache=function(rasterizer)
             end
         end
 
-        local cached_tex=_textureCache[face]
+        local cached_tex=textureCache[face]
         if cached_tex and cached_tex.mips[key] then
             return cached_tex.mips[key]
         end
@@ -147,7 +147,7 @@ local SurfaceCache=function(rasterizer)
         -- missing cache or missing mip
         if not cached_tex then
             cached_tex={mips={}}
-            _textureCache[face] = cached_tex
+            textureCache[face] = cached_tex
         end
 
         -- animated?
@@ -163,53 +163,51 @@ local SurfaceCache=function(rasterizer)
         local imgw,imgh=max(flr(face.width/texscale+0.5),1),max(flr(face.height/texscale+0.5),1)
         cached_tex.mips[key] = setmetatable({
             scale=texscale,
-            imgw=imgw,
             width=imgw,
             height=imgh,
             umin=flr(face.umin/texscale),
             vmin=flr(face.vmin/texscale)
         },{
-          __index=function(t,k)
+          __index=function(self,k)
             -- compute lightmap
-            local w,h=face.lightwidth,face.lightheight  
+            local w,h,lightstyles=face.lightwidth,face.lightheight,face.lightstyles
             if face.lightofs then
                 -- backup pointer
-                local lm=lightmap
+                local lm,src,size=lightmap,face.lightofs,w*h
                 for y=0,h-1 do
                   for x=0,w-1 do
                       local sample,idx=0,x + y*w
                       for i=0,3 do
-                        local scale = activeLights[face.lightstyles[i+1]]
+                        local scale = activeLights[lightstyles[i+1]]
                         if scale and scale>0 then
-                            local src = face.lightofs + i*w*h
-                            sample = sample + scale * src[idx]
+                            sample = sample + scale * src[idx + i*size]
                         end
                       end
-                      -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]
-                      lm[x]=mid(63-flr(sample/4),0,63)
+                      -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]                      
+                      lm[x]=63-shr(sample,2)
                   end
                   -- next row
                   lm = lm + w
                 end
             else
-                local scale = texture.bright and 32 or (activeLights[face.lightstyles[1]] or 0)
+                local scale = texture.bright and 32 or (activeLights[lightstyles[1]] or 0)
                 ffi.fill(lightmap,w*h,mid(63-flr(scale),0,63))
             end
             -- mix with texture map
             local ptr=texture.mips[mip+1] 
             local tw,th=texture.width/texscale,texture.height/texscale
             -- texture offset to be aligned with lightmap
-            local xmin,ymin=flr(face.umin/texscale),flr(face.vmin/texscale)
+            local xmin,ymin=self.umin,self.vmin
             local img=ffi.new("unsigned char[?]", imgw*imgh)
             -- backup pointer
             local dst = img
+            local dt=texscale/16
+            local t=dt/2
             for y=0,imgh-1 do
-                local t=texscale*y/16
-                local t0,tfrac,t1=flr(t),t%1,flr(t+0.5)--ceil(t)
+                local s=dt/2
+                local d,t0,tfrac,t1=dt,flr(t),t%1,ceil(t)
                 for x=0,imgw-1 do
-                  --local s,t=(w*x)/imgw,(h*y)/imgh
-                  local s=texscale*x/16
-                  local s0,sfrac,s1=flr(s),s%1,flr(s+0.5)--ceil(s)
+                  local s0,sfrac,s1=flr(s),s%1,ceil(s)
                   local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
                   -- todo: cache lightmaps when needed
                   --print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
@@ -220,11 +218,13 @@ local SurfaceCache=function(rasterizer)
                   --dst[x]=8+8*mip
                   dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
                   --dst[x]=colormap.ptr[15 + flr(lexel)*256]
+                  s = s + dt
                 end
                 dst = dst + imgw
+                t = t + dt
             end
 
-            t.ptr=img
+            self.ptr=img
             return img
           end
         })
