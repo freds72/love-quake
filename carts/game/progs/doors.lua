@@ -21,7 +21,8 @@ local doors=function(progs)
 
         self.SOLID_BSP = true
         self.MOVETYPE_PUSH = true
-
+        self.MOVING_BSP = true
+        
         -- set size and link into world
         progs:setmodel(self, self.model)        
     end

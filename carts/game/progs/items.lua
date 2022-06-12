@@ -13,7 +13,7 @@ local items=function(progs)
 
     progs.item_shells=function(self)
         self.SOLID_TRIGGER = true
-        self.MOVETYPE_NONE = true;
+        self.MOVETYPE_NONE = true
         -- set size and link into world
         progs:setmodel(self, "maps/b_shell0.bsp")
         progs:drop_to_floor(self)

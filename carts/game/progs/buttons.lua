@@ -8,6 +8,7 @@ local buttons=function(progs)
     local function init_button(self)
         self.sequence = 1
         self.SOLID_BSP = true
+        self.MOVING_BSP = true
         self.MOVETYPE_PUSH = true
         -- set size and link into world
         progs:setmodel(self, self.model)

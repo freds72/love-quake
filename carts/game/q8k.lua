@@ -6,6 +6,7 @@ local world=require("systems.world")
 local camera=require("systems.camera")(world)
 local messages=require("systems.message")
 local rasterizer=require("renderer.span_rasterizer")
+--local rasterizer=require("renderer.wireframe_rasterizer")
 local renderer=require("renderer.bsp_renderer")(world, rasterizer)
 
 -- some globals (temp)
