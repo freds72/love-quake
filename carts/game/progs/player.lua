@@ -3,6 +3,9 @@ local player=function(progs)
     progs:precache_model ("progs/v_shot.mdl")
     progs:precache_model ("progs/player.mdl")
 
+    -- test
+    progs:precache_model("maps/b_shell0.bsp")
+
     -- progs.info_player_start=function(self)
     --     self.SOLID_NOT = true
     --     self.MOVETYPE_NONE = true
@@ -32,6 +35,13 @@ local player=function(progs)
             action={0,0,6.2}
         }
 
+        local shellbox=progs:spawn()
+        shellbox.DRAW_NOT = true
+        shellbox.SOLID_NOT = true
+        shellbox.origin = v_clone(self.origin)
+        progs:setmodel(shellbox, "maps/b_shell0.bsp")
+        self.shellbox=shellbox
+
         local angle,dangle={0,0,0},{0,0,0}
         self.prethink=function(input)
             -- damping      
@@ -55,6 +65,10 @@ local player=function(progs)
             local c,s=cos(a),sin(a)            
             self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,(self.on_ground and acc[3] or 0)-0.5})
             self.mangles = angle
+
+            -- move shellbox
+            local fwd=m_fwd(make_m_from_euler(unpack(angle)))--{s*64,c*64,10}
+            progs:setorigin(shellbox,v_add(self.origin,fwd,96))
         end
 
         self.postthink=function(input)

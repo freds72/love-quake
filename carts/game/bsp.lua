@@ -74,4 +74,29 @@ function bsp.intersect(node,p0,p1,out)
     return ray_bsp_intersect(node,p0,p1,0,1,out)
 end
 
+-- find first straddling node of the given bounding box
+function bsp.firstNode(node,ent)
+    local mins,maxs=ent.absmins,ent.absmaxs
+    local c={
+        0.5*(mins[1]+maxs[1]),
+        0.5*(mins[2]+maxs[2]),
+        0.5*(mins[3]+maxs[3])
+    }
+    -- extents
+    local e=make_v(c, maxs)
+    while not node.contents do
+        -- find first stradling plane
+        local sides=planes.classifyBBox(node.plane,c,e)
+        if sides==3 then
+            return node,count
+        end
+        if band(sides,1)~=0 then
+            node=node[false]
+        end
+        if band(sides,2)~=0 then
+            node=node[true]
+        end
+    end
+end
+
 return bsp

@@ -18,12 +18,12 @@ local WireframeRasterizer={
         self.frame = self.frame + 1
     end,
     -- push a surface to rasterize
-    addSurface=function(pts,n)
+    addSurface=function(pts,n,_,c)
         local x0,y0=vbo[pts[n] + VBO_X],vbo[pts[n] + VBO_Y]
         for i=1,n do
             local p=pts[i]
             local x1,y1=vbo[p + VBO_X],vbo[p + VBO_Y]
-            line(x0,y0,x1,y1,8)
+            line(x0,y0,x1,y1,c or 8)
             x0,y0=x1,y1
         end
     end,
