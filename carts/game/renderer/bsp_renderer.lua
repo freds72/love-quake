@@ -257,11 +257,12 @@ local BSPRenderer=function(world,rasterizer)
     end
   end
 
-  -- polygon clipping
+  -- polygon clipping against BSP hull
+  local empty_set={}
   function poly_clip(node,v)
     -- degenerate case
     if #v<3 then
-      return {},{}
+      return empty_set,empty_set
     end
     local dists,side={},0
     for i=1,#v do
@@ -271,20 +272,20 @@ local BSPRenderer=function(world,rasterizer)
       dists[i]=d
     end
     -- early exit tests (eg. no clipping)
-    if side==1 then return v,{} end
-    if side==2 then return {},v end
+    if side==1 then return v,empty_set end
+    if side==2 then return empty_set,v end
     -- straddling
     -- copy original face reference
     local res,out_res,v0,d0={face=v.face},{face=v.face},v[#v],dists[#v]
     for i=1,#v do
       local v1,d1=v[i],dists[i]
       if d0<=0 then
-        add(out_res,v0)
+        out_res[#out_res+1]=v0
       end
       if (d1>0)~=(d0>0) then
-        -- push in front of list
+        -- add middle point
         local v2=v_lerp(v0,v1,d0/(d0-d1))
-        add(out_res,v2)
+        out_res[#out_res+1]=v2
         -- add to end
         res[#res+1]=v2
       end
@@ -304,30 +305,26 @@ local BSPRenderer=function(world,rasterizer)
     local res_in,res_out=poly_clip(node,poly)
     if #res_in>0 then
       local child=node[true]
-      if child then
-        if child.contents then
-          if child.contents~=-2 then
-            local brushes=out[child] or {}
-            add(brushes,res_in)
-            out[child]=brushes
-          end
-        else
-          bsp_clip(child,res_in,out)
+      if child.contents then
+        if child.contents~=-2 then
+          local brushes=out[child] or {}
+          add(brushes,res_in)
+          out[child]=brushes
         end
+      else
+        bsp_clip(child,res_in,out)
       end
     end
     if #res_out>0 then
       local child=node[false]
-      if child then
-        if child.contents then
-          if child.contents~=-2 then
-            local brushes=out[child] or {}
-            add(brushes,res_out)
-            out[child]=brushes
-          end
-        else   
-          bsp_clip(child,res_out,out)
+      if child.contents then
+        if child.contents~=-2 then
+          local brushes=out[child] or {}
+          add(brushes,res_out)
+          out[child]=brushes
         end
+      else   
+        bsp_clip(child,res_out,out)
       end
     end
   end
@@ -556,7 +553,100 @@ local BSPRenderer=function(world,rasterizer)
             end
         end
     end
-  
+
+    -- clip against world
+    local function drawMovingModel(cam,ent,textures,verts,leaves,lstart,lend)
+      if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
+        return
+      end
+
+      -- does entity clip world?
+      local node=bsp.firstNode(world.entities[1].model.hulls[1],ent)
+      if node then
+        -- yes: clip brush
+        local out={}
+        local out,brush_verts={},{}
+        for j=lstart,lend do
+          local leaf=leaves[j]    
+          for i=1,#leaf do
+            -- face index
+            local face=leaf[i]     
+            local poly,vertref={face=face},face.verts
+            for k=1,#vertref do
+              local vi=vertref[k]
+              local v=brush_verts[vi]
+              if not v then
+                -- "move" brush        
+                v=v_add(verts[vi],ent.origin)
+                brush_verts[vi]=v
+              end
+              poly[k]=v
+            end
+            -- clip against world
+            bsp_clip(node,poly,out)
+          end
+        end 
+        
+        -- 
+        v_cache:init(cam.m)
+        vbo:reset()
+                        
+        -- cam pos in model space (eg. shifted)
+        local cam_pos=v_add(cam.origin,ent.origin,-1)
+        local ox,oy,oz=unpack(ent.origin)
+
+        -- all "faces"
+        local poly={}
+        for i,polys in pairs(out) do                          
+          for i,poly_verts in pairs(polys) do
+            -- dual sided or visible?
+            local face=poly_verts.face
+            if planes.dot(face.plane,cam_pos)>face.cp~=face.side then            
+              local n,texinfo,outcode,clipcode,maxw=#poly_verts,face.texinfo,0xffff,0,-math.huge
+              local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
+              local texture=textures[texinfo.miptex]
+              -- rebase texture (moving brush coords are absolute)
+              s_offset = s_offset - (ox*s[0]+oy*s[1]+oz*s[2])
+              t_offset = t_offset - (ox*t[0]+oy*t[1]+oz*t[2])
+              
+              for k=1,n do
+                local v=poly_verts[k]
+                local a=v_cache:transform(v)
+                -- get vertex pointer
+                local pa = vboptr + a
+                local code = pa[VBO_OUTCODE]
+                outcode=band(outcode,code)
+                clipcode=clipcode + band(code,2)
+                -- compute uvs
+                local x,y,z,w=v[1],v[2],v[3],pa[VBO_W]
+                pa[VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
+                pa[VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
+
+                if w>maxw then
+                  maxw=w
+                end
+                poly[k] = a
+              end                      
+
+              if outcode==0 then
+                if clipcode>0 then
+                    poly,n = z_poly_clip(poly,n)
+                end
+                if n>2 then
+                  -- texture mip
+                  local mip=3-mid(flr(1536*maxw),0,3)
+                  rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),250)      
+                end
+              end
+            end
+          end
+        end                
+      else
+        -- no: regular draw
+        drawModel(cam,ent,textures,verts,leaves,lstart,lend,15)
+      end 
+    end
+
     local function drawAliasModel(cam,ent,model,skin,frame_name)      
       -- check bounding box
       if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
@@ -653,7 +743,11 @@ local BSPRenderer=function(world,rasterizer)
             -- todo: find out a better way to detect type
             if m.leaf_start then
               local resources = ent.resources or resources
-              drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+              if ent.MOVING_BSP then
+                drawMovingModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+              else
+                drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+              end
             else
               drawAliasModel(
                 cam,
@@ -669,94 +763,7 @@ local BSPRenderer=function(world,rasterizer)
             if ent then
               local resources = ent.resources or resources
               local m = ent.model
-              
-              local node=bsp.firstNode(world.level.model[1].hulls[1],ent)
-              if node then
-                debugColor=250
-
-                -- clip brush
-                local out={}
-                local brush_verts,verts={},resources.verts
-                for j=m.leaf_start,m.leaf_end do
-                  local leaf=resources.leaves[j]    
-                  for i=1,#leaf do
-                    -- face index
-                    local face=leaf[i]     
-                    local poly,vertref={face=face},face.verts
-                    for k=1,#vertref do
-                      local vi=vertref[k]
-                      local v=brush_verts[vi]
-                      if not v then
-                        -- "move" brush        
-                        v=v_add(verts[vi],ent.origin)
-                        brush_verts[vi]=v
-                      end
-                      poly[k]=v
-                    end
-                    -- clip against world
-                    bsp_clip(node,poly,out)
-                  end
-                end 
-                
-                local m=cam.m
-                -- todo: entity matrix is overkill as brush models never rotate
-                v_cache:init(m)
-                vbo:reset()
-                                
-                -- cam pos in model space (eg. shifted)
-                local cam_pos=v_add(cam.origin,ent.origin,-1)
-                local ox,oy,oz=unpack(ent.origin)
-
-                -- all "faces"
-                for i,polys in pairs(out) do                          
-                  for i,verts in pairs(polys) do
-                    -- dual sided or visible?
-                    local face=verts.face
-                    if planes.dot(face.plane,cam_pos)>face.cp~=face.side then            
-                      local texinfo,outcode,clipcode,maxw=face.texinfo,0xffff,0,-math.huge
-                      local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
-                      local texture=resources.textures[texinfo.miptex]
-                      -- rebase texture (moving brush coords are absolute)
-                      s_offset = s_offset - (ox*s[0]+oy*s[1]+oz*s[2])
-                      t_offset = t_offset - (ox*t[0]+oy*t[1]+oz*t[2])
-                      local poly={}
-                      for k=1,#verts do
-                        local v=verts[k]
-                        local a=v_cache:transform(v)
-                        -- get vertex pointer
-                        local pa=vboptr + a
-                        local code = pa[VBO_OUTCODE]
-                        outcode=band(outcode,code)
-                        clipcode=clipcode + band(code,2)
-                        -- compute uvs
-                        local x,y,z,w=v[1],v[2],v[3],pa[VBO_W]
-                        pa[VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
-                        pa[VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
-
-                        if w>maxw then
-                          maxw=w
-                        end
-                        poly[k] = a
-                      end                      
-
-                      if outcode==0 then
-                        local n=#poly
-                        if clipcode>0 then
-                            --poly,n = z_poly_clip(poly,n)
-                        end
-                        if n>2 then
-                          -- texture mip
-                          local mip=3-mid(flr(1536*maxw),0,3)
-                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),debugColor)      
-                        end
-                      end
-                    end
-                  end
-                end                
-              else
-                debugColor=15
-                drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
-              end                            
+              drawMovingModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)                                    
             end
           end
           --print(surfaceCache:stats(),2,2,8)          

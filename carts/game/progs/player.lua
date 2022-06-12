@@ -35,12 +35,14 @@ local player=function(progs)
             action={0,0,6.2}
         }
 
+        --[[
         local shellbox=progs:spawn()
         shellbox.DRAW_NOT = true
         shellbox.SOLID_NOT = true
         shellbox.origin = v_clone(self.origin)
         progs:setmodel(shellbox, "maps/b_shell0.bsp")
         self.shellbox=shellbox
+        ]]
 
         local angle,dangle={0,0,0},{0,0,0}
         self.prethink=function(input)
@@ -67,8 +69,10 @@ local player=function(progs)
             self.mangles = angle
 
             -- move shellbox
-            local fwd=m_fwd(make_m_from_euler(unpack(angle)))--{s*64,c*64,10}
+            --[[
+                local fwd=m_fwd(make_m_from_euler(unpack(angle)))--{s*64,c*64,10}
             progs:setorigin(shellbox,v_add(self.origin,fwd,96))
+            ]]
         end
 
         self.postthink=function(input)
