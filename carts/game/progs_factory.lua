@@ -1,6 +1,8 @@
 -- loads declared "programs" in configuration
 local logging=require("engine.logging")
-local ProgsFactory=function(conf,env)
+local conf=require("game_conf")
+
+local ProgsFactory=function(env)
     -- global functions
     for i=1,#conf.progs do
         local name = conf.progs[i]

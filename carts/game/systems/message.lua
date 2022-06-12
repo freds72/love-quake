@@ -10,6 +10,10 @@ local function format(str, ...)
 end
   
 function MessageSystem:say(msg,...)
+    if not msg then
+        self.msg=nil
+        return
+    end
     local txt = format(msg,...)
     -- avoid repeating messages
     if txt==self.msg then
