@@ -15,7 +15,7 @@ _components={}
 function _init()
     -- blend table
     _colormap=mmap("gfx/colormap.png")
-    blend(_colormap)
+    blend(_colormap,31)
 
     local menuState = require("screens.play")
     local arg1, arg2 = args()

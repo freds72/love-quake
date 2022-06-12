@@ -307,9 +307,7 @@ local BSPRenderer=function(world,rasterizer)
       local child=node[true]
       if child.contents then
         if child.contents~=-2 then
-          local brushes=out[child] or {}
-          add(brushes,res_in)
-          out[child]=brushes
+          add(out,res_in)
         end
       else
         bsp_clip(child,res_in,out)
@@ -319,9 +317,7 @@ local BSPRenderer=function(world,rasterizer)
       local child=node[false]
       if child.contents then
         if child.contents~=-2 then
-          local brushes=out[child] or {}
-          add(brushes,res_out)
-          out[child]=brushes
+          add(out,res_out)
         end
       else   
         bsp_clip(child,res_out,out)
@@ -555,13 +551,13 @@ local BSPRenderer=function(world,rasterizer)
     end
 
     -- clip against world
-    local function drawMovingModel(cam,ent,textures,verts,leaves,lstart,lend)
+    local function drawMovingModel(cam,hull,ent,textures,verts,leaves,lstart,lend)
       if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
         return
       end
 
       -- does entity clip world?
-      local node=bsp.firstNode(world.entities[1].model.hulls[1],ent)
+      local node=bsp.firstNode(hull,ent)
       if node then
         -- yes: clip brush
         local out={}
@@ -597,50 +593,48 @@ local BSPRenderer=function(world,rasterizer)
 
         -- all "faces"
         local poly={}
-        for i,polys in pairs(out) do                          
-          for i,poly_verts in pairs(polys) do
-            -- dual sided or visible?
-            local face=poly_verts.face
-            if planes.dot(face.plane,cam_pos)>face.cp~=face.side then            
-              local n,texinfo,outcode,clipcode,maxw=#poly_verts,face.texinfo,0xffff,0,-math.huge
-              local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
-              local texture=textures[texinfo.miptex]
-              -- rebase texture (moving brush coords are absolute)
-              s_offset = s_offset - (ox*s[0]+oy*s[1]+oz*s[2])
-              t_offset = t_offset - (ox*t[0]+oy*t[1]+oz*t[2])
-              
-              for k=1,n do
-                local v=poly_verts[k]
-                local a=v_cache:transform(v)
-                -- get vertex pointer
-                local pa = vboptr + a
-                local code = pa[VBO_OUTCODE]
-                outcode=band(outcode,code)
-                clipcode=clipcode + band(code,2)
-                -- compute uvs
-                local x,y,z,w=v[1],v[2],v[3],pa[VBO_W]
-                pa[VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
-                pa[VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
+        for i,poly_verts in pairs(out) do
+          -- dual sided or visible?
+          local face=poly_verts.face
+          if planes.dot(face.plane,cam_pos)>face.cp~=face.side then            
+            local n,texinfo,outcode,clipcode,maxw=#poly_verts,face.texinfo,0xffff,0,-math.huge
+            local s,s_offset,t,t_offset=texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
+            local texture=textures[texinfo.miptex]
+            -- rebase texture (moving brush coords are absolute)
+            s_offset = s_offset - (ox*s[0]+oy*s[1]+oz*s[2])
+            t_offset = t_offset - (ox*t[0]+oy*t[1]+oz*t[2])
+            
+            for k=1,n do
+              local v=poly_verts[k]
+              local a=v_cache:transform(v)
+              -- get vertex pointer
+              local pa = vboptr + a
+              local code = pa[VBO_OUTCODE]
+              outcode=band(outcode,code)
+              clipcode=clipcode + band(code,2)
+              -- compute uvs
+              local x,y,z,w=v[1],v[2],v[3],pa[VBO_W]
+              pa[VBO_U] = x*s[0]+y*s[1]+z*s[2]+s_offset
+              pa[VBO_V] = x*t[0]+y*t[1]+z*t[2]+t_offset
 
-                if w>maxw then
-                  maxw=w
-                end
-                poly[k] = a
-              end                      
+              if w>maxw then
+                maxw=w
+              end
+              poly[k] = a
+            end                      
 
-              if outcode==0 then
-                if clipcode>0 then
-                    poly,n = z_poly_clip(poly,n)
-                end
-                if n>2 then
-                  -- texture mip
-                  local mip=3-mid(flr(1536*maxw),0,3)
-                  rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),250)      
-                end
+            if outcode==0 then
+              if clipcode>0 then
+                  poly,n = z_poly_clip(poly,n)
+              end
+              if n>2 then
+                -- texture mip
+                local mip=3-mid(flr(1536*maxw),0,3)
+                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),250)      
               end
             end
           end
-        end                
+        end
       else
         -- no: regular draw
         drawModel(cam,ent,textures,verts,leaves,lstart,lend,15)
@@ -744,7 +738,7 @@ local BSPRenderer=function(world,rasterizer)
             if m.leaf_start then
               local resources = ent.resources or resources
               if ent.MOVING_BSP then
-                drawMovingModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+                drawMovingModel(cam,main_model.hulls[1],ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
               else
                 drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
               end
@@ -756,16 +750,7 @@ local BSPRenderer=function(world,rasterizer)
                 ent.skin,
                 ent.frame)        
             end
-          end 
-          
-          if world.player then
-            local ent=world.player.shellbox
-            if ent then
-              local resources = ent.resources or resources
-              local m = ent.model
-              drawMovingModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)                                    
-            end
-          end
+          end        
           --print(surfaceCache:stats(),2,2,8)          
       end
     }
