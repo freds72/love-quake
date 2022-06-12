@@ -20,7 +20,12 @@ ffi.cdef[[
 ]]
 
 
-local PakReader=function(root_path)    
+local PakReader=function(conf)    
+    local root_path=conf.root_path
+    assert(root_path,"Missing root_path key configuration")
+    -- optional path
+    local mod_path=conf.mod_path
+
     -- reads the given struct name from the byte array
     local function read_directory(cname, info, mem)
         local res = {}
@@ -67,23 +72,23 @@ local PakReader=function(root_path)
     -- get a resource from a pak file
     return {
         open=function(self,resource)
-            local entry=cache[resource]
             -- from native file system?
-            if not entry then
-                local filename = root_path.."/"..resource
-                local ok, data = pcall(nfs.newFileData, filename)
-                if not data then
-                    assert("Unknown file system resource: "..filename)
+            if mod_path then
+                local filename = mod_path.."/"..resource
+                local data, err = nfs.newFileData(filename)
+                if data then
+                    logging.debug("Loading resource from mod path: "..filename)
+                    local mem = data:getFFIPointer()
+                    local ptr = ffi.cast("unsigned char*", mem)
+                    cache[resource] = {
+                        _ffi_ = data,
+                        ptr = ptr
+                    }
+                    return ptr
                 end
-                logging.debug("Loading resource from filesystem: "..filename)
-                local mem = data:getFFIPointer()
-                local ptr = ffi.cast("unsigned char*", mem)
-                cache[resource] = {
-                    _ffi_ = data,
-                    ptr = ptr
-                }
-                return ptr
             end
+            local entry=cache[resource]
+            assert(entry,"Unknown resource: "..resource)
             return entry.ptr
         end
     }

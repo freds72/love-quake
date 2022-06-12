@@ -6,7 +6,6 @@ local collisionMap
 local active_entities={}
 local new_entities={}
 
-
 function WorldSystem:load(level_name)
     -- globals :(
     planes = require("engine.plane_pool")()
@@ -18,7 +17,7 @@ function WorldSystem:load(level_name)
     active_entities={}    
 
     -- create I/O classes (inc. caching)
-    local pakReader=require("io.pak_reader")(conf.root_path)
+    local pakReader=require("io.pak_reader")(conf)
     local modelReader=require("io.model_reader")(pakReader)
     
     -- load file
