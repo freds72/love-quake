@@ -274,17 +274,17 @@ local BSPRenderer=function(world,rasterizer)
     if side==1 then return v,{} end
     if side==2 then return {},v end
     -- straddling
-    -- copy original face index
+    -- copy original face reference
     local res,out_res,v0,d0={face=v.face},{face=v.face},v[#v],dists[#v]
     for i=1,#v do
       local v1,d1=v[i],dists[i]
       if d0<=0 then
-        add(out_res,1,v0)
+        add(out_res,v0)
       end
       if (d1>0)~=(d0>0) then
         -- push in front of list
         local v2=v_lerp(v0,v1,d0/(d0-d1))
-        add(out_res,1,v2)
+        add(out_res,v2)
         -- add to end
         res[#res+1]=v2
       end
