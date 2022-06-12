@@ -10,8 +10,8 @@ local subs=function(progs)
             -- down
             self.movedir = {0,0,-1}
         else
-            local angle=math.pi*angle/180
-            self.movedir={math.cos(angle),math.sin(angle),0}
+            local angle=angle/180
+            self.movedir={cos(angle),sin(angle),0}
         end
         
         self.angles = {0,0,0}

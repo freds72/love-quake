@@ -54,7 +54,7 @@ local world=function(progs)
         -- set size and link into world
 		if self.mangle then
 			local x,y,z=unpack(split(self.mangle," "))
-			self.mangles = {x/360,y/360,z/360}
+			self.mangles = {x/180,y/180,z/180}
 		end
         progs:setmodel(self, self.model)
     end
