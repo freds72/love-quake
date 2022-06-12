@@ -11,6 +11,26 @@
     &love.exe game q8k e1m3
 ```
 
+## How to add custom configuration
+
+Create user_conf.lua in ~/LOVE/picotron. Example
+
+```
+return {
+  mouse_speed = 0.5
+}
+```
+
+Supported overrides:
+
+| Property    | Description |
+| ----------- | ----------- |
+| mouse_speed | mouse acceleration factor |
+| root_path   | Path to ID1 Quake folder |
+| mod_path | Extra path to load mod assets (takes precedence) |
+| progs | list of active game programs |
+| gravity_z | Gravity factor (default: 800) |
+
 ## How to debug
 
 - Install VSCode extension: https://marketplace.visualstudio.com/items?itemName=tomblind.local-lua-debugger-vscode

@@ -3,7 +3,7 @@ local GameConf={
     gravity_z = 800,
     -- temporary
     root_path="D:\\Games\\quake\\id1",
-    start_level="start.bsp",    
+    start_level="start",    
     -- game key bindings
     keys = {
         up = {'w','up'},
@@ -30,4 +30,14 @@ local GameConf={
         "weapons"
     }     
 }
+
+-- load user conf (if any)
+local status, user_conf = pcall(require, "user_conf")
+if status then
+    -- merge with standard conf
+    for k,v in pairs(user_conf) do
+        printh("Found setting override: "..k)
+        GameConf[k] = v
+    end        
+end
 return GameConf
