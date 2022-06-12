@@ -1,9 +1,10 @@
 local logging=require("engine.logging")
 local input=require("engine.input_system")
 local stateSystem = require("engine.state_system")
+local conf=require("game_conf")
 
 -- start menu screen/state
-return function(conf, level)
+return function(level)
     local menu,selected={
         "Start",
         "E1M1",
@@ -13,13 +14,13 @@ return function(conf, level)
     },0
     local actions={
         function()
-            stateSystem:next(require("screens.play"),conf,"start.bsp")
+            stateSystem:next("screens.play","start")
         end,
         function()
-            stateSystem:next(require("screens.play"),conf,"e1m1.bsp")
+            stateSystem:next("screens.play","e1m1")
         end,
         function()
-            stateSystem:next(require("screens.play"),conf,"e1m3.bsp")
+            stateSystem:next("screens.play","e1m3")
         end,
         function()
             -- todo: open option menu
@@ -33,15 +34,15 @@ return function(conf, level)
     return     
         -- update
         function()
-            if input:pressed("up") then
+            if input:released("up") then
                 selected = selected - 1 
                 if selected<0 then selected=#menu-1 end
             end
-            if input:pressed("down") then
+            if input:released("down") then
                 selected = selected + 1 
                 if selected==#menu then selected=0 end
             end    
-            if input:pressed("action") then
+            if input:released("action") then
                 actions[selected + 1]()
             end
         end,

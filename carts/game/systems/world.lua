@@ -11,6 +11,8 @@ planes = require("engine.plane_pool")()
 
 function WorldSystem:load(level_name)
     self.loaded = false
+    self.player = nil
+    self.level = nil
     planes.reset()
     active_entities={}    
 
@@ -19,7 +21,7 @@ function WorldSystem:load(level_name)
     local modelReader=require("io.model_reader")(pakReader)
     
     -- load file
-    local level=modelReader:load("maps/"..level_name)
+    local level=modelReader:load("maps/"..level_name..".bsp")
     self.level = level
 
     -- 2d/3d collision map
@@ -29,7 +31,7 @@ function WorldSystem:load(level_name)
     self.entities=require("entities")(active_entities)
     -- context
     local api=require("progs_api")(modelReader, level.model, self, collisionMap)
-    factory=require("progs_factory")(conf, api)
+    factory=require("progs_factory")(api)
 
     -- bind entities and engine
     for i=1,#level.entities do        
@@ -52,10 +54,10 @@ function WorldSystem:spawn()
     local ent={
         nodes={},
         m={
-                1,0,0,0,
-                0,1,0,0,
-                0,0,1,0,
-                0,0,0,1
+            1,0,0,0,
+            0,1,0,0,
+            0,0,1,0,
+            0,0,0,1
             }        
         }
     -- 

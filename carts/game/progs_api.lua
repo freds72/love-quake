@@ -3,6 +3,7 @@ local logging = require("engine.logging")
 local lightStyles = require("systems.lightstyles")
 local rampStyles = require("systems.rampstyles")
 local messages = require("systems.message")
+local stateSystem = require("engine.state_system")
 
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local precache_models={}
@@ -124,12 +125,16 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           logging.debug("Selected skill level: "..skill)
           _skill = skill
         end,
-        load=function(_,map,intermission)
+        load=function(self,map,intermission)
+          -- clear message
+          messages:say()
           if intermission then
             -- switch to intermission state
+            logging.debug("Map intermission")
+            stateSystem:next("screens.intermission",world,map,self.found_secrets,self.total_secrets)
           else
-            logging.info("NOT IMPLEMENTED - loading map: "..map)
-            -- server:load("maps/"..map..".bsp")
+            logging.debug("Loading map: "..map)
+            stateSystem:next("screens.play",world,map)
           end
         end,
         drop_to_floor=function(self,ent)
@@ -142,11 +147,6 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           self:setorigin(ent,hits.pos)
         end,
         attach=function(self,ent,system,args)
-          if not _components then
-            -- todo: fix!!!
-            return
-          end
-
           local c=_components[system]
           if not c then
             logging.error("Unknown system: "..system)

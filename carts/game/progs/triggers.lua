@@ -170,8 +170,9 @@ local triggers=function(progs)
         local NO_INTERMISSION = 1
 
         init_trigger(self)        
-        self.touch = function()
-            -- todo: change level
+        self.touch = function()    
+            -- avoid reentrancy
+            self.touch = nil    
             progs:load(self.map, band(self.spawnflags,NO_INTERMISSION)~=0)
         end
     end

@@ -1,5 +1,4 @@
 
-local gameConf = require("game_conf")
 local stateSystem = require("engine.state_system")
 local input=require("engine.input_system")
 local world=require("systems.world")
@@ -17,9 +16,8 @@ function _init()
     _colormap=mmap("gfx/colormap.png")
     blend(_colormap,31)
 
-    local menuState = require("screens.play")
     local arg1, arg2 = args()
-    stateSystem:next(menuState, gameConf, arg1, arg2)
+    stateSystem:next("screens.play", arg1, arg2)
 
     _components["particles"] = require("systems.particles")(rasterizer)
 
