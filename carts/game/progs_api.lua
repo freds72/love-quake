@@ -128,6 +128,11 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
         load=function(self,map,intermission)
           -- clear message
           messages:say()
+          -- remove player
+          if world.player then
+            world.player.free=true
+          end
+          
           if intermission then
             -- switch to intermission state
             logging.debug("Map intermission")

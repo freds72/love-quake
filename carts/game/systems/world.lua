@@ -6,10 +6,11 @@ local collisionMap
 local active_entities={}
 local new_entities={}
 
--- globals :(
-planes = require("engine.plane_pool")()
 
 function WorldSystem:load(level_name)
+    -- globals :(
+    planes = require("engine.plane_pool")()
+
     self.loaded = false
     self.player = nil
     self.level = nil
@@ -77,6 +78,9 @@ function WorldSystem:update()
         local ent = active_entities[i]
         -- to be removed?
         if ent.free then
+            if ent.classname=="player" then
+                self.player = nil
+            end
             collisionMap:unregister(ent)
             del(active_entities, i)
         else
@@ -150,6 +154,8 @@ function WorldSystem:update()
 
             -- todo: force origin changes via function
             if ent.m then
+                local angles=ent.mangles or {0,0,0}
+                ent.m=make_m_from_euler(unpack(angles))          
                 m_set_pos(ent.m, ent.origin)
             end
         end

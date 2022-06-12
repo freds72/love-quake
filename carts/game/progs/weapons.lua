@@ -18,7 +18,7 @@ local weapons=function(progs)
 
         self.nextthink = progs:time() + 0.1
         self.think=function()            
-            self.mangles={0,0,progs:time() * 12}
+            self.mangles={0,0,progs:time()}
             self.nextthink = progs:time() + 0.01
         end        
     end
@@ -34,7 +34,7 @@ local weapons=function(progs)
         
         self.nextthink = progs:time() + 0.1
         self.think=function()            
-            self.mangles={0,0,progs:time() * 12}
+            self.mangles={0,0,progs:time()}
             self.nextthink = progs:time() + 0.01
         end        
     end
