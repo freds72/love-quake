@@ -12,6 +12,7 @@ local GameConf={
         right = {'d','right'},
         action = {'space'}
     },
+    mouse_speed=0.3,
     -- supported entities & various "programs"
     progs={
         "world",

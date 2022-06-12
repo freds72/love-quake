@@ -30,6 +30,8 @@ function InputSystem:update()
 
     self.mx,self.my=mouse()
     self.mdx,self.mdy=dmouse()
+    self.mdx=self.mdx*conf.mouse_speed
+    self.mdy=self.mdy*conf.mouse_speed
 end
 
 -- returns true if key has been pressed in frame

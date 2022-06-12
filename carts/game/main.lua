@@ -1,5 +1,5 @@
 if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
-    _dont_grab_mouse = true
+    -- _dont_grab_mouse = true
     -- start debugger only in 1 thread
     -- require("lldebugger").start()
 end
@@ -201,8 +201,8 @@ function love.run()
                     -- return mouse position when requested
                     x=math.floor(love.mouse.getX()/scale),
                     y=math.floor(love.mouse.getY()/scale),        
-                    dx=math.floor(mouseInfo.dx),
-                    dy=math.floor(mouseInfo.dy)
+                    dx=mouseInfo.dx,
+                    dy=mouseInfo.dy
                 })
                 mouseInfo.dx=0
                 mouseInfo.dy=0
