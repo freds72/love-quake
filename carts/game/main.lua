@@ -53,7 +53,11 @@ end
 function love.keypressed( key, scancode, isrepeat )
     if key == "escape" then
         love.event.quit(0)
-    end
+    elseif key == "f11" then
+        fullscreen = not fullscreen
+        love.window.setFullscreen(fullscreen, fstype)
+        love.resize(love.graphics.getDimensions())
+    end    
     scanCodes[scancode] = true
 end
 

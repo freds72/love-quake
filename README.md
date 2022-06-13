@@ -11,6 +11,13 @@
     &love.exe game q8k e1m3
 ```
 
+- Game keys:
+  - Escape : exit game
+  - F11: switch full screen on/off
+  - WASD/ZQSD: move
+  - space bar: action (open)
+  - left mouse button: fire
+
 ## How to add custom configuration
 
 Create user_conf.lua in ~/LOVE/picotron. Example
@@ -68,3 +75,5 @@ Supported overrides:
 
 - setup break point in game (note: setting breakpoints in main.lua is not supported)
 - Hit F5 to start a session (or debug icon)
+
+
