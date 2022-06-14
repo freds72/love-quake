@@ -94,7 +94,7 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 			local dx,sdw=x0-s0,_ptr[span+3]
 			local sw=_ptr[span+2]+dx*sdw		
 			
-			if sw-w<-1e-6 or (sw-w<0.00001 and dw>sdw) then
+			if sw-w<-0.00001 or (sw-w<0.00001 and dw>sdw) then
 				--printh(sw.."("..dx..") "..w.." w:"..span.dw.."<="..dw)	
 				-- insert (left) clipped existing span as a "new" span
 				if dx>0 then

@@ -29,7 +29,7 @@ local player=function(progs)
             down={0,-1,0},
             left={1,0,0},
             right={-1,0,0},
-            action={0,0,6.2}
+            jump={0,0,6.2}
         }
 
         local angle,dangle={0,0,0},{0,0,0}
@@ -55,6 +55,18 @@ local player=function(progs)
             local c,s=cos(a),sin(a)            
             self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,(self.on_ground and acc[3] or 0)-0.5})
             self.mangles = angle
+
+            -- action?
+            if input:released("action") then
+                local fwd,up = m_fwd(self.m),m_up(self.m)
+                local eye_pos = v_add(self.origin,up,24)
+                local aim_pos = v_add(eye_pos,fwd,48)
+                
+                local touched = progs:traceline(self,eye_pos,aim_pos)
+                if touched and touched.use then
+                    touched.use(self)
+                end
+            end
         end
 
         self.postthink=function(input)

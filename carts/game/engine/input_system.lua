@@ -23,7 +23,7 @@ function InputSystem:update()
     end
 
     -- refresh
-    for k,action in pairs(scancodes) do
+    for k,action in pairs(scancodes) do        
         if key(k) then down_actions[action]=true end
         if keyp(k) then up_actions[action]=true end
     end

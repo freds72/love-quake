@@ -1,5 +1,5 @@
 if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
-    -- _dont_grab_mouse = true
+    _dont_grab_mouse = true
     -- start debugger only in 1 thread
     -- require("lldebugger").start()
 end
@@ -65,9 +65,15 @@ function love.keyreleased( key, scancode )
     scanCodes[scancode] = nil
 end
 
+local btn_names={"lmb","rmb","mmb"}
 function love.mousepressed( x, y, button, istouch, presses )
-    mouseInfo.btn = button
+    -- convert mouse buttons to "scancodes"
+    scanCodes[btn_names[button]] = true
 end
+function love.mousereleased( x, y, button, istouch, presses )
+    scanCodes[btn_names[button]] = nil
+end
+
 function love.wheelmoved( x, y )
     mouseInfo.wheel = y
 end
@@ -195,9 +201,10 @@ function love.run()
                 -- compute rectangle to capture
                channels:response({canvasBytes,x,y,min(x+w,displayWidth),min(y+h,displayHeight)})
             elseif name=="keys" then
+                -- copy active scan codes
                 local keys={}
                 for k in pairs(scanCodes) do
-                    keys[k] = love.keyboard.isScancodeDown(k)
+                    keys[k] = scanCodes[k]
                 end
                 channels:response(keys)            
             elseif name=="mouse" then
