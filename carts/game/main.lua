@@ -24,16 +24,16 @@ local mouseInfo={
     dy=0
 }
 
--- physical display size
+-- Picotron display size
 local screenWidth,screenHeight=480,270
 
--- logical screen size
-local displayWidth,displayHeight=screenWidth,screenHeight
+-- Love screen size
 local scale,xoffset,yoffset = 2,0,0
+local displayWidth,displayHeight=scale * screenWidth,scale * screenHeight
 local imageExtensions={[".png"]=true,[".bmp"]=true}
   
 function love.load(args)  
-    love.window.setMode(displayWidth * scale, displayHeight * scale, {resizable=true, vsync=true, minwidth=480, minheight=270})
+    love.window.setMode(displayWidth, displayHeight, {resizable=true, vsync=true, minwidth=480, minheight=270})
 
     if not _dont_grab_mouse then
         love.mouse.setGrabbed(true)
@@ -141,7 +141,7 @@ function love.run()
                     lg.setColor(1,1,1)
                     framebuffer:present(xoffset, yoffset, fb, pal, scale)
                     lg.setColor(0,1,0)
-                    lg.print("fps: "..love.timer.getFPS(),2,scale * displayHeight - 20)
+                    lg.print("fps: "..love.timer.getFPS(),2,displayHeight - 20)
                     lg.present()
                 end
                 -- unlock vm
