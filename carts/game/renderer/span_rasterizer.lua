@@ -1,4 +1,3 @@
-local frame=0
 -- layout
 local VBO_1 = 0
 local VBO_2 = 1
@@ -12,7 +11,7 @@ local VBO_V = 8
 
 local vbo = require("engine.pool")("vertex_cache",9,7500)
 local _vboptr=vbo:ptr(0)
-local _pool=require("engine.pool")("spans",5,12500)
+local _pool=require("engine.pool")("spans",5,25000)
 local _ptr=_pool:ptr(0)
 local _spans={}
 
@@ -193,7 +192,7 @@ local WireframeRasterizer={
         local VBO_V = 8
     
         local mipscale,umin,vmin=texture.scale,texture.umin,texture.vmin
-        local miny,maxy,mini=math.huge,-math.huge
+        local miny,maxy,mini=32000,-32000
         -- find extent
         for i=1,np do
 			local pi=_vboptr + p[i]
@@ -311,10 +310,7 @@ local WireframeRasterizer={
 		x0=flr(x0)
 		x1=flr(x1)-1
 		-- visible?
-		if x0>480 or x1<0 then
-			return
-		end
-		if y0>270 or y1<0 then
+		if x0>480 or x1<0 or y0>270 or y1<0 then
 			return
 		end
 		for y=1+flr(y0),y1 do

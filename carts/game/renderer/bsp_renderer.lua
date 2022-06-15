@@ -432,7 +432,7 @@ local BSPRenderer=function(world,rasterizer)
       -- skip world
       for i=2,#entities do
         local ent = entities[i]
-        if not ent.DRAW_NOT and ent.nodes then
+        if not ent.DRAW_NOT and ent.nodes then          
           -- find if touching a visible leaf?
           for node,_ in pairs(ent.nodes) do
             if node.visframe==visframe then              
@@ -704,8 +704,8 @@ local BSPRenderer=function(world,rasterizer)
           end
         end
       end
-    end      
-    
+    end
+
     return {
       beginFrame=function()
           surfaceCache:beginFrame()
@@ -714,44 +714,44 @@ local BSPRenderer=function(world,rasterizer)
         surfaceCache:endFrame()
       end,
       draw=function(self,cam)
-          -- nothing to draw (eg. no scene/world)
-          if not cam.ready then
-              return
-          end
-          debugColor=8
-          
-          -- refresh visible set
-          local world_entity = world.entities[1]
-          local main_model = world_entity.model
-          local resources = world.level.model
-          local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
-          -- world entity
-          drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves)
+        -- nothing to draw (eg. no scene/world)
+        if not cam.ready then
+            return
+        end
+        debugColor=8
+        
+        -- refresh visible set
+        local world_entity = world.entities[1]
+        local main_model = world_entity.model
+        local resources = world.level.model
+        local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
+        -- world entity
+        drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves)
 
-          -- visible entities
-          local visents = collect_entities(world.entities)
-          
-          for i=1,#visents do
-            local ent=visents[i]
-            local m = ent.model
-            -- todo: find out a better way to detect type
-            if m.leaf_start then
-              local resources = ent.resources or resources
-              if ent.MOVING_BSP then
-                drawMovingModel(cam,main_model.hulls[1],ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
-              else
-                drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
-              end
+        -- visible entities
+        local visents = collect_entities(world.entities)
+        
+        for i=1,#visents do
+          local ent=visents[i]
+          local m = ent.model
+          -- todo: find out a better way to detect type
+          if m.leaf_start then
+            local resources = ent.resources or resources
+            if ent.MOVING_BSP then
+              drawMovingModel(cam,main_model.hulls[1],ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
             else
-              drawAliasModel(
-                cam,
-                ent, 
-                m,
-                ent.skin,
-                ent.frame)        
+              drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
             end
-          end        
-          --print(surfaceCache:stats(),2,2,8)          
+          else
+            drawAliasModel(
+              cam,
+              ent, 
+              m,
+              ent.skin,
+              ent.frame)        
+          end
+        end   
+        --print(surfaceCache:stats(),2,2,8)          
       end
     }
 end

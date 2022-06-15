@@ -1,8 +1,5 @@
 local shambler=function(progs)
 
-    -- p8 compat
-    local band=bit.band
-
     progs:precache_model("progs/shambler.mdl")
 
     progs.monster_shambler=function(self)

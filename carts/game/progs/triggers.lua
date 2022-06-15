@@ -12,10 +12,57 @@ local triggers=function(progs)
         self.DRAW_NOT = true
         set_defaults(self,{
             nextthink = -1,
+            spawnflags = 0,
+            health = 0,
             spawnflags = 0
         })
+
         -- set size and link into world
         progs:setmodel(self, self.model)
+    end
+
+    local function init_multiple(self)
+        -- init entity        
+        init_trigger(self)
+
+        local use=function(other)
+            if self.nextthink>progs:time() then
+                return
+            end
+            if self.message then
+                progs:print(self.message)
+            end
+            -- trigger
+            use_targets(self, other)
+
+            -- reactivate (or not)
+            if self.wait>0 then
+                self.nextthink = progs:time() + self.wait
+            else
+                -- remove self
+                self.free = true
+                self.use = nil
+            end
+        end
+
+        self.use = use
+        if band(self.spawnflags,SPAWNFLAG_NOTOUCH)==0 then
+            self.touch = self.use
+        end
+
+        if self.health>0 then
+            -- can only be triggered 
+            self.SOLID_TRIGGER = nil
+            self.SOLID_BBOX = true
+            local max_health = self.health
+            self.die=function(instigator)
+                if self.use then
+                    self.use(instigator)
+                end
+                -- in case triggers is multiple
+                self.health = max_health
+            end
+        end
     end
 
     -- classname bindings
@@ -66,47 +113,17 @@ local triggers=function(progs)
     end
 
     progs.trigger_multiple=function(self)
-        -- init entity        
-        init_trigger(self)
         if not self.wait then
 		    self.wait = 0.2
         end
-
-        self.touch=function(other)
-            if self.nextthink>progs:time() then
-                return
-            end
-            printh("touched by: "..other.classname)
-            if self.message then
-                progs:print(self.message)
-            end
-            -- reactivate (or not)
-            if self.wait>0 then
-                self.nextthink = progs:time() + self.wait
-            else
-                -- remove self
-                self.free = true
-                self.touch = nil
-            end
-        end
+        init_multiple(self)
     end
 
     progs.trigger_once=function(self)
         -- init entity        
-        init_trigger(self)
+        self.wait = -1
 
-        self.touch=function(other)
-            if self.message then
-                progs:print(self.message)
-            end
-            -- kill self
-            self.free = true
-            -- avoid reentrancy
-            self.touch = nil
-            
-            -- trigger action (if any)
-            use_targets(self)
-        end
+        init_multiple(self)
     end
 
     progs.trigger_counter=function(self)
@@ -151,7 +168,7 @@ local triggers=function(progs)
             use_targets(self, other)
         end
         self.use = use_secret
-        if band(self.spawnflags or 0,SPAWNFLAG_NOTOUCH)==0 then
+        if band(self.spawnflags,SPAWNFLAG_NOTOUCH)==0 then
             self.touch = use_secret
         end
     end

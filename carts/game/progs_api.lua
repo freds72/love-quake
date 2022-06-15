@@ -161,8 +161,9 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
         end,
         traceline=function(self,ent,p0,p1,monsters)
           local absmins,absmaxs=v_min(p0,p1),v_max(p0,p1)
-          local ents = collisionMap:touches(absmins, absmaxs, ent)            
-          local trace = collisionMap:hitscan({0,0,0},{0,0,0},p0,p1,{},ents)
+          local ents = collisionMap:touches(absmins, absmaxs, ent)                      
+          local triggers = {}
+          local trace = collisionMap:hitscan({0,0,0},{0,0,0},p0,p1,triggers,ents)
           if trace and trace.n then
             return trace.ent
           end

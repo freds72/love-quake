@@ -7,7 +7,7 @@ tools/__pycache__
 /maps/autosave
 *.blend1
 /env/
-.vscode
+/.vscode/
 
 
 

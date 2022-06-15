@@ -198,7 +198,8 @@ local CollisionMap=function(world)
     -- returns all entities touching the given absolute box
 
     function this:touches(mins,maxs,filter)
-        touch_query.ents = {}
+        -- always add world
+        touch_query.ents = {world.entities[1]}
         touch_query:find(_map,mins,maxs,filter)
         return touch_query.ents
     end
@@ -254,7 +255,7 @@ local CollisionMap=function(world)
 
                 if tmphits.n then
                     -- closest hit?
-                    -- print(other_ent.classname.." @ "..tmphits.t)
+                    -- printh(other_ent.classname.." @ "..tmphits.t)
                     if other_ent.SOLID_TRIGGER then
                         -- damage or other actions
                         triggers[other_ent] = true
@@ -281,8 +282,6 @@ local CollisionMap=function(world)
         -- collect all potential touching entities (done only once)
         -- todo: smaller box
         local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
-        -- always add world
-        add(ents,1,world.entities[1])  
         -- check current to target pos
         for i=1,4 do
             local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
@@ -334,8 +333,6 @@ local CollisionMap=function(world)
         -- collect all potential touching entities (done only once)
         -- todo: smaller box
         local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
-        -- always add world
-        add(ents,1,world.entities[1])  
         -- check current to target pos
         local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)        
         if hits then

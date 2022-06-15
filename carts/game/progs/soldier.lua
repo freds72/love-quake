@@ -1,8 +1,5 @@
 local soldier=function(progs)
 
-    -- p8 compat
-    local band,rnd,flr,min=bit.band,math.random,math.floor,math.min
-
     progs:precache_model("progs/soldier.mdl")
     local poses={
         stand={random=true,length=8},
@@ -17,6 +14,7 @@ local soldier=function(progs)
         self.skin = 1     
         self.frame = "stand1"
         self.mangles = {0,0,self.angle or 0}
+        self.health = 30
         progs:setmodel(self, "progs/soldier.mdl")
 
         --     
@@ -54,9 +52,9 @@ local soldier=function(progs)
                 end
             end)
 
-        self.use=function()
+        self.die=function()
             -- avoid reentrancy
-            self.use=nil
+            self.die=nil
             self.think=select_pose(
                 rnd()>0.5 and "deathc" or "death",
                 0.1,

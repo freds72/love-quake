@@ -64,6 +64,7 @@ local world=function(progs)
             name = self.message,
             worldtype=self.worldtype
         }
+		self.classname="world"
 		-- force origin
 		self.origin = {0,0,0}	
         self.SOLID_BSP = true

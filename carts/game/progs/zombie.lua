@@ -1,8 +1,4 @@
 local zombie=function(progs)
-
-    -- p8 compat
-    local band,flr,rnd=bit.band,math.floor,math.random
-
     progs:precache_model("progs/zombie.mdl")
     
     progs.monster_zombie=function(self)
