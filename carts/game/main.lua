@@ -68,13 +68,14 @@ function love.keyreleased( key, scancode )
     scanCodes[scancode] = nil
 end
 
-local btn_names={"lmb","rmb","mmb"}
+-- "scancodes" for mouse
+local mbtn_names={"lmb","rmb","mmb"}
 function love.mousepressed( x, y, button, istouch, presses )
     -- convert mouse buttons to "scancodes"
-    scanCodes[btn_names[button]] = true
+    scanCodes[mbtn_names[button]] = true
 end
 function love.mousereleased( x, y, button, istouch, presses )
-    scanCodes[btn_names[button]] = nil
+    scanCodes[mbtn_names[button]] = nil
 end
 
 function love.wheelmoved( x, y )
