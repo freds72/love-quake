@@ -24,8 +24,11 @@ local mouseInfo={
     dy=0
 }
 
+-- physical display size
+local screenWidth,screenHeight=480,270
+
 -- logical screen size
-local displayWidth,displayHeight=480,270
+local displayWidth,displayHeight=screenWidth,screenHeight
 local scale,xoffset,yoffset = 2,0,0
 local imageExtensions={[".png"]=true,[".bmp"]=true}
   
@@ -39,9 +42,9 @@ function love.load(args)
     end
 
     -- print canvas
-    printCanvas = lg.newCanvas( displayWidth, displayHeight, {format="r8"})
+    printCanvas = lg.newCanvas( screenWidth, screenHeight, {format="r8"})
     -- exchange buffer
-    canvasBytes = love.data.newByteData(displayWidth * displayHeight)
+    canvasBytes = love.data.newByteData(screenWidth * screenHeight)
     -- console font
     consoleFont = lg.newFont("picotron/assets/console.fnt")
 
@@ -55,7 +58,7 @@ function love.keypressed( key, scancode, isrepeat )
         love.event.quit(0)
     elseif key == "f11" then
         fullscreen = not fullscreen
-        love.window.setFullscreen(fullscreen, fstype)
+        love.window.setFullscreen(fullscreen)
         love.resize(love.graphics.getDimensions())
     end    
     scanCodes[scancode] = true
@@ -181,6 +184,7 @@ function love.run()
                         sx = b
                         s = ""
                     elseif ch~="\b" then
+                        -- todo: color (wargh!)
                         s = s .. ch
                     end
                 end                    
@@ -195,11 +199,11 @@ function love.run()
                 lg.setCanvas()
                 local img = printCanvas:newImageData()
                 -- images cannot be shared cross-thread
-                ffi.copy(canvasBytes:getFFIPointer(),img:getFFIPointer(),displayWidth*displayHeight)
+                ffi.copy(canvasBytes:getFFIPointer(),img:getFFIPointer(),screenWidth*screenHeight)
                 img:release()
                 local x,y=max(0,b),max(0,c)
                 -- compute rectangle to capture
-               channels:response({canvasBytes,x,y,min(x+w,displayWidth),min(y+h,displayHeight)})
+               channels:response({canvasBytes,x,y,min(x+w,screenWidth),min(y+h,screenHeight)})
             elseif name=="keys" then
                 -- copy active scan codes
                 local keys={}
