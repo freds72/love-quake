@@ -5,7 +5,9 @@ local conf = require("game_conf")
 local scancodes={}
 for action,keys in pairs(conf.keys) do
     for _,k in pairs(keys) do
-        scancodes[k]=action
+        local actions=scancodes[k] or {}
+        add(actions,action)
+        scancodes[k]=actions
     end
 end
 -- store current frame down actions
@@ -23,9 +25,12 @@ function InputSystem:update()
     end
 
     -- refresh
-    for k,action in pairs(scancodes) do        
-        if key(k) then down_actions[action]=true end
-        if keyp(k) then up_actions[action]=true end
+    for k,actions in pairs(scancodes) do   
+        local pressed,released=key(k),keyp(k)
+        for _,action in pairs(actions) do
+            if pressed then down_actions[action]=true end
+            if released then up_actions[action]=true end
+        end
     end
 
     self.mx,self.my=mouse()
