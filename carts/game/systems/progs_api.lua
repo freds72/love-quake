@@ -4,6 +4,7 @@ local lightStyles = require("systems.lightstyles")
 local rampStyles = require("systems.rampstyles")
 local messages = require("systems.message")
 local stateSystem = require("engine.state_system")
+local gameState = require("systems.game_state")
 
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local precache_models={}
@@ -121,9 +122,9 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
             end
           end
         end,
-        set_skill=function(_,skill)
+        set_skill=function(self,skill)
           logging.debug("Selected skill level: "..skill)
-          _skill = skill
+          gameState.skill = skill
         end,
         load=function(self,map,intermission)
           -- clear message
@@ -159,6 +160,7 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           end
           ent[system]=c:new(ent,args)
         end,
+        -- returns the closest entity in the light of sight
         traceline=function(self,ent,p0,p1,monsters)
           local absmins,absmaxs=v_min(p0,p1),v_max(p0,p1)
           local ents = collisionMap:touches(absmins, absmaxs, ent)                      
@@ -167,6 +169,10 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           if trace and trace.n then
             return trace.ent
           end
+        end,
+        -- call an entity function
+        call=function(_,ent,fn,...)
+          world:call(ent,fn,...)
         end
       }
 end

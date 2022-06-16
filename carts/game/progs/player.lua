@@ -38,6 +38,7 @@ local player=function(progs)
             angle[2]=angle[2]*0.8
             dangle = v_scale(dangle,0.6)
 
+            -- todo: less friction not on ground
             self.velocity[1]=self.velocity[1]*0.8
             self.velocity[2]=self.velocity[2]*0.8      
       

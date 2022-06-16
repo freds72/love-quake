@@ -1,8 +1,8 @@
--- loads declared "programs" in configuration
 local logging=require("engine.logging")
 local conf=require("game_conf")
 
-local ProgsFactory=function(env)
+-- interface between "programs" and game engine
+local ProgsVM=function(env)
     -- global functions
     for i=1,#conf.progs do
         local name = conf.progs[i]
@@ -10,7 +10,7 @@ local ProgsFactory=function(env)
         require("progs."..name)(env)
     end
 
-    return {
+    return {        
         -- call a "mod" function unless entity is tagged for delete
         call=function(self,ent,fn,...)
             if not ent.free and ent[fn] then
@@ -28,4 +28,4 @@ local ProgsFactory=function(env)
         end
     }
 end
-return ProgsFactory
+return ProgsVM

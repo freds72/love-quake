@@ -1,7 +1,11 @@
 local WorldSystem={}
 local conf = require("game_conf")
 local maths = require("engine.maths3d")
-local factory
+local logging = require("engine.logging")
+local gameState = require("systems.game_state")
+
+-- private vars
+local vm
 local collisionMap
 local active_entities={}
 local new_entities={}
@@ -13,6 +17,11 @@ function WorldSystem:load(level_name)
     self.loaded = false
     self.player = nil
     self.level = nil
+    
+    if level_name=="start" then
+        gameState:reset()
+    end
+
     planes.reset()
     active_entities={}    
 
@@ -30,16 +39,16 @@ function WorldSystem:load(level_name)
     -- live entities
     self.entities=require("entities")(active_entities)
     -- context
-    local api=require("progs_api")(modelReader, level.model, self, collisionMap)
-    factory=require("progs_factory")(api)
+    local api=require("systems.progs_api")(modelReader, level.model, self, collisionMap)
+    vm = require("systems.progs_vm")(api)
 
     -- bind entities and engine
     for i=1,#level.entities do        
         -- order matters: worldspawn is always first
         local ent = level.entities[i]
-        -- todo: match with difficulty level
-        if band(ent.spawnflags or 0,512)==0 then
-            local ent = factory:create(ent)
+        -- match with difficulty level
+        if band(ent.spawnflags or 0, shl(gameState.skill,8))==0 then
+            local ent = vm:create(ent)
             if ent then
                 -- valid entity?
                 add(active_entities, ent)
@@ -65,6 +74,12 @@ function WorldSystem:spawn()
     return ent
 end
 
+-- call a "program" function unless entity is tagged for delete
+function WorldSystem:call(ent,fn,...) 
+    vm:call(ent,fn,...)
+end
+
+-- update world / run physics / create late entities / ...
 function WorldSystem:update()
     -- transfer new entities to active list     
     for k,ent in pairs(new_entities) do
@@ -86,19 +101,25 @@ function WorldSystem:update()
             -- any velocity?
             local velocity=ent.velocity
             if velocity then
+
                 -- todo: physics...
                 -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
                 local prev_contents = ent.contents
+                -- water? super damping
+                if prev_contents==-3 then
+                    velocity[3]=velocity[3]*0.6
+                end
+
                 if ent.MOVETYPE_TOSS then
                     local move = collisionMap:fly(ent,ent.origin,v_scale(velocity,1/60))
                     ent.origin = move.pos          
                     velocity[3] = velocity[3] - conf.gravity_z/60          
                     -- hit other entity?
                     if move.ent then
-                        factory:call(ent,"touch",move.ent)
+                        vm:call(ent,"touch",move.ent)
                     end
                 elseif ent.SOLID_SLIDEBOX then
-                    -- check next position
+                    -- check next position                    
                     local vn,vl=v_normz(velocity)      
                     local on_ground = ent.on_ground
                     if vl>0.1 then
@@ -121,7 +142,7 @@ function WorldSystem:update()
 
                         -- trigger touched items
                         for other_ent in pairs(move.touched) do
-                            factory:call(other_ent,"touch",ent)
+                            vm:call(other_ent,"touch",ent)
                         end                               
                     else
                         velocity = {0,0,0}
@@ -174,7 +195,7 @@ function WorldSystem:connect()
                 origin = v_add(v_clone(kv.origin),{0,0,1})
             }
             
-            local ent = factory:create(ent)
+            local ent = vm:create(ent)
             assert(ent,"cannot create player")
             -- valid entity?
             self.player = ent

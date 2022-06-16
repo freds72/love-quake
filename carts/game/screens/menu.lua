@@ -42,7 +42,7 @@ return function(level)
                 selected = selected + 1 
                 if selected==#menu then selected=0 end
             end    
-            if input:released("action") then
+            if input:released("ok") then
                 actions[selected + 1]()
             end
         end,

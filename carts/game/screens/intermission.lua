@@ -8,7 +8,7 @@ return function(world,level,secrets,total)
     return     
         -- update
         function()
-            if input:released("action") then
+            if input:released("ok") then
                 stateSystem:next("screens.play",level)
             end
         end,

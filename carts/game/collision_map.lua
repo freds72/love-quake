@@ -185,11 +185,11 @@ local CollisionMap=function(world)
             local e=make_v(c, maxs)
             -- register in visible world
             register_bbox(_root, ent, c, e)
-
-            -- find current content (origin only)
-            local node = bsp.locate(_root,ent.origin)
-            ent.contents = node.contents
         end
+
+        -- find current content (origin only)
+        local node = bsp.locate(_root,ent.origin)
+        ent.contents = node.contents
 
         -- register to 2d map
         register_map(_map, ent)
