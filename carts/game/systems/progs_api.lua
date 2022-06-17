@@ -140,7 +140,7 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
             stateSystem:next("screens.intermission",world,map,self.found_secrets,self.total_secrets)
           else
             logging.debug("Loading map: "..map)
-            stateSystem:next("screens.play",world,map)
+            stateSystem:next("screens.play",map)
           end
         end,
         drop_to_floor=function(self,ent)

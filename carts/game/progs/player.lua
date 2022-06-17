@@ -64,8 +64,8 @@ local player=function(progs)
                 local aim_pos = v_add(eye_pos,fwd,48)
                 
                 local touched = progs:traceline(self,eye_pos,aim_pos)
-                if touched and touched.touch then
-                    touched.touch(self)
+                if touched then
+                    progs:call(touched,"touch",self)
                 end
             end
 
@@ -75,10 +75,11 @@ local player=function(progs)
                 local aim_pos = v_add(eye_pos,fwd,1024)
                 
                 local touched = progs:traceline(self,eye_pos,aim_pos)
+                -- todo: refactor
                 if touched and touched.health then
                     touched.health = touched.health - 10
-                    if touched.health<=0 and touched.die then
-                        touched.die(self)
+                    if touched.health<=0 then
+                        progs:call(touched,"die",self)
                     end
                 end
             end
