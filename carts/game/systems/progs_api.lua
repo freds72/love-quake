@@ -42,8 +42,6 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           local m
           if sub(id,1,1)=="*" then
             m = models[tonumber(sub(id,2)) + 1]
-            -- bind to model "owner"
-            -- todo: yargh!!! to be changed
           else        
             local cached_model = precache_models[id]
             if cached_model.alias then
@@ -82,6 +80,10 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           end
           ent.absmins=v_add(ent.origin,ent.mins)
           ent.absmaxs=v_add(ent.origin,ent.maxs)
+
+          assert(ent.absmins)
+          assert(ent.absmaxs)
+          
           -- register into world
           ent.nodes={}
           if id~="*0" then

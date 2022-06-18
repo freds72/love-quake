@@ -197,9 +197,9 @@ local CollisionMap=function(world)
 
     -- returns all entities touching the given absolute box
 
-    function this:touches(mins,maxs,filter)
+    function this:touches(mins,maxs,filter,no_world)
         -- always add world
-        touch_query.ents = {world.entities[1]}
+        touch_query.ents = {not no_world and world.entities[1]}
         touch_query:find(_map,mins,maxs,filter)
         return touch_query.ents
     end
@@ -324,7 +324,7 @@ local CollisionMap=function(world)
     end
     
     -- missile type move (no course correction)
-    function this:fly(ent,origin,velocity)
+    function this:fly(ent,origin,velocity,no_world)
         local next_pos=v_add(origin,velocity)
         local invalid,hit_ent=false
     
@@ -332,7 +332,7 @@ local CollisionMap=function(world)
         local touched = {}
         -- collect all potential touching entities (done only once)
         -- todo: smaller box
-        local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
+        local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent,no_world)
         -- check current to target pos
         local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)        
         if hits then

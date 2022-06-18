@@ -132,7 +132,7 @@ local triggers=function(progs)
         local msg = self.message or "%s more to go..."
         local msg_on = band(self.spawnflags or 0,SPAWNFLAG_NOMESSAGE)==0
         local count = self.count or 2
-        self.use = function()
+        self.use = function(other)
             count = count - 1
             if msg_on then
                 if count>0 then
@@ -145,7 +145,7 @@ local triggers=function(progs)
                 -- kill counter
                 self.free = true
                 self.use = nil
-                use_targets(self)
+                use_targets(self,other)
             end
         end
     end

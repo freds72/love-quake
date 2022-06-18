@@ -1,10 +1,7 @@
 local doors=function(progs)
     local subs = require("progs/subs")(progs)
     local maths = require("engine.maths3d")
-    -- p8 compat
-    local abs,band=math.abs,bit.band
-    local add=table.insert
-
+    
     -- internal helpers
     local function init(self)
         -- easier to find siblings
@@ -24,7 +21,7 @@ local doors=function(progs)
         self.MOVING_BSP = true
         
         -- set size and link into world
-        progs:setmodel(self, self.model)        
+        progs:setmodel(self, self.model)  
     end
 
     -- classname bindings

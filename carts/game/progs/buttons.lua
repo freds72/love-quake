@@ -73,7 +73,7 @@ local buttons=function(progs)
             -- texture
             self.sequence = 2
             -- trigger action (if any)
-            use_targets(self)
+            use_targets(self, other)
             
             -- move            
             calc_move(self, self.pos2, self.speed, function()

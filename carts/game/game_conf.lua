@@ -30,7 +30,8 @@ local GameConf={
         "shambler",
         "zombie",
         "soldier",
-        "weapons"
+        "weapons",
+        "platforms"
     }     
 }
 
