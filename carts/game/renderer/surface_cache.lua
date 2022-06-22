@@ -195,8 +195,8 @@ local SurfaceCache=function(rasterizer)
             scale=texscale,
             width=imgw,
             height=imgh,
-            umin=flr(face.umin/texscale),
-            vmin=flr(face.vmin/texscale)
+            umin=face.umin/texscale,
+            vmin=face.vmin/texscale
         },{
           __index=function(self,_)
             -- grab memory region
@@ -244,7 +244,7 @@ local SurfaceCache=function(rasterizer)
                         end
                       end
                       -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]                      
-                      lm[x]=63-shr(sample,2)
+                      lm[x]=63-shr(sample,1)
                   end
                   -- next row
                   lm = lm + w
@@ -264,7 +264,7 @@ local SurfaceCache=function(rasterizer)
             local t=dt/2
             for y=0,imgh-1 do
                 local s=dt/2
-                local d,t0,tfrac,t1=dt,flr(t),t%1,ceil(t)
+                local t0,tfrac,t1=flr(t),t%1,ceil(t)
                 for x=0,imgw-1 do
                   local s0,sfrac,s1=flr(s),s%1,ceil(s)
                   local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w

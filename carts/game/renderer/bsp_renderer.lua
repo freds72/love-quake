@@ -630,7 +630,7 @@ local BSPRenderer=function(world,rasterizer)
               if n>2 then
                 -- texture mip
                 local mip=3-mid(flr(1536*maxw),0,3)
-                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),32)      
+                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),250)      
               end
             end
           end
