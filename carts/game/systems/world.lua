@@ -87,6 +87,65 @@ function WorldSystem:update()
         new_entities[k]=nil
     end
 
+    -- run physic "warm" loop
+    local platforms={}
+    for i=#active_entities,1,-1 do
+        local ent = active_entities[i]
+        if not ent.free and not ent.SOLID_NOT and ent.SOLID_BSP and ent.MOVETYPE_PUSH then
+            if ent.velocity then
+                local velocity = v_scale(ent.velocity,1/60)
+                -- collect moving box
+                local absmins,absmaxs=v_add(ent.absmins,velocity),v_add(ent.absmaxs,velocity)
+                -- collect touching entities (excludes world!!)
+                local touchingEnts=collisionMap:touches(absmins,absmaxs,ent,true)
+                -- 
+                ent.SOLID_NOT=true
+                local can_push = true
+                for j=1,#touchingEnts do
+                    local touchingEnt=touchingEnts[j]
+                    --if not touchingEnt.free and not ent.MOVETYPE_PUSH and ent.SOLID_SLIDEBOX then
+                    if touchingEnt.classname=="player" then
+                        --printh(time().." plat touching: "..touchingEnt.classname)
+                        -- collect "push" velocity
+                        -- touchingEnt.push = v_add(touchingEnt.push or {0,0,0},ent.velocity,1/60)
+                        -- try to push entity
+                        local move = collisionMap:slide(touchingEnt,touchingEnt.origin,velocity)
+                        if move.fraction<1 then
+                            printh(time().."player blocked by: "..move.ent.classname)
+                            can_push = false
+                            break
+                        else
+                            touchingEnt.origin = move.pos
+                            -- update bounding box
+                            touchingEnt.absmins=v_add(touchingEnt.origin,touchingEnt.mins)
+                            touchingEnt.absmaxs=v_add(touchingEnt.origin,touchingEnt.maxs)
+                    
+                            -- link to world
+                            collisionMap:register(touchingEnt)                        
+                        end
+                    end
+                end
+                ent.SOLID_NOT=nil
+                if can_push then
+                    -- move platform
+                    ent.origin = v_add(ent.origin, velocity)
+                    -- update bounding box
+                    ent.absmins=v_add(ent.origin,ent.mins)
+                    ent.absmaxs=v_add(ent.origin,ent.maxs)
+            
+                    -- link to world
+                    collisionMap:register(ent)                           
+                end
+            end
+            -- update entity
+            if ent.nextthink and ent.nextthink<time() and ent.think then
+                ent.nextthink = nil
+                ent:think()
+            end                  
+            add(platforms,ent)
+        end
+    end
+
     -- any thinking to do?
     for i=#active_entities,1,-1 do
         local ent = active_entities[i]
@@ -97,21 +156,18 @@ function WorldSystem:update()
             end
             collisionMap:unregister(ent)
             del(active_entities, i)
-        else
-            -- any velocity?
-            local velocity=ent.velocity
-            if velocity then
-
-                -- todo: physics...
+        elseif not ent.MOVETYPE_PUSH then
+            if ent.velocity then
+                local velocity = v_scale(ent.velocity,1/60)
                 -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
                 local prev_contents = ent.contents
                 -- water? super damping
                 if prev_contents==-3 then
-                    velocity[3]=velocity[3]*0.6
+                    -- velocity[3]=velocity[3]*0.6
                 end
 
                 if ent.MOVETYPE_TOSS then
-                    local move = collisionMap:fly(ent,ent.origin,v_scale(velocity,1/60))
+                    local move = collisionMap:fly(ent,ent.origin,velocity)
                     ent.origin = move.pos          
                     velocity[3] = velocity[3] - conf.gravity_z/60          
                     -- hit other entity?
@@ -124,17 +180,12 @@ function WorldSystem:update()
                     local on_ground = ent.on_ground
                     if vl>0.1 then
                         local move = collisionMap:slide(ent,ent.origin,velocity)   
-                        on_ground=move.on_ground
-                        if ent.on_ground and move.on_wall and move.fraction<1 then
+                        on_ground = move.on_ground
+                        if on_ground and move.on_wall and move.fraction<1 then
                             local up_move = collisionMap:slide(ent,v_add(ent.origin,{0,0,18}),velocity) 
                             -- largest distance?
                             if not up_move.invalid and up_move.fraction>move.fraction then
                                 move = up_move
-                                -- slight nudge up
-                                -- todo: fix / doesn't really work
-                                -- move.velocity[3] = move.velocity[3] + 4
-                                -- "mini" jump
-                                ent.on_ground=false
                             end
                         end
                         ent.origin = move.pos
@@ -150,9 +201,10 @@ function WorldSystem:update()
                     -- "debug"
                     ent.on_ground = on_ground                    
 
-                    ent.velocity = velocity
+                    -- use corrected velocity
+                    ent.velocity = v_scale(velocity,60)
                 else
-                    ent.origin = v_add(ent.origin, ent.velocity, 1/60)
+                    ent.origin = v_add(ent.origin, velocity)
                 end
 
                 -- update bounding box
@@ -164,9 +216,9 @@ function WorldSystem:update()
 
                 if prev_contents~=ent.contents then
                     -- print("transition from: "..prev_contents.." to:"..ent.contents)
-                end
+                end        
             end
-
+            
             if ent.nextthink and ent.nextthink<time() and ent.think then
                 ent.nextthink = nil
                 ent:think()
@@ -180,6 +232,31 @@ function WorldSystem:update()
             end
         end
     end
+
+    --[[
+    -- move platforms (if possible)
+    for i=1,#platforms do
+        local ent=platforms[i]
+        -- clip with world
+        ent.SOLID_NOT=nil
+        local move = collisionMap:fly(ent,ent.origin,v_scale(ent.velocity,1/60),true)
+        -- not collision?
+        if not move.ent then
+            ent.origin = move.pos          
+            -- update bounding box
+            ent.absmins=v_add(ent.origin,ent.mins)
+            ent.absmaxs=v_add(ent.origin,ent.maxs)
+
+            -- link to world
+            collisionMap:register(ent)
+            local angles=ent.mangles or {0,0,0}
+            ent.m=make_m_from_euler(unpack(angles))          
+            m_set_pos(ent.m, ent.origin)
+        else
+            printh(ent.classname.." collides: "..move.ent.classname)
+        end
+    end
+    ]]
 end
 
 -- create a player

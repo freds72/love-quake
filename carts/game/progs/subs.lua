@@ -44,7 +44,7 @@ local subs=function(progs)
         self.nextthink = progs:time() + traveltime
         self.think = function(self)
             progs:setorigin(self,tdest)
-            self.velocity = nil   
+            self.velocity = {0,0,0}
             -- chain additional logic?         
             if func then
                 func()

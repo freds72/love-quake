@@ -120,9 +120,9 @@ local CollisionMap=function(world)
             for e,_ in pairs(cell.ents) do
                 if e~=filter then
                     -- touching?
-                    if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
-                    y0<=e.absmaxs[2] and y1>=e.absmins[2] and
-                    z0<=e.absmaxs[3] and z1>=e.absmins[3] then
+                    if x0<e.absmaxs[1] and x1>e.absmins[1] and
+                    y0<e.absmaxs[2] and y1>e.absmins[2] and
+                    z0<e.absmaxs[3] and z1>e.absmins[3] then
                         add(self.ents,e)
                     end
                 end
@@ -195,11 +195,10 @@ local CollisionMap=function(world)
         register_map(_map, ent)
     end
 
-    -- returns all entities touching the given absolute box
-
+    -- returns all entities touching the given absolute box    
     function this:touches(mins,maxs,filter,no_world)
         -- always add world
-        touch_query.ents = {not no_world and world.entities[1]}
+        touch_query.ents = no_world and {} or {world.entities[1]}
         touch_query:find(_map,mins,maxs,filter)
         return touch_query.ents
     end
@@ -354,7 +353,6 @@ local CollisionMap=function(world)
             touched=touched,
             invalid=invalid}
     end
-        
     return this
 end
 return CollisionMap

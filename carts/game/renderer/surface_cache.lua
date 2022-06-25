@@ -195,8 +195,8 @@ local SurfaceCache=function(rasterizer)
             scale=texscale,
             width=imgw,
             height=imgh,
-            umin=face.umin/texscale,
-            vmin=face.vmin/texscale
+            umin=flr(face.umin/texscale),
+            vmin=flr(face.vmin/texscale)
         },{
           __index=function(self,_)
             -- grab memory region
@@ -236,15 +236,16 @@ local SurfaceCache=function(rasterizer)
                 local lm,src,size=lightmap,face.lightofs,w*h
                 for y=0,h-1 do
                   for x=0,w-1 do
-                      local sample,idx=0,x + y*w
+                      local sample,src=0,src + x + y*w
                       for i=0,3 do
                         local scale = activeLights[lightstyles[i+1]]
                         if scale and scale>0 then
-                            sample = sample + scale * src[idx + i*size]
+                            sample = sample + scale * src[0]
                         end
+                        src = src + size
                       end
                       -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]                      
-                      lm[x]=63-shr(sample,1)
+                      lm[x]=63-min(shr(sample,1),63)
                   end
                   -- next row
                   lm = lm + w

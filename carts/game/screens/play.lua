@@ -29,6 +29,10 @@ return function(level)
             if messages.msg then
                 print(messages.msg,480/2-#messages.msg*4/2,110,15)
             end
+
+            if player then
+                print("content: "..player.contents.."\nground: "..tostring(player.on_ground),2,2,15)
+            end
         end,
         -- init
         function()
