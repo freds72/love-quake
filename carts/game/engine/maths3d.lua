@@ -54,6 +54,7 @@ function v_len(v)
 	local x,y,z=v[1],v[2],v[3]
   -- pick major
   local d=max(max(abs(x),abs(y)),abs(z))
+  if d==0 then return 0 end
   -- adjust
   x=x/d
   y=y/d

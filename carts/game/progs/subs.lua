@@ -41,8 +41,8 @@ local subs=function(progs)
         self.velocity = v_scale(vdestdelta, 1/traveltime)
 
         -- set nextthink to trigger a think when dest is reached
-        self.nextthink = progs:time() + traveltime
-        self.think = function(self)
+        self.nextthink = self.ltime + traveltime
+        self.think = function()
             progs:setorigin(self,tdest)
             self.velocity = {0,0,0}
             -- chain additional logic?         

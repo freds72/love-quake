@@ -17,7 +17,8 @@ local platforms=function(progs)
         set_defaults(self,{
             spawnflags=0,
             speed=50,
-            dmg=2
+            dmg=2,
+            velocity={0,0,0}
         })
 
         self.SOLID_BSP = true
@@ -88,7 +89,7 @@ local platforms=function(progs)
         plat_hit_top=function()
             state = STATE_TOP
             self.think = plat_go_down
-            self.nextthink = progs:time() + 3
+            self.nextthink = self.ltime + 3
         end
 
         plat_go_down=function ()
@@ -127,7 +128,7 @@ local platforms=function(progs)
             if state == STATE_BOTTOM then
                 plat_go_up()
             elseif state == STATE_TOP then
-                self.nextthink = progs:time() + 1	-- delay going down
+                self.nextthink = self.ltime + 1	-- delay going down
             end
         end
 

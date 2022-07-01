@@ -92,10 +92,6 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
         end,
         setorigin=function(self,ent,pos)
           ent.origin = v_clone(pos)
-          ent.absmins=v_add(ent.origin,ent.mins)
-          ent.absmaxs=v_add(ent.origin,ent.maxs)
-          m_set_pos(ent.m,ent.origin)
-    
           collisionMap:register(ent)
         end,
         time=function()

@@ -284,6 +284,11 @@ local BSPRenderer=function(world,rasterizer)
       end
       if (d1>0)~=(d0>0) then
         -- add middle point
+        if d0<0 then
+          d0=d0-0.03125
+        else
+          d0=d0+0.03125
+        end          
         local v2=v_lerp(v0,v1,d0/(d0-d1))
         out_res[#out_res+1]=v2
         -- add to end
@@ -706,6 +711,74 @@ local BSPRenderer=function(world,rasterizer)
       end
     end
 
+    -- debug bounding box
+    local function drawBBox(cam,mins,maxs)
+      local verts={
+        {-1,-1,-1},
+        { 1,-1,-1},
+        { 1, 1,-1},
+        {-1, 1,-1},
+        {-1,-1,1},
+        { 1,-1,1},
+        { 1, 1,1},
+        {-1, 1,1}}
+      local faces={
+        {1,2,6,5},
+        {2,3,7,6},
+        {3,4,8,7},
+        {4,1,5,8},
+        {1,2,3,4},
+        {5,6,7,8}
+      }
+      local size=v_scale(v_add(maxs,mins,-1),0.5)
+      local og=v_scale(v_add(maxs,mins),0.5)
+      for k,vert in pairs(verts) do
+        verts[k] = v_add(og,{
+          vert[1] * size[1],
+          vert[2] * size[2],
+          vert[3] * size[3]
+        })
+      end
+
+      v_cache:init(cam.m)
+
+      for _,face in pairs(faces) do
+
+        local a0,a1,a2,a3=
+         v_cache:transform(verts[face[1]]),
+         v_cache:transform(verts[face[2]]),
+         v_cache:transform(verts[face[3]]),
+         v_cache:transform(verts[face[4]])
+        -- store point addresses
+        local poly={a0,a1,a2,a3}
+        -- work with direct offsets
+        a0,a1,a2,a3=
+         vboptr + a0,
+         vboptr + a1,
+         vboptr + a2,
+         vboptr + a3
+        local outcode=band(0xffff,band(band(band(a0[VBO_OUTCODE],a1[VBO_OUTCODE]),a2[VBO_OUTCODE]),a3[VBO_OUTCODE]))
+        local clipcode=band(a0[VBO_OUTCODE],2)+band(a1[VBO_OUTCODE],2)+band(a2[VBO_OUTCODE],2)+band(a3[VBO_OUTCODE],2)
+
+        if outcode==0 then
+          local n=4
+          if clipcode>0 then
+            poly,n = z_poly_clip(poly,n)
+          end
+
+          local a0=poly[n]
+          for i=1,n do
+            local a1=poly[i]
+            -- get vertex pointer
+            local p0 = vboptr + a0
+            local p1 = vboptr + a1
+            line(p0[VBO_X],p0[VBO_Y],p1[VBO_X],p1[VBO_Y],15)
+            a0=a1
+          end
+        end
+      end
+    end
+
     return {
       beginFrame=function()
           surfaceCache:beginFrame()
@@ -739,6 +812,9 @@ local BSPRenderer=function(world,rasterizer)
             local resources = ent.resources or resources
             if ent.MOVING_BSP then
               drawMovingModel(cam,main_model.hulls[1],ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+              -- 
+              -- drawBBox(cam,{ent.absmins[1],ent.absmins[2],ent.absmaxs[3]},v_add(ent.absmaxs,{0,0,1}))
+
             else
               drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
             end

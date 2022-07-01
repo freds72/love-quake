@@ -13,7 +13,8 @@ local doors=function(progs)
             speed=100,
             wait=3,
             lip=8,
-            dmg=2
+            dmg=2,
+            velocity={0,0,0}
         })
 
         self.SOLID_BSP = true
@@ -54,7 +55,7 @@ local doors=function(progs)
         -- remote triggered doors don't need to be linked
         if not self.targetname then
             -- wait until everything has already been set
-            self.nextthink = progs:time() + 0.1
+            self.nextthink = self.ltime + 0.1
             self.think=function()
                 if self.owner then
                     -- already linked
@@ -103,7 +104,7 @@ local doors=function(progs)
                 state = 3
                 -- wait?
                 if self.wait > 0 then
-                    self.nextthink = progs:time() + self.wait
+                    self.nextthink = self.ltime + self.wait
                     -- going reverse
                     self.think = function()
                         calc_move(self, self.pos1, self.speed, function()
@@ -167,7 +168,7 @@ local doors=function(progs)
         end
         -- Wait 1 second...
         local function fd_secret_move5()
-            self.nextthink = progs:time() + 1.0
+            self.nextthink = self.ltime + 1.0
             self.think = fd_secret_move6            
         end
                 
@@ -179,7 +180,7 @@ local doors=function(progs)
         -- Wait here until time to go back...
         local function fd_secret_move3()
             if band(self.spawnflags,SECRET_OPEN_ONCE)==0 then
-                self.nextthink = progs:time() + self.wait
+                self.nextthink = self.ltime + self.wait
                 self.think = fd_secret_move4
             end
         end
@@ -191,7 +192,7 @@ local doors=function(progs)
 
         -- Wait after first movement...
         local function fd_secret_move1()
-            self.nextthink = progs:time() + 1.0
+            self.nextthink = self.ltime + 1.0
             self.think = fd_secret_move2
         end 
 
@@ -212,7 +213,7 @@ local doors=function(progs)
             self.velocity = {0,0,0}
         
             -- Make a sound, wait a little...
-            self.nextthink = progs:time() + 0.1
+            self.nextthink = self.ltime + 0.1
         
             local temp = 1 - band(self.spawnflags,SECRET_1ST_LEFT) -- 1 or -1
 

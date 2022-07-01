@@ -31,7 +31,7 @@ return function(level)
             end
 
             if player then
-                print("content: "..player.contents.."\nground: "..tostring(player.on_ground),2,2,15)
+                print("content: "..player.contents.."\nground: "..tostring(player.on_ground and player.on_ground.classname),2,2,15)
             end
         end,
         -- init

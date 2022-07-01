@@ -7,8 +7,10 @@ local CollisionMap=function(world)
     -- collision map (2d)
     local _map
 
+    -- depth of 2d map
+    local MAX_DEPTH = 4
     local function create_map(mins,maxs,depth)
-        if depth>4 then
+        if depth>MAX_DEPTH then
             return
         end
         local size,left,right,fn=make_v(mins,maxs)
@@ -58,6 +60,7 @@ local CollisionMap=function(world)
         return     
         {
             classify=fn,
+            -- stores physic+triggers entities
             ents={},
             depth=depth,
             -- debug
@@ -98,10 +101,10 @@ local CollisionMap=function(world)
     
     local function register_map(cell, ent)
         local sides = cell.classify(ent.absmins, ent.absmaxs)
-        if sides==3 or cell.depth==4 then
+        if sides==3 or cell.depth==MAX_DEPTH then
             -- stradling? register in current cell
             cell.ents[ent]=true
-            ent.cell=cell
+            ent.cell=cell            
             return
         end
         local side=band(sides,2)~=0
@@ -118,11 +121,13 @@ local CollisionMap=function(world)
             -- collect current cell items
             local x0,y0,z0,x1,y1,z1=mins[1],mins[2],mins[3],maxs[1],maxs[2],maxs[3]    
             for e,_ in pairs(cell.ents) do
-                if e~=filter then
+                if not self.ents[e] and e~=filter then
                     -- touching?
-                    if x0<e.absmaxs[1] and x1>e.absmins[1] and
-                    y0<e.absmaxs[2] and y1>e.absmins[2] and
-                    z0<e.absmaxs[3] and z1>e.absmins[3] then
+                    if x0<=e.absmaxs[1] and x1>=e.absmins[1] and
+                       y0<=e.absmaxs[2] and y1>=e.absmins[2] and
+                       z0<=e.absmaxs[3] and z1>=e.absmins[3] then
+                        -- avoid duplicates
+                        self.ents[e] = true
                         add(self.ents,e)
                     end
                 end
@@ -150,7 +155,6 @@ local CollisionMap=function(world)
     -- teleport entity to specified position
     function this:set_origin(ent,pos)    
         ent.origin=v_clone(pos)    
-        m_set_pos(ent.m,pos)
         self:register(ent)
     end
 
@@ -158,21 +162,34 @@ local CollisionMap=function(world)
     end    
 
     function this:unregister(ent)
-        -- nothing to unregister
-        if not ent.nodes then
-            return
+        -- unregister from visible world
+        if ent.nodes then
+            for node,_ in pairs(ent.nodes) do
+                if node.ents then
+                    node.ents[ent]=nil
+                end
+                ent.nodes[node] = nil
+            end    
         end
-        for node,_ in pairs(ent.nodes) do
-            if node.ents then
-                node.ents[ent]=nil
-            end
-            ent.nodes[node] = nil
-        end    
+        -- unregister from physical world
+        if ent.cell then
+            ent.cell.ents[ent]=nil
+            ent.cell=nil
+        end
     end
 
-    function this:register(ent)
+    function this:register(ent, touch_triggers)
+        -- refresh attributes linked to origin
+        ent.absmins=v_add(ent.origin,ent.mins)
+        ent.absmaxs=v_add(ent.origin,ent.maxs)
+        m_set_pos(ent.m,ent.origin)
+    
         -- unlink first
         self:unregister(ent)
+
+        if ent.free then
+            return
+        end
 
         if not ent.DRAW_NOT then
             local mins,maxs=ent.absmins,ent.absmaxs
@@ -183,11 +200,32 @@ local CollisionMap=function(world)
             }
             -- extents
             local e=make_v(c, maxs)
-            -- register in visible world
+            -- register in visible world (e.g. PVS)
             register_bbox(_root, ent, c, e)
+        end
+        
+        --
+        -- to make items easier to pick up and allow them to be grabbed off
+        -- of shelves, the abs sizes are expanded
+        --
+        if ent.FL_ITEM then
+            ent.absmins[1] = ent.absmins[1] - 15
+            ent.absmins[2] = ent.absmins[2] - 15
+            ent.absmaxs[1] = ent.absmaxs[1] + 15
+            ent.absmaxs[2] = ent.absmaxs[2] + 15
+        else
+        	-- because movement is clipped an epsilon away from an actual edge,
+            -- we must fully check even when bounding boxes don't quite touch
+            ent.absmins[1] = ent.absmins[1] - 1
+            ent.absmins[2] = ent.absmins[2] - 1
+            ent.absmins[3] = ent.absmins[3] - 1
+            ent.absmaxs[1] = ent.absmaxs[1] + 1
+            ent.absmaxs[2] = ent.absmaxs[2] + 1
+            ent.absmaxs[3] = ent.absmaxs[3] + 1
         end
 
         -- find current content (origin only)
+        -- todo: move to "classify" player position
         local node = bsp.locate(_root,ent.origin)
         ent.contents = node.contents
 
@@ -196,10 +234,10 @@ local CollisionMap=function(world)
     end
 
     -- returns all entities touching the given absolute box    
-    function this:touches(mins,maxs,filter,no_world)
+    function this:touches(mins,maxs,ent,no_world)
         -- always add world
         touch_query.ents = no_world and {} or {world.entities[1]}
-        touch_query:find(_map,mins,maxs,filter)
+        touch_query:find(_map,mins,maxs,ent)
         return touch_query.ents
     end
 
@@ -282,7 +320,7 @@ local CollisionMap=function(world)
         -- todo: smaller box
         local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
         -- check current to target pos
-        for i=1,4 do
+        for i=1,5 do
             local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
             if not hits then
                 goto clear
@@ -291,13 +329,14 @@ local CollisionMap=function(world)
                 local fix=v_dot(hits.n,velocity)
                 -- not separating?
                 if fix<0 then  
+                    -- printh(v_tostring(velocity).." fix: "..fix.." ground: "..tostring(hits.n[3]>0.7))
+                    
                     vl = vl + v_dot(vel2d,hits.n)
-                    local old_vel = v_clone(velocity)
                     velocity=v_add(velocity,hits.n,-fix)
                     -- print("fix pos:"..fix.." before: "..v_tostring(old_vel).." after: "..v_tostring(velocity))      
                     -- floor?
                     if hits.n[3]>0.7 then
-                        on_ground=true
+                        on_ground=hits.ent
                     end
                     -- wall hit?
                     if not hits.ent.SOLID_SLIDEBOX and hits.n[3]==0 then
@@ -310,10 +349,11 @@ local CollisionMap=function(world)
     ::blocked::
         invalid = true
         velocity={0,0,0}
+        next_pos=origin
     ::clear::
     
         return {
-            pos=v_add(origin,velocity),
+            pos=next_pos,--v_add(origin,velocity),
             velocity=velocity,
             on_ground=on_ground,
             on_wall=blocked,

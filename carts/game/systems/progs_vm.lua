@@ -25,6 +25,14 @@ local ProgsVM=function(env)
                 fn(ent)
                 return ent
             end
+        end,
+        impact=function(self,ent1,ent2)
+            if not ent1.SOLID_NOT then
+                self:call(ent1,"touch",ent2)
+            end
+            if not ent2.SOLID_NOT then
+                self:call(ent2,"touch",ent1)
+            end
         end
     }
 end

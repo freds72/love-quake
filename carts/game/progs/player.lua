@@ -29,7 +29,7 @@ local player=function(progs)
             down={0,-1,0},
             left={1,0,0},
             right={-1,0,0},
-            jump={0,0,6.2}
+            jump={0,0,9}
         }
 
         local angle,dangle={0,0,0},{0,0,0}
@@ -54,7 +54,7 @@ local player=function(progs)
           
             local a,dx,dz=angle[3],acc[2],acc[1]
             local c,s=cos(a),sin(a)            
-            self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,(self.on_ground and acc[3] or 0)-0.5},60)
+            self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,(self.on_ground and acc[3] or 0)},60)
             self.mangles = angle
 
             -- action?

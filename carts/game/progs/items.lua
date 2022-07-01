@@ -14,6 +14,7 @@ local items=function(progs)
     progs.item_shells=function(self)
         self.SOLID_TRIGGER = true
         self.MOVETYPE_NONE = true
+        self.FL_ITEM = true
         -- set size and link into world
         progs:setmodel(self, "maps/b_shell0.bsp")
         progs:drop_to_floor(self)
@@ -29,6 +30,7 @@ local items=function(progs)
     progs.item_health=function(self)
         self.SOLID_TRIGGER = true
         self.MOVETYPE_NONE = true
+        self.FL_ITEM = true
         local flags = self.spawnflags or 0
         
         if band(flags,H_ROTTEN)~=0 then

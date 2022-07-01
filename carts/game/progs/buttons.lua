@@ -47,7 +47,8 @@ local buttons=function(progs)
             speed=40,
             wait=1,
             lip=4,
-            health=0
+            health=0,
+            velocity={0,0,0}
         })
         -- init entity
         init_button(self)
