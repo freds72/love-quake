@@ -18,12 +18,13 @@ return function(world, vm, collisionMap)
 
 	local function testEntityPosition(ent)
 		-- 
-		local touches = collisionMap:touches(
-			v_add(ent.origin,ent.mins), 
-			v_add(ent.origin,ent.maxs), ent)
+		local mins,maxs=
+			v_add(ent.origin,ent.mins),
+			v_add(ent.origin,ent.maxs)
+		local touches = collisionMap:touches(v_add(mins,{1,1,1},-8), v_add(maxs,{1,1,1},8), ent)
 		local trace = collisionMap:hitscan(ent.mins,ent.maxs,ent.origin,ent.origin,{},touches,ent)
 
-		if trace and trace.start_solid then
+		if trace and (trace.start_solid or trace.all_solid) then
 			-- printh("invalid position: "..ent_tostring(trace.ent))
 			return true
 		end
@@ -33,8 +34,9 @@ return function(world, vm, collisionMap)
 
 	-- SV_Push
 	local function push(pusher, move)
-		local mins=v_add(pusher.absmins, move)
-		local maxs=v_add(pusher.absmaxs, move)
+		-- collect touching entities (with some buffer)
+		local mins=v_add(v_add(pusher.absmins, move),{1,1,1},-8)
+		local maxs=v_add(v_add(pusher.absmaxs, move),{1,1,1},8)
 
 		local pushorig = v_clone(pusher.origin)
 
@@ -46,8 +48,7 @@ return function(world, vm, collisionMap)
 		
 		-- see if any solid entities are inside the final position
 		local moved={}
-		local touches = collisionMap:touches(pusher.absmins, pusher.absmaxs, pusher, true)
-
+		local touches = collisionMap:touches(mins, maxs, pusher, true)		
 		for i=1,#touches do
 			local check=touches[i]
 			
@@ -75,34 +76,37 @@ return function(world, vm, collisionMap)
 				or check.absmaxs[1] <= mins[1]
 				or check.absmaxs[2] <= mins[2]
 				or check.absmaxs[3] <= mins[3] then
+					--printh(check.classname.." off path")
 					goto continue
 				end
 
 				-- see if the ent's bbox is inside the pusher's final position
 				if not testEntityPosition(check) then
+					--printh(check.classname.." in path but clear")
 					goto continue
 				end
 			end
 
-			-- record start position
+			-- record start position			
 			moved[check] = v_clone(check.origin)
 
 			-- try moving the contacted entity 
 			check.origin = v_add(check.origin, move)
 			--printh("moving "..check.classname.." from: "..v_tostring(moved[check]).." to: "..v_tostring(check.origin))
 			
-			local block = testEntityPosition(check)
-			if not block then
+			if not testEntityPosition(check) then
+				-- printh(">>pushed")
 				-- pushed ok
 				collisionMap:register(check)
 				goto continue
 			end
 
 			-- if it is ok to leave in the old position, do it
+			-- occurs when entity blocked by something else
 			check.origin = moved[check]
-			local block = testEntityPosition(check)
-			if not block then
-				-- moved back, remove from tentative list
+			if not testEntityPosition(check) then
+				-- printh("**blocked")
+				-- moved back
 				moved[check] = nil
 				collisionMap:register(check)
 				goto continue
@@ -115,6 +119,7 @@ return function(world, vm, collisionMap)
 				goto continue
 			end
 
+			-- solid trigger???
 			if check.SOLID_NOT or check.SOLID_TRIGGER then
 				-- corpse						
 				check.mins[1] = 0
@@ -124,9 +129,10 @@ return function(world, vm, collisionMap)
 				goto continue
 			end
 			
+			-- failed move
+			-- printh("!!!! rollback move !!!")
 			pusher.origin = pushorig
 			collisionMap:register(pusher)
-
 
 			-- if the pusher has a "blocked" function, call it
 			--  otherwise, just stay in place until the obstacle is gone
@@ -137,7 +143,7 @@ return function(world, vm, collisionMap)
 				ent.origin = orig
 				collisionMap:register(ent)
 
-				assert(not testEntityPosition(ent),"stuck @"..ent_tostring(ent))
+				-- assert(not testEntityPosition(ent),"stuck @"..ent_tostring(ent))
 			end
 
 			if true then return false end

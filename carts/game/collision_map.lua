@@ -113,7 +113,6 @@ local CollisionMap=function(world)
 
     -- query helper
     local touch_query={ 
-        ents = {},
         find=function(self,cell,mins,maxs,filter)
             if not cell then
                 return
@@ -320,16 +319,20 @@ local CollisionMap=function(world)
         -- todo: smaller box
         local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
         -- check current to target pos
-        for i=1,5 do
+        for i=1,4 do
             local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
             if not hits then
                 goto clear
             end
+            if hits.start_solid or hits.all_solid then
+                goto blocked
+            end
+
             if hits.n then            
                 local fix=v_dot(hits.n,velocity)
                 -- not separating?
                 if fix<0 then  
-                    -- printh(v_tostring(velocity).." fix: "..fix.." ground: "..tostring(hits.n[3]>0.7))
+                    -- printh("hit:"..v_tostring(hits.n).." "..v_tostring(velocity).." fix: "..fix.." ground: "..tostring(hits.n[3]>0.7))
                     
                     vl = vl + v_dot(vel2d,hits.n)
                     velocity=v_add(velocity,hits.n,-fix)
@@ -346,7 +349,7 @@ local CollisionMap=function(world)
                 next_pos=v_add(origin,velocity)
             end
         end
-    ::blocked::
+    ::blocked::        
         invalid = true
         velocity={0,0,0}
         next_pos=origin
