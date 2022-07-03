@@ -1,6 +1,11 @@
 local doors=function(progs)
     local subs = require("progs/subs")(progs)
     local maths = require("engine.maths3d")
+
+    local STATE_TOP     = 0
+    local STATE_BOTTOM  = 1
+    local STATE_UP      = 2
+    local STATE_DOWN    = 3
     
     -- internal helpers
     local function init(self)
@@ -14,7 +19,9 @@ local doors=function(progs)
             wait=3,
             lip=8,
             dmg=2,
-            velocity={0,0,0}
+            health=0,
+            velocity={0,0,0},
+            attack_finished=0
         })
 
         self.SOLID_BSP = true
@@ -30,13 +37,14 @@ local doors=function(progs)
         -- constants
         local DOOR_START_OPEN = 1
         local DOOR_DONT_LINK = 4
+        local DOOR_TOGGLE = 32
 
         -- init entity
         init(self)
 
         set_move_dir(self)
 
-        local state = 1 -- STATE_BOTTOM
+        self.state = STATE_BOTTOM
 
         self.pos1 = v_clone(self.origin)
         self.pos2 = v_add(
@@ -50,96 +58,234 @@ local doors=function(progs)
             progs:setorigin(self,self.pos1)
         end
 
-        local linked_doors={}
+        local door_hit_top,door_hit_bottom,door_go_down,door_go_up,door_fire,door_use,door_trigger_touch,door_killed,door_touch
 
-        -- remote triggered doors don't need to be linked
-        if not self.targetname then
-            -- wait until everything has already been set
-            self.nextthink = self.ltime + 0.1
-            self.think=function()
-                if self.owner then
-                    -- already linked
+        door_hit_top=function()
+            -- sound (self, CHAN_NO_PHS_ADD+CHAN_VOICE, self.noise1, 1, ATTN_NORM);
+            self.state = STATE_TOP
+
+            if band(self.spawnflags, DOOR_TOGGLE)~=0 then
+                return         -- don't come down automatically
+            end
+            
+            local oself=self
+
+            self.think = function() self=oself door_go_down() end
+            self.nextthink = self.ltime + self.wait
+        end
+        
+        door_hit_bottom=function()
+            -- sound (self, CHAN_NO_PHS_ADD+CHAN_VOICE, self.noise1, 1, ATTN_NORM);
+            self.state = STATE_BOTTOM
+        end
+        
+        door_go_down=function()
+            -- sound (self, CHAN_VOICE, self.noise2, 1, ATTN_NORM);
+            if self.max_health then
+                -- self.takedamage = DAMAGE_YES;
+                self.health = self.max_health
+            end
+            
+            printh("going down:"..tostring(self).." owner:"..tostring(self.owner)) 
+
+            self.state = STATE_DOWN
+            local oself=self
+            calc_move(self, self.pos1, self.speed, function() self=oself door_hit_bottom() end)
+        end
+        
+        door_go_up=function()
+            if self.state == STATE_UP then
+                return         -- allready going up
+            end
+        
+            if self.state == STATE_TOP then
+                -- reset top wait time
+                self.nextthink = self.ltime + self.wait
+                return
+            end
+            
+            --sound (self, CHAN_VOICE, self.noise2, 1, ATTN_NORM);
+            printh("door_go_up:"..tostring(self).." owner:"..tostring(self.owner))
+
+            self.state = STATE_UP
+            local oself=self
+            calc_move(self, self.pos2, self.speed, function() self=oself door_hit_top() end)
+        
+            use_targets(self) -- fire all targets / killtargets
+        end
+
+        door_fire=function()
+            -- play use key sound  
+            --[[      
+            if self.items then
+                sound (self, CHAN_VOICE, self.noise4, 1, ATTN_NORM)
+            end
+            ]]
+        
+            self.message = nil
+            local oself=self
+            printh("-------")
+
+            if band(self.spawnflags,DOOR_TOGGLE)~=0 then
+                if self.state == STATE_UP or self.state == STATE_TOP then
+                    local door=self.owner
+                    while door do
+                        self=door
+                        door_go_down()
+                        door = door.enemy
+                    end
+                    self=oself
                     return
                 end
-                local doors = progs:find(self, "classname", self.classname)
-                local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
-                --local mins,maxs=self.mins,self.maxs
-                local link_mins,link_maxs=self.mins,self.maxs
-                -- note: assumes doors are in closed position/origin = 0 0 0
-                for _,door in pairs(doors) do
-                    if  mins[1]<=door.maxs[1] and maxs[1]>=door.mins[1] and
-                        mins[2]<=door.maxs[2] and maxs[2]>=door.mins[2] and
-                        mins[3]<=door.maxs[3] and maxs[3]>=door.mins[3] then
-                        -- overlap
-                        door.owner = self
-                        -- extend min/maxs
-                        link_mins=v_min(link_mins, door.mins)
-                        link_maxs=v_max(link_maxs, door.maxs)
-                        add(linked_doors, door)
-                    end                
-                end
-                -- spawn a big trigger field around
-                local trigger = progs:spawn()
-                trigger.MOVETYPE_NONE = true
-                trigger.SOLID_TRIGGER = true
-                trigger.DRAW_NOT = true
-                trigger.owner = self
-                trigger.mins = v_add(link_mins, {-60,-60,-8})                
-                trigger.maxs = v_add(link_maxs, {60,60,8})                
-                trigger.touch=function(other)
-                    if self.touch then
-                        self.touch(other)
-                    end
-                end
-                progs:setorigin(trigger,self.origin)
             end
+            
+            -- trigger all paired doors
+            local door=self.owner
+            while door do
+                self=door
+                door_go_up()
+                door = door.enemy
+            end
+            self=oself
         end
-
-        self.use=function()
-            if state~=1 then
+                
+        door_use=function()
+            self.message = nil -- door message are for touch only
+            self.owner.message = nil
+        
+            local oself=self
+            self = self.owner
+            door_fire()
+            self = oself
+        end        
+        
+        door_trigger_touch=function(other)
+            if other.health <= 0 then
                 return
             end
-            state = 2
-            calc_move(self, self.pos2, self.speed,function()
-                state = 3
-                -- wait?
-                if self.wait > 0 then
-                    self.nextthink = self.ltime + self.wait
-                    -- going reverse
-                    self.think = function()
-                        calc_move(self, self.pos1, self.speed, function()
-                            state = 1
-                        end)
-                    end
-                end
-            end)
-
-            for _,other in pairs(linked_doors) do
-                other.use()
-            end
-        end
-
-        self.touch=function(other)
-            if self.targetname then
-                -- not triggered by touch
-
-                -- any "supporting" message?
-                if self.message then
-                    progs:print(self.message)
-                end
-                return                
-            end
-
-            if self.owner then
-                -- linked door (or trigger field)
-                self.owner.touch(other)
+        
+            if progs:time() < self.attack_finished then
                 return
             end
+            self.attack_finished = progs:time() + 1
+        
+            local oself = self
+            self = self.owner
+            door_use()
+            self = oself
+        end
+                
+        door_killed=function()
+            local oself = self
+            self = self.owner
+            self.health = self.max_health
+            --self.takedamage = DAMAGE_NO;    // wil be reset upon return
+            door_use()
+            self = oself
+        end
+
+        door_touch=function(other)
             if other.classname ~= "player" then
                 return
             end 
-            self.use()           
-        end        
+            if self.owner.attack_finished > progs:time() then
+                return
+            end
+
+            self.owner.attack_finished = progs:time() + 2
+
+            if self.owner.message then
+                progs:print(self.owner.message)
+            end
+            
+            -- key door stuff
+            --[[
+            if (!self.items)
+                return;
+            ]]
+
+            -- todo: item management
+
+            self.touch = nil
+            if self.enemy then
+                -- kill touch for linked door
+                self.enemy.touch = nil
+            end
+            door_use()
+        end
+
+        self.blocked = door_blocked
+        self.use = door_use
+        self.touch = door_touch
+
+        -- wait until everything has already been set
+        self.nextthink = progs:time() + 0.1
+        self.think=function()
+            if self.owner then
+                -- already linked
+                return
+            end
+            -- cannot be linked
+            if band(self.spawnflags,DOOR_DONT_LINK)~=0 then
+                self.owner = self
+                return
+            end
+
+            local doors = progs:find(self, "classname", self.classname)
+            local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
+            --local mins,maxs=self.mins,self.maxs
+            local link_mins,link_maxs=self.mins,self.maxs
+            -- note: assumes doors are in closed position/origin = 0 0 0
+            local prev=self
+            self.owner = self
+            for _,door in pairs(doors) do
+                -- overlap?
+                if  mins[1]<=door.maxs[1] and maxs[1]>=door.mins[1] and
+                    mins[2]<=door.maxs[2] and maxs[2]>=door.mins[2] and
+                    mins[3]<=door.maxs[3] and maxs[3]>=door.mins[3] then
+                    -- link to "master" door
+                    door.owner = self
+                    if door.health>0 then
+                        self.health = door.health
+                    end
+                    if door.targetname then
+                        self.targetname = door.targetname
+                    end
+                    if door.message then
+                        self.message = door.message
+                    end
+                    -- create linked door chain
+                    prev.enemy = door
+                    -- extend min/maxs
+                    link_mins=v_min(link_mins, door.mins)
+                    link_maxs=v_max(link_maxs, door.maxs)
+                    -- move on
+                    prev = door
+                end                
+            end
+
+            -- cannot be self triggered
+			if self.health>0 or self.targetname then
+                return
+            end
+            -- todo: items
+            --[[
+            if self.items then
+                return
+            end
+            ]]
+            
+            -- spawn a big trigger field around
+            local trigger = progs:spawn()
+            trigger.MOVETYPE_NONE = true
+            trigger.SOLID_TRIGGER = true
+            trigger.DRAW_NOT = true
+            trigger.owner = self
+            trigger.mins = v_add(link_mins, {-60,-60,-8})                
+            trigger.maxs = v_add(link_maxs, {60,60,8})                
+            trigger.touch = door_trigger_touch
+            progs:setorigin(trigger,{0,0,0})
+        end
     end
 
     progs.func_door_secret=function(self)

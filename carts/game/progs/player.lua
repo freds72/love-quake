@@ -15,7 +15,8 @@ local player=function(progs)
         self.SOLID_SLIDEBOX=true
         -- todo: only if camera = self
         self.DRAW_NOT = true
-        
+
+        self.health = 100
         self.velocity={0,0,0}
         -- set size and link into world
         self.skin = 1     

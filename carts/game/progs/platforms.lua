@@ -16,7 +16,7 @@ local platforms=function(progs)
         -- default values
         set_defaults(self,{
             spawnflags=0,
-            speed=50,
+            speed=150,
             dmg=2,
             velocity={0,0,0}
         })
@@ -103,6 +103,7 @@ local platforms=function(progs)
         end
 
         plat_use=function ()
+            self.use=nil
             if state~=STATE_UP then
                 return
             end
@@ -132,12 +133,26 @@ local platforms=function(progs)
             end
         end
 
+        local plat_crush=function(other)
+            --other.deathtype = "squish";
+            --T_Damage (other, self, self, 1);
+            
+            if state == STATE_UP then
+                plat_go_down()
+            elseif state == STATE_DOWN then
+                plat_go_up()
+            else
+                assert(false,"invalid plat state: "..state)
+            end
+        end
+
         if self.height then
 		    self.pos2[3] = self.origin[3] - self.height
 	    else
 		    self.pos2[3] = self.origin[3] - self.size[3] + 8
         end
 
+        self.blocked = plat_crush
         self.use = plat_trigger_use
 
         plat_spawn_inside_trigger() -- the "start moving" trigger	
