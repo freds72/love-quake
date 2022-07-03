@@ -72,12 +72,10 @@ local PakReader=function(conf)
     -- get a resource from a pak file
     return {
         open=function(self,resource)
-            -- from native file system?
-            if mod_path then
-                local filename = mod_path.."/"..resource
+            local function read_file(filename)
                 local data, err = nfs.newFileData(filename)
                 if data then
-                    logging.debug("Loading resource from mod path: "..filename)
+                    logging.debug("Loading resource: "..filename)
                     local mem = data:getFFIPointer()
                     local ptr = ffi.cast("unsigned char*", mem)
                     cache[resource] = {
@@ -87,6 +85,18 @@ local PakReader=function(conf)
                     return ptr
                 end
             end
+            
+            -- try reading file from mod path
+            if mod_path then
+                local ptr=read_file(mod_path.."/"..resource)
+                if ptr then return ptr end
+            end
+
+            -- try reading file from root path
+            local ptr=read_file(conf.root_path.."/"..resource)
+            if ptr then return ptr end
+
+            -- read file from pak
             local entry=cache[resource]
             assert(entry,"Unknown resource: "..resource)
             return entry.ptr

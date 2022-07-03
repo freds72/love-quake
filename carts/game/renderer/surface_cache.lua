@@ -244,7 +244,7 @@ local SurfaceCache=function(rasterizer)
                         end
                       end
                       -- lightmap[x+y*w]=colormap.ptr[8+mid(63-flr(sample/4),0,63)*256]                      
-                      lm[x]=63-shr(sample,2)
+                      lm[x]=63-shr(sample,1)
                   end
                   -- next row
                   lm = lm + w
