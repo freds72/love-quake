@@ -166,5 +166,116 @@ local platforms=function(progs)
 		    state = STATE_BOTTOM
         end
     end
+
+    -- moving platforms
+    progs.func_train=function(self)
+        if not self.target then
+            progs:objerror("func_train without a target")
+        end
+
+        -- default values
+        set_defaults(self,{
+            spawnflags=0,
+            speed=100,
+            dmg=2,
+            velocity={0,0,0},
+            attack_finished=0
+        })
+
+        self.SOLID_BSP = true
+        self.MOVETYPE_PUSH = true
+        self.MOVING_BSP = true
+        
+        -- set size and link into world
+        progs:setmodel(self, self.model)  
+
+        local train_next,func_train_find
+        
+        local train_blocked=function()
+            if progs:time() < self.attack_finished then
+                return
+            end
+            self.attack_finished = progs:time() + 0.5
+            
+            --other.deathtype = "squish";
+            --T_Damage (other, self, self, self.dmg);
+        end
+        
+        local train_use = function()
+            if self.think ~= func_train_find then
+                return  -- already activated
+            end
+            train_next()
+        end
+        
+        local train_wait = function()
+            if self.wait~=0 then
+                self.nextthink = self.ltime + self.wait
+                --sound (self, CHAN_NO_PHS_ADD+CHAN_VOICE, self.noise, 1, ATTN_NORM);
+            else
+                self.nextthink = self.ltime + 0.1
+            end
+            
+            self.think = train_next
+        end
+        
+        train_next = function()
+            local target = progs:find(self,"targetname", self.target)[1]
+            assert(target,"func_train target not found: "..self.target)
+            self.target = target.target
+            if not self.target then
+                progs:objerror("train_next: no next target")
+            end
+            if target.wait~=0 then
+                self.wait = target.wait
+            else
+                self.wait = 0
+            end
+
+            -- sound (self, CHAN_VOICE, self.noise1, 1, ATTN_NORM);
+            calc_move(self, v_add(target.origin,self.mins,-1), self.speed, train_wait)
+        end
+        
+        func_train_find = function()        
+            local target = progs:find(self, "targetname", self.target)[1]
+            assert(target,"func_train target not found: "..self.target)
+            self.target = target.target
+            progs:setorigin(self, v_add(target.origin,self.mins,-1))
+
+            if not self.targetname then            
+                -- not triggered, so start immediately
+                self.nextthink = self.ltime + 0.1
+                self.think = train_next
+            end
+        end
+                
+        --[[
+        if (self.sounds == 0)
+        {
+            self.noise = ("misc/null.wav");
+            precache_sound ("misc/null.wav");
+            self.noise1 = ("misc/null.wav");
+            precache_sound ("misc/null.wav");
+        }
+    
+        if (self.sounds == 1)
+        {
+            self.noise = ("plats/train2.wav");
+            precache_sound ("plats/train2.wav");
+            self.noise1 = ("plats/train1.wav");
+            precache_sound ("plats/train1.wav");
+        }
+        ]]
+
+        self.cnt = 1
+        self.blocked = train_blocked
+        self.use = train_use
+        self.classname = "train"
+    
+        -- start trains on the second frame, to make sure their targets have had
+        -- a chance to spawn
+        self.nextthink = self.ltime + 0.1
+        self.think = func_train_find            
+    end
 end
 return platforms

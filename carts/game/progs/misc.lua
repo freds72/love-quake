@@ -97,5 +97,27 @@ local misc=function(progs)
             end
         })
     end
+
+    -- path location
+    progs.path_corner=function(self)
+        if not self.targetname then
+            progs:objerror ("monster_movetarget: no targetname")
+        end
+        self.DRAW_NOT = true
+        self.SOLID_TRIGGER = true
+        self.MOVETYPE_NONE = true
+        -- self.touch = t_movetarget
+        self.mins = {-8,-8,-8}
+        self.maxs = {8,8,8}
+        set_defaults(self,{
+            wait=0
+        })
+        self.m={
+            1,0,0,0,
+            0,1,0,0,
+            0,0,1,0,
+            0,0,0,1}
+        progs:setorigin(self, self.origin)
+    end
 end
 return misc

@@ -12,7 +12,6 @@ local triggers=function(progs)
         self.DRAW_NOT = true
         set_defaults(self,{
             nextthink = -1,
-            spawnflags = 0,
             health = 0,
             spawnflags = 0
         })

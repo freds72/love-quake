@@ -86,8 +86,6 @@ local doors=function(progs)
                 self.health = self.max_health
             end
             
-            printh("going down:"..tostring(self).." owner:"..tostring(self.owner)) 
-
             self.state = STATE_DOWN
             local oself=self
             calc_move(self, self.pos1, self.speed, function() self=oself door_hit_bottom() end)
@@ -105,7 +103,6 @@ local doors=function(progs)
             end
             
             --sound (self, CHAN_VOICE, self.noise2, 1, ATTN_NORM);
-            printh("door_go_up:"..tostring(self).." owner:"..tostring(self.owner))
 
             self.state = STATE_UP
             local oself=self
@@ -124,8 +121,6 @@ local doors=function(progs)
         
             self.message = nil
             local oself=self
-            printh("-------")
-
             if band(self.spawnflags,DOOR_TOGGLE)~=0 then
                 if self.state == STATE_UP or self.state == STATE_TOP then
                     local door=self.owner
