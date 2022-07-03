@@ -4,6 +4,12 @@ if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
     -- require("lldebugger").start()
 end
 
+-- yikes until better solution!
+printh=print
+local conf = require("game_conf")
+printh=nil
+local nfs = require("lib.nativefs")
+
 -- current platform is Löve
 local ffi=require("ffi")
 local framebuffer = require("picotron.emulator.framebuffer")
@@ -150,18 +156,28 @@ function love.run()
                 break 
             elseif name=="load" then
                 -- a: filename
-                local extension=string.sub(a,#a-3,#a)
-                if imageExtensions[extension] then
-                    local img = love.image.newImageData(a)
-                    print("Loading image asset: "..a.." format:"..img:getFormat( ))
-                    local w,h=img:getWidth(),img:getHeight()
-                    local data = love.data.newByteData(img,0,img:getSize())
-                    img:release()
-                   channels:response({data,w,h})
-                else
-                    print("Loading asset: "..a)
-                    local data = love.filesystem.newFileData(a)
-                    channels:response({data, data:getSize()})
+                local paths, filename, data, err = { conf.mod_path and conf.mod_path.."/"..a or "", love.filesystem.getSourceBaseDirectory().."/"..arg[1].."/"..a, conf.root_path.."/"..a }
+                
+                -- try reading file and fallback through mod_path, source path and root_path
+                for _,fn in ipairs(paths) do
+                    filename = fn
+                    data, err = nfs.newFileData(filename)
+                    if data then
+                        local extension=string.sub(a,#a-3,#a)
+                        if imageExtensions[extension] then
+                            local img = love.image.newImageData(data)
+                            print("Loading image asset: "..filename.." format:"..img:getFormat( ))
+                            local w,h=img:getWidth(),img:getHeight()
+                            local data = love.data.newByteData(img,0,img:getSize())
+                            img:release()
+                            channels:response({data,w,h})
+                        else
+                            print("Loading asset: "..filename)
+                            channels:response({data, data:getSize()})
+                        end
+                        break
+                    end
+                    if err then print(err) end
                 end
             elseif name=="print" then
                 -- a: text
