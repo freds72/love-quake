@@ -82,7 +82,7 @@ local buttons=function(progs)
                 state = 3
                 -- prepare for re-trigger
                 if self.wait > 0 then
-                    self.nextthink = progs:time() + self.wait
+                    self.nextthink = self.ltime + self.wait
                     -- going reverse
                     self.think = function()
                         calc_move(self, self.pos1, self.speed, function()
