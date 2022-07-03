@@ -16,7 +16,7 @@ local platforms=function(progs)
         -- default values
         set_defaults(self,{
             spawnflags=0,
-            speed=150,
+            speed=50,
             dmg=2,
             velocity={0,0,0}
         })

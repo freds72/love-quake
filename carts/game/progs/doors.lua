@@ -198,6 +198,11 @@ local doors=function(progs)
                 progs:print(self.owner.message)
             end
             
+            -- door is triggered by something
+            if self.targetname then
+                return
+            end
+
             -- key door stuff
             --[[
             if (!self.items)
