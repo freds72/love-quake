@@ -98,6 +98,29 @@ local subs=function(progs)
             self[k] = self[k] or v
         end    
     end
+
+    function killed(self, attacker)
+        self.health = max(self.health,-99)
+
+        if self.MOVETYPE_PUSH or self.MOVETYPE_NONE then
+            -- doors, triggers, etc
+            self.die()
+            return
+        end
+
+        self.touch = nil
+        self.die()
+    end
+
+    function take_damage(ent, inflictor, attacker, damage)
+        -- do the damage
+        ent.health = ent.health - damage
+        
+        if ent.health <= 0 then
+            killed(ent, attacker)
+            return
+        end
+    end
 end
 
 return subs

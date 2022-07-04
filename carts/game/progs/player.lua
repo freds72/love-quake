@@ -11,12 +11,23 @@ local player=function(progs)
     --     progs:setmodel(self, self.model)
     -- end
 
+    local  DEAD_NO           = 0
+    local  DEAD_DYING        = 1
+    local  DEAD_DEAD         = 2
+    local  DEAD_RESPAWNABLE  = 3
+
     progs.player=function(self)
-        self.SOLID_SLIDEBOX=true
+        self.SOLID_SLIDEBOX = true
+        self.MOVETYPE_WALK = true
         -- todo: only if camera = self
         self.DRAW_NOT = true
 
         self.health = 100
+        self.dmgtime = 0
+        self.deadflag = DEAD_NO
+        -- todo: compute
+        self.waterlevel = 1
+
         self.velocity={0,0,0}
         -- set size and link into world
         self.skin = 1     
@@ -34,15 +45,37 @@ local player=function(progs)
         }
 
         local angle,dangle={0,0,0},{0,0,0}
+
+        local water_move=function()
+            if self.health < 0 then
+                return
+            end
+
+            if self.contents==-5 then
+                if self.dmgtime < progs:time() then
+                    self.dmgtime = progs:time() + 0.2
+        
+                    take_damage(self, nil, nil, 10*self.waterlevel)
+                end
+            end
+        end
+
         self.prethink=function(input)
             -- damping      
             angle[2]=angle[2]*0.8
             dangle = v_scale(dangle,0.6)
-
-            -- todo: less friction not on ground
-            self.velocity[1]=self.velocity[1]*0.8
-            self.velocity[2]=self.velocity[2]*0.8      
       
+            water_move()
+            
+            if self.deadflag >= DEAD_DEAD then
+                death_think()
+                return
+            end
+            
+            if self.deadflag == DEAD_DYING then
+                return
+            end
+
             local acc={0,0,0}
             for action,move in pairs(moves) do
               if input:pressed(action) then
@@ -94,6 +127,13 @@ local player=function(progs)
         end
 
         self.die=function()
+            self.deadflag = DEAD_DYING
+            self.solid = SOLID_NOT            
+            self.MOVETYPE_TOSS = true
+            local velocity = self.velocity
+            if velocity[3] < 10 then
+                velocity[3] = velocity[3] + rnd()*300
+            end
         end
     end
 end

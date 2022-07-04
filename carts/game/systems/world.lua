@@ -269,15 +269,19 @@ function WorldSystem:update()
                 end
 
                 if ent.MOVETYPE_TOSS then
+                    -- gravity
                     local move = collisionMap:fly(ent,ent.origin,velocity)
-                    ent.origin = move.pos          
-                    velocity[3] = velocity[3] - conf.gravity_z/60          
+                    ent.origin = move.pos 
+                    ent.velocity[3] = ent.velocity[3] - conf.gravity_z*dt
                     -- hit other entity?
                     if move.ent then
                         vm:call(ent,"touch",move.ent)
                     end
-                elseif ent.SOLID_SLIDEBOX then
+                elseif ent.MOVETYPE_WALK then
                     -- gravity
+                    -- todo: less friction not on ground
+                    velocity[1] = velocity[1] * 0.8
+                    velocity[2] = velocity[2] * 0.8
                     velocity[3] = velocity[3] - 1                     
                     -- check next position 
                     local vn,vl=v_normz(velocity)      
