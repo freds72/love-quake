@@ -134,8 +134,7 @@ local platforms=function(progs)
         end
 
         local plat_crush=function(other)
-            --other.deathtype = "squish";
-            --T_Damage (other, self, self, 1);
+            take_damage(other, self, self, 1, "squish")
             
             if state == STATE_UP then
                 plat_go_down()
@@ -191,14 +190,13 @@ local platforms=function(progs)
 
         local train_next,func_train_find
         
-        local train_blocked=function()
+        local train_blocked=function(other)
             if progs:time() < self.attack_finished then
                 return
             end
             self.attack_finished = progs:time() + 0.5
             
-            --other.deathtype = "squish";
-            --T_Damage (other, self, self, self.dmg);
+            take_damage(other, self, self, self.dmg, "squish")
         end
         
         local train_use = function()

@@ -58,7 +58,22 @@ local doors=function(progs)
             progs:setorigin(self,self.pos1)
         end
 
-        local door_hit_top,door_hit_bottom,door_go_down,door_go_up,door_fire,door_use,door_trigger_touch,door_killed,door_touch
+        local door_blocked,door_hit_top,door_hit_bottom,door_go_down,door_go_up,door_fire,door_use,door_trigger_touch,door_killed,door_touch
+
+        door_blocked=function(other)
+            -- todo: fix goalentity
+            take_damage(other, self, self.goalentity, self.dmg, "squish")
+
+            -- if a door has a negative wait, it would never come back if blocked,
+            -- so let it just squash the object to death real fast
+            if self.wait >= 0 then
+                if self.state == STATE_DOWN then
+                    door_go_up ()
+                else
+                    door_go_down ()
+                end
+            end
+        end
 
         door_hit_top=function()
             -- sound (self, CHAN_NO_PHS_ADD+CHAN_VOICE, self.noise1, 1, ATTN_NORM);
@@ -300,7 +315,8 @@ local doors=function(progs)
         set_defaults(self,{
             speed=50,
             dmg = 2,
-            wait = 5
+            wait = 5,
+            attack_finished=0
         })
         set_move_dir(self)        
 
@@ -402,6 +418,14 @@ local doors=function(progs)
         end
 
         self.use=fd_secret_use
+
+        self.blocked=function(other)
+            if progs:time() < self.attack_finished then
+                return
+            end
+            self.attack_finished = progs:time() + 0.5
+            take_damage(other, self, self, self.dmg, "squish")
+        end
     end
 end
 return doors
