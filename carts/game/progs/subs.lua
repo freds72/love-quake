@@ -52,11 +52,18 @@ local subs=function(progs)
         end
     end
 
-    function print_entity(self)
-        print("---- "..self.classname.." -----")
+    -- convert entity to string
+    function e_tostring(self)
+        local s="---- "..tostring(self.classname).." -----\n"
         for k,v in pairs(self) do
-            print(k..":"..tostring(v))
+            if type(v)=="table" and #table==3 then
+                s=s..k..":"..v_tostring(v)
+            else
+                s=s..k..":"..tostring(v)
+            end
+            s=s.."\n"
         end
+        return s
     end
 
     -- find all targets from the given entity and "use" them
@@ -104,7 +111,7 @@ local subs=function(progs)
 
         if self.MOVETYPE_PUSH or self.MOVETYPE_NONE then
             -- doors, triggers, etc
-            self.die()
+            self.die(attacker)
             return
         end
 
@@ -123,6 +130,26 @@ local subs=function(progs)
             killed(ent, attacker)
             return
         end
+    end
+
+    function take_heal(ent, healamount, ignore)
+        -- already dead?
+	    if ent.health <= 0 then
+		    return
+        end
+
+	    if (not ignore) and (ent.health >= ent.max_health) then
+		    return
+        end
+	    local healamount = ceil(healamount)
+
+	    ent.health = ent.health + healamount
+	    if (not ignore) and (ent.health >= ent.max_health) then
+		    ent.health = ent.max_health
+        end
+		
+        ent.health=min(ent.health, 250)
+	    return true
     end
 end
 

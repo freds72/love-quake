@@ -23,6 +23,7 @@ local player=function(progs)
         self.DRAW_NOT = true
 
         self.health = 100
+        self.max_health = 100
         self.dmgtime = 0
         self.deadflag = DEAD_NO
         -- todo: compute
@@ -46,6 +47,7 @@ local player=function(progs)
 
         local angle,dangle={0,0,0},{0,0,0}
 
+        local death_angle=0
         local water_move=function()
             if self.health < 0 then
                 return
@@ -73,6 +75,7 @@ local player=function(progs)
             end
             
             if self.deadflag == DEAD_DYING then
+                self.mangles[2]=lerp(self.mangles[2],death_angle,0.8)
                 return
             end
 
@@ -131,7 +134,7 @@ local player=function(progs)
                 
                 local touched = progs:traceline(self,eye_pos,aim_pos)
                 -- todo: refactor
-                if touched then
+                if touched and touched.die then
                     take_damage(touched, self, self, 10)
                 end
             end
@@ -139,9 +142,6 @@ local player=function(progs)
 
         self.postthink=function(input)
             -- update weapon pos            
-        end
-
-        self.hit=function(dmg,other)
         end
 
         self.die=function()
@@ -152,6 +152,7 @@ local player=function(progs)
             if velocity[3] < 10 then
                 velocity[3] = velocity[3] + rnd()*300
             end
+            death_angle = rnd()>0.5 and 0.25 or -0.25
         end
     end
 end

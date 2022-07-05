@@ -160,6 +160,7 @@ local doors=function(progs)
         end
                 
         door_use=function()
+            --assert(self.owner,"invalid door owner: "..e_tostring(self))
             self.message = nil -- door message are for touch only
             self.owner.message = nil
         
@@ -260,6 +261,8 @@ local doors=function(progs)
                     mins[3]<=door.maxs[3] and maxs[3]>=door.mins[3] then
                     -- link to "master" door
                     door.owner = self
+                    -- create linked door chain
+                    prev.enemy = door
                     if door.health>0 then
                         self.health = door.health
                     end
@@ -269,8 +272,6 @@ local doors=function(progs)
                     if door.message then
                         self.message = door.message
                     end
-                    -- create linked door chain
-                    prev.enemy = door
                     -- extend min/maxs
                     link_mins=v_min(link_mins, door.mins)
                     link_maxs=v_max(link_maxs, door.maxs)

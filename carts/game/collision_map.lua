@@ -381,9 +381,8 @@ local CollisionMap=function(world)
         if hits then
             -- invalid move
             if hits.start_solid or hits.all_solid then
-                next_pos = v_clone(origin)
+                next_pos = origin
                 invalid = true
-                printh("blocked!")
             else
                 -- position at impact (world space)
                 -- report closest hit
