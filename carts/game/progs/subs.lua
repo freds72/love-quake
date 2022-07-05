@@ -113,6 +113,9 @@ local subs=function(progs)
     end
 
     function take_damage(ent, inflictor, attacker, damage)
+        if not ent.health then
+            return
+        end
         -- do the damage
         ent.health = ent.health - damage
         

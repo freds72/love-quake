@@ -376,23 +376,27 @@ local CollisionMap=function(world)
         -- todo: smaller box
         local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent,no_world)
         -- check current to target pos
-        local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)        
+        local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)  
+        local n      
         if hits then
             -- invalid move
             if hits.start_solid or hits.all_solid then
-                next_pos = origin
+                next_pos = v_clone(origin)
                 invalid = true
+                printh("blocked!")
             else
-                -- position at impact
+                -- position at impact (world space)
                 -- report closest hit
-                next_pos=v_add(hits.pos, hits.ent.origin)
+                -- next_pos=hits.pos--v_add(hits.pos, hits.ent.origin)
                 hit_ent = hits.ent
+                n = hits.n
             end
         end
     
         return {
             pos=next_pos,
             ent=hit_ent,
+            n=n,
             touched=touched,
             invalid=invalid}
     end

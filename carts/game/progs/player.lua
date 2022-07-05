@@ -104,17 +104,35 @@ local player=function(progs)
             end
 
             if input:released("fire") then
+                printh("fired thing!")
                 local fwd,up = m_fwd(self.m),m_up(self.m)
                 local eye_pos = v_add(self.origin,up,16)
                 local aim_pos = v_add(eye_pos,fwd,1024)
                 
+
+                local angle=self.mangles
+                local m=m_x_m(
+                    m_x_m(
+                      make_m_from_euler(0,0,angle[3]),
+                      make_m_from_euler(angle[1],0,0)),
+                      make_m_from_euler(0,angle[2],0))
+
+
+                local tfwd=m_fwd(m)
+                local tpos=v_add(eye_pos,tfwd,48)
+                local t = progs:spawn()
+                t.MOVETYPE_BOUNCE = true
+                t.SOLID_NOT = true
+                t.origin=tpos
+                t.velocity=v_scale(tfwd,300)
+                t.frame="shot1"
+                t.skin = 1
+                progs:setmodel(t,"progs/v_shot.mdl")
+                
                 local touched = progs:traceline(self,eye_pos,aim_pos)
                 -- todo: refactor
-                if touched and touched.health then
-                    touched.health = touched.health - 10
-                    if touched.health<=0 then
-                        progs:call(touched,"die",self)
-                    end
+                if touched then
+                    take_damage(touched, self, self, 10)
                 end
             end
         end

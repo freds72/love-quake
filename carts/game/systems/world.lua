@@ -261,66 +261,19 @@ function WorldSystem:update()
         elseif not platforms[ent] then
             if ent.velocity then
                 local velocity = v_scale(ent.velocity,dt)
-                -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
-                local prev_contents = ent.contents
-                -- water? super damping
-                if prev_contents==-3 then
-                    -- velocity[3]=velocity[3]*0.6
-                end
 
                 if ent.MOVETYPE_TOSS then
-                    -- gravity
-                    local move = collisionMap:fly(ent,ent.origin,velocity)
-                    ent.origin = move.pos 
-                    ent.velocity[3] = ent.velocity[3] - conf.gravity_z*dt
-                    -- hit other entity?
-                    if move.ent then
-                        vm:call(ent,"touch",move.ent)
-                    end
+                    physic.toss(ent, velocity, dt)
                 elseif ent.MOVETYPE_WALK then
-                    -- gravity
-                    -- todo: less friction not on ground
-                    velocity[1] = velocity[1] * 0.8
-                    velocity[2] = velocity[2] * 0.8
-                    velocity[3] = velocity[3] - 1                     
-                    -- check next position 
-                    local vn,vl=v_normz(velocity)      
-                    local on_ground = ent.on_ground
-                    if vl>0.1 then
-                        local move = collisionMap:slide(ent,ent.origin,velocity)   
-                        on_ground = move.on_ground
-                        if on_ground and move.on_wall and move.fraction<1 then
-                            local up_move = collisionMap:slide(ent,v_add(ent.origin,{0,0,18}),velocity) 
-                            -- largest distance?
-                            if not up_move.invalid and up_move.fraction>move.fraction then
-                                move = up_move
-                            end
-                        end
-                        ent.origin = move.pos
-                        velocity = move.velocity                        
-
-                        -- trigger touched items
-                        for other_ent in pairs(move.touched) do
-                            vm:call(other_ent,"touch",ent)
-                        end                               
-                    else
-                        velocity = {0,0,0}
-                    end
-                    -- "debug"
-                    ent.on_ground = on_ground                    
-
-                    -- use corrected velocity
-                    ent.velocity = v_scale(velocity, 1/dt)
+                    physic.walk(ent, velocity, dt)
+                elseif ent.MOVETYPE_BOUNCE then
+                    physic.bounce(ent, velocity, dt)
                 else
                     ent.origin = v_add(ent.origin, velocity)
                 end
 
                 -- link to world
                 collisionMap:register(ent)                
-
-                if prev_contents~=ent.contents then
-                    -- print("transition from: "..prev_contents.." to:"..ent.contents)
-                end        
             end
             
             if ent.nextthink and ent.nextthink<time_t and ent.think then

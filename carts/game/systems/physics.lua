@@ -9,6 +9,7 @@
 -- Does not change the entities velocity at all
 
 local maths = require("engine.maths3d")
+local conf = require("game_conf")
 
 return function(world, vm, collisionMap)
 
@@ -210,6 +211,75 @@ return function(world, vm, collisionMap)
 					push(ent, move)
 				end
 			end
+		end,
+		toss=function(ent, velocity, dt)
+			-- gravity
+			velocity[3] = velocity[3] - conf.gravity_z*dt
+			local move = collisionMap:fly(ent,ent.origin,velocity)
+			ent.origin = move.pos 
+			-- hit other entity?
+			if move.ent then
+				vm:call(ent,"touch",move.ent)
+			end
+			-- use corrected velocity
+			ent.velocity = v_scale(velocity, 1/dt)
+		end,
+		bounce=function(ent, velocity, dt)
+			local orig = v_clone(ent.origin)
+			-- gravity
+			velocity[3] = velocity[3] - 0.3--conf.gravity_z*dt
+			local move = collisionMap:fly(ent,ent.origin,velocity)
+			ent.origin = move.pos
+			-- valid pos?
+			if testEntityPosition(ent) then
+				-- rollback
+				ent.origin = orig
+			end
+
+			-- hit other entity?
+			if move.ent then
+				vm:call(ent,"touch",move.ent)
+				-- handle bounce
+				velocity=v_scale(v_add(velocity,v_scale(move.n,-2*v_dot(velocity,move.n))),0.8)				
+			end
+				
+			-- use corrected velocity
+			ent.velocity = v_scale(velocity, 1/dt)
+		end,
+		walk=function(ent, velocity, dt)
+			-- gravity
+			-- todo: less friction not on ground
+			velocity[1] = velocity[1] * 0.8
+			velocity[2] = velocity[2] * 0.8
+			velocity[3] = velocity[3] - 1                     
+			-- check next position 
+			local vn,vl=v_normz(velocity)      
+			local on_ground = ent.on_ground
+			if vl>0.1 then
+				local move = collisionMap:slide(ent,ent.origin,velocity)   
+				on_ground = move.on_ground
+				if on_ground and move.on_wall and move.fraction<1 then
+					local up_move = collisionMap:slide(ent,v_add(ent.origin,{0,0,18}),velocity) 
+					-- largest distance?
+					if not up_move.invalid and up_move.fraction>move.fraction then
+						move = up_move
+					end
+				end
+				ent.origin = move.pos
+				velocity = move.velocity                        
+
+				-- trigger touched items
+				for other_ent in pairs(move.touched) do
+					vm:call(other_ent,"touch",ent)
+				end                               
+			else
+				velocity = {0,0,0}
+			end
+			-- "debug"
+			ent.on_ground = on_ground                    
+
+			-- use corrected velocity
+			ent.velocity = v_scale(velocity, 1/dt)
 		end,
 		unstuck=function(ent)
 			return not testEntityPosition(ent)
