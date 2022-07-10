@@ -118,6 +118,7 @@ local doors=function(progs)
             end
             
             --sound (self, CHAN_VOICE, self.noise2, 1, ATTN_NORM);
+            -- assert(self.pos2, "invalid door:"..e_tostring(self))
 
             self.state = STATE_UP
             local oself=self
@@ -160,7 +161,6 @@ local doors=function(progs)
         end
                 
         door_use=function()
-            --assert(self.owner,"invalid door owner: "..e_tostring(self))
             self.message = nil -- door message are for touch only
             self.owner.message = nil
         
@@ -248,13 +248,13 @@ local doors=function(progs)
             end
 
             local doors = progs:find(self, "classname", self.classname)
-            local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
+            local mins,maxs=self.mins,self.maxs
             --local mins,maxs=self.mins,self.maxs
             local link_mins,link_maxs=self.mins,self.maxs
             -- note: assumes doors are in closed position/origin = 0 0 0
             local prev=self
             self.owner = self
-            for _,door in pairs(doors) do
+            for _,door in ipairs(doors) do
                 -- overlap?
                 if  mins[1]<=door.maxs[1] and maxs[1]>=door.mins[1] and
                     mins[2]<=door.maxs[2] and maxs[2]>=door.mins[2] and
@@ -277,7 +277,7 @@ local doors=function(progs)
                     link_maxs=v_max(link_maxs, door.maxs)
                     -- move on
                     prev = door
-                end                
+                end
             end
 
             -- cannot be self triggered
