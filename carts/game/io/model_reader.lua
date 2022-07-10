@@ -478,10 +478,13 @@ local ModelReader = function(pak)
         models.textures=bsp.textures
         unpack_array(function(model)  
             local mins,maxs=model.mins,model.maxs
+            -- !!! original quake game "inflates" the mins/maxs by 1
+            -- compiler does produce mins/maxs deflated by 1
+            -- fix: adjust!!!
             add(models,{
                 faces=faces,
-                mins={mins[0],mins[1],mins[2]},
-                maxs={maxs[0],maxs[1],maxs[2]},
+                mins={mins[0]-1,mins[1]-1,mins[2]-1},
+                maxs={maxs[0]+1,maxs[1]+1,maxs[2]+1},
                 hulls={
                     -- root node (for display)
                     nodes[model.headnode[0]+1],                

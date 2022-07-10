@@ -827,6 +827,16 @@ local BSPRenderer=function(world,rasterizer)
               ent.frame)        
           end
         end   
+
+        if false then
+          for i=1,#world.entities do
+            local ent=world.entities[i]
+            -- todo: find out a better way to detect type
+            if ent.SOLID_TRIGGER then
+              drawBBox(cam, ent.absmins, ent.absmaxs)
+            end
+          end   
+        end
         --print(surfaceCache:stats(),2,2,8)          
       end
     }

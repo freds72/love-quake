@@ -54,9 +54,9 @@ local subs=function(progs)
 
     -- convert entity to string
     function e_tostring(self)
-        local s="---- "..tostring(self.classname).." -----\n"
+        local s="---- "..tostring(self.classname).."["..tostring(self).."] -----\n"
         for k,v in pairs(self) do
-            if type(v)=="table" and #table==3 then
+            if type(v)=="table" and #v==3 then
                 s=s..k..":"..v_tostring(v)
             else
                 s=s..k..":"..tostring(v)
@@ -84,7 +84,6 @@ local subs=function(progs)
                     return
                 end
                 local i = flr(rnd(1,#targets))
-                printh("picking entity: "..i.."/"..#targets)
                 targets[i].use(other)
             else
                 for i=1,#targets do

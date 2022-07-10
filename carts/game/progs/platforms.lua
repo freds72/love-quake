@@ -16,7 +16,7 @@ local platforms=function(progs)
         -- default values
         set_defaults(self,{
             spawnflags=0,
-            speed=50,
+            speed=150,
             dmg=2,
             velocity={0,0,0}
         })
@@ -62,7 +62,7 @@ local platforms=function(progs)
             trigger.owner = self
             trigger.touch = plat_center_touch
             local tmin = v_add(self.mins,{25,25,0})
-            local tmax = v_add(self.maxs,{25,25,-8})
+            local tmax = v_add(self.maxs,{25,25,-8},-1)
 
             tmin[3] = tmax[3] - (self.pos1[3] - self.pos2[3] + 8)
             if band(self.spawnflags,PLAT_LOW_TRIGGER)~=0 then
