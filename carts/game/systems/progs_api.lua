@@ -95,7 +95,8 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           collisionMap:register(ent)
         end,
         time=function()
-          return time()
+          -- sync with world time
+          return world.time_t
         end,
         print=function(self,msg,...)
           messages:say(msg,...)

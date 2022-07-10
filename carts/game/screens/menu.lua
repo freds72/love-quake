@@ -5,6 +5,7 @@ local conf=require("game_conf")
 
 -- start menu screen/state
 return function(level)
+    level = level or "start"
     local menu,selected={
         "Start",
         "E1M1",

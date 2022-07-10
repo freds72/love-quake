@@ -58,7 +58,22 @@ local doors=function(progs)
             progs:setorigin(self,self.pos1)
         end
 
-        local door_hit_top,door_hit_bottom,door_go_down,door_go_up,door_fire,door_use,door_trigger_touch,door_killed,door_touch
+        local door_blocked,door_hit_top,door_hit_bottom,door_go_down,door_go_up,door_fire,door_use,door_trigger_touch,door_killed,door_touch
+
+        door_blocked=function(other)
+            -- todo: fix goalentity
+            take_damage(other, self, self.goalentity, self.dmg, "squish")
+
+            -- if a door has a negative wait, it would never come back if blocked,
+            -- so let it just squash the object to death real fast
+            if self.wait >= 0 then
+                if self.state == STATE_DOWN then
+                    door_go_up ()
+                else
+                    door_go_down ()
+                end
+            end
+        end
 
         door_hit_top=function()
             -- sound (self, CHAN_NO_PHS_ADD+CHAN_VOICE, self.noise1, 1, ATTN_NORM);
@@ -103,6 +118,7 @@ local doors=function(progs)
             end
             
             --sound (self, CHAN_VOICE, self.noise2, 1, ATTN_NORM);
+            -- assert(self.pos2, "invalid door:"..e_tostring(self))
 
             self.state = STATE_UP
             local oself=self
@@ -232,19 +248,21 @@ local doors=function(progs)
             end
 
             local doors = progs:find(self, "classname", self.classname)
-            local mins,maxs=v_add(self.mins,{-8,-8,-8}),v_add(self.maxs,{8,8,8})
+            local mins,maxs=self.mins,self.maxs
             --local mins,maxs=self.mins,self.maxs
             local link_mins,link_maxs=self.mins,self.maxs
             -- note: assumes doors are in closed position/origin = 0 0 0
             local prev=self
             self.owner = self
-            for _,door in pairs(doors) do
+            for _,door in ipairs(doors) do
                 -- overlap?
                 if  mins[1]<=door.maxs[1] and maxs[1]>=door.mins[1] and
                     mins[2]<=door.maxs[2] and maxs[2]>=door.mins[2] and
                     mins[3]<=door.maxs[3] and maxs[3]>=door.mins[3] then
                     -- link to "master" door
                     door.owner = self
+                    -- create linked door chain
+                    prev.enemy = door
                     if door.health>0 then
                         self.health = door.health
                     end
@@ -254,14 +272,12 @@ local doors=function(progs)
                     if door.message then
                         self.message = door.message
                     end
-                    -- create linked door chain
-                    prev.enemy = door
                     -- extend min/maxs
                     link_mins=v_min(link_mins, door.mins)
                     link_maxs=v_max(link_maxs, door.maxs)
                     -- move on
                     prev = door
-                end                
+                end
             end
 
             -- cannot be self triggered
@@ -300,7 +316,8 @@ local doors=function(progs)
         set_defaults(self,{
             speed=50,
             dmg = 2,
-            wait = 5
+            wait = 5,
+            attack_finished=0
         })
         set_move_dir(self)        
 
@@ -365,11 +382,10 @@ local doors=function(progs)
 
             local v_right,v_fwd,v_up = makevectors(self.movedir)
             if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then
-                -- magic +2 to avoid sticking into walls (why???)
-                local len = abs(v_dot(v_up,self.size)) + 2
+                local len = abs(v_dot(v_up,self.size))
                 self.dest1 = v_add(self.origin,v_up,-len)
             else
-                local len = abs(v_dot(v_right,self.size)) + 2
+                local len = abs(v_dot(v_right,self.size))
                 self.dest1 = v_add(self.origin,v_right,temp*len)
             end
         
@@ -402,6 +418,14 @@ local doors=function(progs)
         end
 
         self.use=fd_secret_use
+
+        self.blocked=function(other)
+            if progs:time() < self.attack_finished then
+                return
+            end
+            self.attack_finished = progs:time() + 0.5
+            take_damage(other, self, self, self.dmg, "squish")
+        end
     end
 end
 return doors

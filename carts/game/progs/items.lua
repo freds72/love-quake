@@ -51,10 +51,18 @@ local items=function(progs)
         end
         progs:drop_to_floor(self)
         
-        self.touch=function()
+        self.touch=function(other)
             progs:remove(self)
-            -- todo:     
-            printh("got health: "..self.healamount)               
+
+            if other.classname ~= "player" then
+                return
+            end
+
+            -- todo: sound
+            take_heal(other, self.healamount)
+            
+            -- linked actions?
+            use_targets(self)
         end
     end
 end

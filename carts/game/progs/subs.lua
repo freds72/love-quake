@@ -52,11 +52,18 @@ local subs=function(progs)
         end
     end
 
-    function print_entity(self)
-        print("---- "..self.classname.." -----")
+    -- convert entity to string
+    function e_tostring(self)
+        local s="---- "..tostring(self.classname).."["..tostring(self).."] -----\n"
         for k,v in pairs(self) do
-            print(k..":"..tostring(v))
+            if type(v)=="table" and #v==3 then
+                s=s..k..":"..v_tostring(v)
+            else
+                s=s..k..":"..tostring(v)
+            end
+            s=s.."\n"
         end
+        return s
     end
 
     -- find all targets from the given entity and "use" them
@@ -77,7 +84,6 @@ local subs=function(progs)
                     return
                 end
                 local i = flr(rnd(1,#targets))
-                printh("picking entity: "..i.."/"..#targets)
                 targets[i].use(other)
             else
                 for i=1,#targets do
@@ -97,6 +103,56 @@ local subs=function(progs)
         for k,v in pairs(defaults) do
             self[k] = self[k] or v
         end    
+    end
+
+    function killed(self, attacker)
+        self.health = max(self.health,-99)
+
+        if self.MOVETYPE_PUSH or self.MOVETYPE_NONE then
+            -- doors, triggers, etc
+            self.die(attacker)
+            return
+        end
+
+        self.touch = nil
+        self.die()
+    end
+
+    function take_damage(ent, inflictor, attacker, damage)
+        if not ent.health then
+            return
+        end
+        -- do the damage
+        ent.health = ent.health - damage
+        
+        if ent.health <= 0 then
+            killed(ent, attacker)
+            return
+        end
+
+        if ent.pain then
+            ent.pain(attacker, damage)
+        end
+    end
+
+    function take_heal(ent, healamount, ignore)
+        -- already dead?
+	    if ent.health <= 0 then
+		    return
+        end
+
+	    if (not ignore) and (ent.health >= ent.max_health) then
+		    return
+        end
+	    local healamount = ceil(healamount)
+
+	    ent.health = ent.health + healamount
+	    if (not ignore) and (ent.health >= ent.max_health) then
+		    ent.health = ent.max_health
+        end
+		
+        ent.health=min(ent.health, 250)
+	    return true
     end
 end
 

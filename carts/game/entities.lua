@@ -1,6 +1,7 @@
 -- helper class to store and find entities
 local Entities=function(entities)
 
+    -- returns entities with the selected property value and the "filter" attribute/function
     function entities:find(ent,property,value,filter)
         local matches={}
         for i=1,#entities do

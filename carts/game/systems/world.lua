@@ -1,4 +1,4 @@
-local WorldSystem={}
+local WorldSystem={time_t=0}
 local conf = require("game_conf")
 local maths = require("engine.maths3d")
 local logging = require("engine.logging")
@@ -9,7 +9,6 @@ local vm
 local collisionMap
 local active_entities={}
 local new_entities={}
-local time_t = 0
 
 local physic
 
@@ -21,7 +20,7 @@ function WorldSystem:load(level_name)
     self.player = nil
     self.level = nil
     -- "physics" time (fixed clock)
-    time_t = 0
+    self.time_t = 0
     
     if level_name=="start" then
         gameState:reset()
@@ -56,7 +55,9 @@ function WorldSystem:load(level_name)
         local ent = level.entities[i]
         -- match with difficulty level
         if band(ent.spawnflags or 0, shl(gameState.skill,8))==0 then
+            -- todo: cleanup default
             ent.ltime = 0
+            local oent=ent
             local ent = vm:create(ent)
             if ent then
                 -- valid entity?
@@ -236,11 +237,11 @@ function WorldSystem:update()
 
     -- printh('--------------------')
     local dt = 1/60
-    time_t = time_t + dt
+    self.time_t = self.time_t + dt
 
     -- run physic "warm" loop
     local platforms={}
-    for i=#active_entities,1,-1 do
+    for i=1,#active_entities do
         local ent = active_entities[i]
         if ent.MOVETYPE_PUSH then
             platforms[ent] = true
@@ -249,82 +250,32 @@ function WorldSystem:update()
     end
 
     -- any thinking to do?
-    for i=#active_entities,1,-1 do
+    for i=1,#active_entities do
         local ent = active_entities[i]
-        -- to be removed?
-        if ent.free then
-            if ent.classname=="player" then
-                self.player = nil
-            end
-            collisionMap:unregister(ent)
-            del(active_entities, i)
-        elseif not platforms[ent] then
+        if not platforms[ent] then
             if ent.velocity then
                 local velocity = v_scale(ent.velocity,dt)
-                -- print("entity: "..i.." moving: "..v_tostring(ent.origin))
-                local prev_contents = ent.contents
-                -- water? super damping
-                if prev_contents==-3 then
-                    -- velocity[3]=velocity[3]*0.6
-                end
 
                 if ent.MOVETYPE_TOSS then
-                    local move = collisionMap:fly(ent,ent.origin,velocity)
-                    ent.origin = move.pos          
-                    velocity[3] = velocity[3] - conf.gravity_z/60          
-                    -- hit other entity?
-                    if move.ent then
-                        vm:call(ent,"touch",move.ent)
-                    end
-                elseif ent.SOLID_SLIDEBOX then
-                    -- gravity
-                    velocity[3] = velocity[3] - 1                     
-                    -- check next position 
-                    local vn,vl=v_normz(velocity)      
-                    local on_ground = ent.on_ground
-                    if vl>0.1 then
-                        local move = collisionMap:slide(ent,ent.origin,velocity)   
-                        on_ground = move.on_ground
-                        if on_ground and move.on_wall and move.fraction<1 then
-                            local up_move = collisionMap:slide(ent,v_add(ent.origin,{0,0,18}),velocity) 
-                            -- largest distance?
-                            if not up_move.invalid and up_move.fraction>move.fraction then
-                                move = up_move
-                            end
-                        end
-                        ent.origin = move.pos
-                        velocity = move.velocity                        
-
-                        -- trigger touched items
-                        for other_ent in pairs(move.touched) do
-                            vm:call(other_ent,"touch",ent)
-                        end                               
-                    else
-                        velocity = {0,0,0}
-                    end
-                    -- "debug"
-                    ent.on_ground = on_ground                    
-
-                    -- use corrected velocity
-                    ent.velocity = v_scale(velocity, 1/dt)
+                    physic.toss(ent, velocity, dt)
+                elseif ent.MOVETYPE_WALK then
+                    physic.walk(ent, velocity, dt)
+                elseif ent.MOVETYPE_BOUNCE then
+                    physic.bounce(ent, velocity, dt)
                 else
                     ent.origin = v_add(ent.origin, velocity)
                 end
 
                 -- link to world
                 collisionMap:register(ent)                
-
-                if prev_contents~=ent.contents then
-                    -- print("transition from: "..prev_contents.." to:"..ent.contents)
-                end        
             end
             
-            if ent.nextthink and ent.nextthink<time_t and ent.think then
+            if ent.nextthink and ent.nextthink<self.time_t and ent.think then
                 ent.nextthink = nil
                 ent:think()
             end
 
-            -- todo: force origin changes via function
+            -- todo: force origin changes via function / useless?
             if ent.m then
                 local angles=ent.mangles or {0,0,0}
                 ent.m=make_m_from_euler(unpack(angles))          
@@ -333,30 +284,17 @@ function WorldSystem:update()
         end
     end
 
-    --[[
-    -- move platforms (if possible)
-    for i=1,#platforms do
-        local ent=platforms[i]
-        -- clip with world
-        ent.SOLID_NOT=nil
-        local move = collisionMap:fly(ent,ent.origin,v_scale(ent.velocity,1/60),true)
-        -- not collision?
-        if not move.ent then
-            ent.origin = move.pos          
-            -- update bounding box
-            ent.absmins=v_add(ent.origin,ent.mins)
-            ent.absmaxs=v_add(ent.origin,ent.maxs)
-
-            -- link to world
-            collisionMap:register(ent)
-            local angles=ent.mangles or {0,0,0}
-            ent.m=make_m_from_euler(unpack(angles))          
-            m_set_pos(ent.m, ent.origin)
-        else
-            printh(ent.classname.." collides: "..move.ent.classname)
+    -- drop "free" entities
+    for i=#active_entities,1,-1 do
+        local ent = active_entities[i]
+        if ent.free then
+            if ent.classname=="player" then
+                self.player = nil
+            end
+            collisionMap:unregister(ent)
+            del(active_entities, i)
         end
     end
-    ]]
 end
 
 -- create a player

@@ -1,6 +1,6 @@
 local GameConf={
     -- physics
-    gravity_z = 800,
+    gravity_z = 18,
     -- temporary
     root_path="D:\\Games\\quake\\id1",
     start_level="start",    
