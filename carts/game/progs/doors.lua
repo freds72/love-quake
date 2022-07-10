@@ -382,11 +382,10 @@ local doors=function(progs)
 
             local v_right,v_fwd,v_up = makevectors(self.movedir)
             if band(self.spawnflags,SECRET_1ST_DOWN)~=0 then
-                -- magic +2 to avoid sticking into walls (why???)
-                local len = abs(v_dot(v_up,self.size)) + 2
+                local len = abs(v_dot(v_up,self.size))
                 self.dest1 = v_add(self.origin,v_up,-len)
             else
-                local len = abs(v_dot(v_right,self.size)) + 2
+                local len = abs(v_dot(v_right,self.size))
                 self.dest1 = v_add(self.origin,v_right,temp*len)
             end
         
