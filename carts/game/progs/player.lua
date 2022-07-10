@@ -112,26 +112,6 @@ local player=function(progs)
                 local eye_pos = v_add(self.origin,up,16)
                 local aim_pos = v_add(eye_pos,fwd,1024)
                 
-
-                local angle=self.mangles
-                local m=m_x_m(
-                    m_x_m(
-                      make_m_from_euler(0,0,angle[3]),
-                      make_m_from_euler(angle[1],0,0)),
-                      make_m_from_euler(0,angle[2],0))
-
-
-                local tfwd=m_fwd(m)
-                local tpos=v_add(eye_pos,tfwd,48)
-                local t = progs:spawn()
-                t.MOVETYPE_BOUNCE = true
-                t.SOLID_NOT = true
-                t.origin=tpos
-                t.velocity=v_scale(tfwd,300)
-                t.frame="shot1"
-                t.skin = 1
-                progs:setmodel(t,"progs/v_shot.mdl")
-                
                 local touched = progs:traceline(self,eye_pos,aim_pos)
                 -- todo: refactor
                 if touched and touched.die then
@@ -145,8 +125,13 @@ local player=function(progs)
         end
 
         self.die=function()
+            if self.deadflag>DEAD_NO then
+                return
+            end
+
             self.deadflag = DEAD_DYING
-            self.solid = SOLID_NOT            
+            self.SOLID_NOT = true
+            self.SOLID_SLIDEBOX = nil
             self.MOVETYPE_TOSS = true
             local velocity = self.velocity
             if velocity[3] < 10 then

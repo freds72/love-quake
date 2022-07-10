@@ -1,4 +1,4 @@
-local WorldSystem={}
+local WorldSystem={time_t=0}
 local conf = require("game_conf")
 local maths = require("engine.maths3d")
 local logging = require("engine.logging")
@@ -9,7 +9,6 @@ local vm
 local collisionMap
 local active_entities={}
 local new_entities={}
-local time_t = 0
 
 local physic
 
@@ -21,7 +20,7 @@ function WorldSystem:load(level_name)
     self.player = nil
     self.level = nil
     -- "physics" time (fixed clock)
-    time_t = 0
+    self.time_t = 0
     
     if level_name=="start" then
         gameState:reset()
@@ -238,7 +237,7 @@ function WorldSystem:update()
 
     -- printh('--------------------')
     local dt = 1/60
-    time_t = time_t + dt
+    self.time_t = self.time_t + dt
 
     -- run physic "warm" loop
     local platforms={}
@@ -271,12 +270,12 @@ function WorldSystem:update()
                 collisionMap:register(ent)                
             end
             
-            if ent.nextthink and ent.nextthink<time_t and ent.think then
+            if ent.nextthink and ent.nextthink<self.time_t and ent.think then
                 ent.nextthink = nil
                 ent:think()
             end
 
-            -- todo: force origin changes via function
+            -- todo: force origin changes via function / useless?
             if ent.m then
                 local angles=ent.mangles or {0,0,0}
                 ent.m=make_m_from_euler(unpack(angles))          

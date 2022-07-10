@@ -216,7 +216,7 @@ return function(world, vm, collisionMap)
 			-- gravity
 			velocity[3] = velocity[3] - conf.gravity_z*dt
 			local move = collisionMap:fly(ent,ent.origin,velocity)
-			ent.origin = move.pos 
+			ent.origin = move.pos
 			-- hit other entity?
 			if move.ent then
 				vm:call(ent,"touch",move.ent)
@@ -227,7 +227,7 @@ return function(world, vm, collisionMap)
 		bounce=function(ent, velocity, dt)
 			local orig = v_clone(ent.origin)
 			-- gravity
-			velocity[3] = velocity[3] - 0.3--conf.gravity_z*dt
+			velocity[3] = velocity[3] - conf.gravity_z*dt
 			local move = collisionMap:fly(ent,ent.origin,velocity)
 			ent.origin = move.pos
 			-- valid pos?
@@ -251,7 +251,7 @@ return function(world, vm, collisionMap)
 			-- todo: less friction not on ground
 			velocity[1] = velocity[1] * 0.8
 			velocity[2] = velocity[2] * 0.8
-			velocity[3] = velocity[3] - 1                     
+			velocity[3] = velocity[3] - 1 
 			-- check next position 
 			local vn,vl=v_normz(velocity)      
 			local on_ground = ent.on_ground
