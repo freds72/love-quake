@@ -55,11 +55,21 @@ local player=function(progs)
                 return
             end
 
+            -- todo: add water level support
+            -- todo: add falling damage
+
+            local dmg = 2
             if self.contents==-5 then
+                dmg = 10
+            elseif self.contents==-4 then
+                dmg = 4
+            end
+
+            if self.contents<-1 then
                 if self.dmgtime < progs:time() then
                     self.dmgtime = progs:time() + 0.2
         
-                    take_damage(self, nil, nil, 10*self.waterlevel)
+                    take_damage(self, nil, nil, dmg*self.waterlevel)
                 end
             end
         end
