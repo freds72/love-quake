@@ -129,6 +129,10 @@ local subs=function(progs)
             killed(ent, attacker)
             return
         end
+
+        if ent.pain then
+            ent.pain(attacker, damage)
+        end
     end
 
     function take_heal(ent, healamount, ignore)

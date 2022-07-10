@@ -35,6 +35,8 @@ local player=function(progs)
         self.frame = "stand1"
         self.mangles = {0,0,self.angle or 0}
         progs:setmodel(self, "progs/player.mdl")
+        -- from mesh
+        self.eyepos = self.model.eyepos
 
         -- moves
         local moves={
@@ -76,6 +78,7 @@ local player=function(progs)
             
             if self.deadflag == DEAD_DYING then
                 self.mangles[2]=lerp(self.mangles[2],death_angle,0.8)
+                self.eyepos=v_lerp(self.eyepos,{0,0,8},0.8)
                 return
             end
 
@@ -124,6 +127,11 @@ local player=function(progs)
             -- update weapon pos            
         end
 
+        self.pain=function()
+            -- basic pain feedback
+            self.mangles[2]=0.05*(1-rnd(2))
+        end
+
         self.die=function()
             if self.deadflag>DEAD_NO then
                 return
@@ -135,7 +143,7 @@ local player=function(progs)
             self.MOVETYPE_TOSS = true
             local velocity = self.velocity
             if velocity[3] < 10 then
-                velocity[3] = velocity[3] + rnd()*300
+                velocity[3] = velocity[3] + 100 + rnd()*200
             end
             death_angle = rnd()>0.5 and 0.25 or -0.25
         end
