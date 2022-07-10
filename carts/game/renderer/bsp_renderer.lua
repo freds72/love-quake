@@ -284,11 +284,6 @@ local BSPRenderer=function(world,rasterizer)
       end
       if (d1>0)~=(d0>0) then
         -- add middle point
-        if d0<0 then
-          d0=d0-0.03125
-        else
-          d0=d0+0.03125
-        end          
         local v2=v_lerp(v0,v1,d0/(d0-d1))
         out_res[#out_res+1]=v2
         -- add to end
