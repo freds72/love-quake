@@ -1,21 +1,33 @@
 -- camera
 local logging = require("engine.logging")
 local CameraSystem=function(world)
-    local function track(self,pos,m)
+    local function track(self,pos,m, water)
         --pos=v_add(v_add(pos,m_fwd(m),-24),m_up(m),24)	      
-        self.m={unpack(m)}            
+        self.m={unpack(m)} 
+        -- screen wobbling if under water/lava/...           
+        if water then
+            local w,h=0.98+0.04*cos(time()/2),0.98+0.04*sin(time()/2)
+            m[1] = m[1] * w
+            m[2] = m[2] * w
+            m[3] = m[3] * w
+
+            m[8+1] = m[8+1] * h
+            m[8+2] = m[8+2] * h
+            m[8+3] = m[8+3] * h
+        end
+
         -- inverse view matrix
         m[2],m[5]=m[5],m[2]
         m[3],m[9]=m[9],m[3]
         m[7],m[10]=m[10],m[7]
-        --
+        --        
         self.m=m_x_m(m,{
             1,0,0,0,
             0,1,0,0,
             0,0,1,0,
             -pos[1],-pos[2],-pos[3],1
         })
-        
+
         self.origin=pos
     end
 
@@ -23,7 +35,7 @@ local CameraSystem=function(world)
         return {
             update=function(self)
                 local player=world.player
-                if not player or player.dead then
+                if not player then
                     return 1
                 end
                 local angle=player.mangles
@@ -32,8 +44,8 @@ local CameraSystem=function(world)
                       make_m_from_euler(0,0,angle[3]),
                       make_m_from_euler(angle[1],0,0)),
                       make_m_from_euler(0,angle[2],0))
-          
-                track(parent,v_add(player.origin,player.eyepos,-1),m)
+                
+                track(parent,v_add(player.origin,player.eyepos,-1),m,player.contents<-1)
             end
         }
     end
