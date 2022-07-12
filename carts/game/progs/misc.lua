@@ -53,6 +53,7 @@ local misc=function(progs)
 
     progs.misc_fireball=function(self)
         self.classname = "fireball"
+        -- particle params
         local particles={
             rate=50, -- 50 particles/sec
             ttl={0.5,1},
@@ -60,6 +61,13 @@ local misc=function(progs)
             maxs={8,8,8},
             gravity={0,0,30},
             ramp=3
+        }
+        local blast={
+            mins={-8,-8,-8},
+            maxs={8,8,8},
+            gravity={0,0,-10},
+            ttl={0.1,0.4},
+            speed={50,150}
         }
         set_defaults(self,{
             SOLID_NOT=true,            
@@ -81,6 +89,7 @@ local misc=function(progs)
                     (rnd() * 100) - 50,
                     self.speed + rnd() * 200}
                 fireball.touch=function(other)
+                    progs:attach(fireball,"blast",blast)
                     progs:remove(fireball)
                 end
                 fireball.nextthink = progs:time() + 5
@@ -90,7 +99,7 @@ local misc=function(progs)
                 fireball.skin=1
                 fireball.frame = "frame1"
                 progs:setmodel(fireball,"progs/lavaball.mdl")
-                progs:attach(fireball,"particles",particles)
+                progs:attach(fireball,"trail",particles)
 
                 -- attach a particle system
                 self.nextthink = progs:time() + 5 * rnd()

@@ -36,6 +36,9 @@ local recycling_pool=function(name,stride,size)
         end,
         stats=function(self)   
             return "pool: "..name.." free: "..(#free-cursor).." pool: "..#pool/stride
+        end,
+        reset=function()
+            pool,free,cursor={},{},1
         end
     },{
         -- redirect get/set to underlying array

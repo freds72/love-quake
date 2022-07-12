@@ -3,13 +3,14 @@ local stateSystem = require("engine.state_system")
 local input=require("engine.input_system")
 local world=require("systems.world")
 local camera=require("systems.camera")(world)
+local particles=require("systems.particles")
 local messages=require("systems.message")
 local rasterizer=require("renderer.span_rasterizer")
 --local rasterizer=require("renderer.wireframe_rasterizer")
 local renderer=require("renderer.bsp_renderer")(world, rasterizer)
 
--- some globals (temp)
-_components={}
+-- global "pluggable" components
+_components = {}
 
 function _init()
     -- blend table
@@ -19,8 +20,6 @@ function _init()
     local arg1, arg2 = args()
     stateSystem:next("screens.play", arg1, arg2)
 
-    _components["particles"] = require("systems.particles")(rasterizer)
-
     profiler = require("lib.profile") 
     --profiler.start()
 end
@@ -29,9 +28,7 @@ function _update()
     input:update()
     messages:update()
     world:update()
-    for _,c in pairs(_components) do
-        c:update(1/60)
-    end
+    particles:update()
     camera:update()
     stateSystem:update()
 end
@@ -41,12 +38,15 @@ function _draw()
         
     -- something to display?
     rasterizer:beginFrame()
+
+    -- 3d world
     renderer:beginFrame()
     renderer:draw(camera)
     renderer:endFrame()
-    for _,c in pairs(_components) do
-        c:draw(camera)
-    end
+
+    -- 
+    particles:draw(rasterizer, camera)
+
     rasterizer:endFrame()
 
     stateSystem:draw()

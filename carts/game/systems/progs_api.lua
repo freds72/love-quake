@@ -6,6 +6,10 @@ local messages = require("systems.message")
 local stateSystem = require("engine.state_system")
 local gameState = require("systems.game_state")
 
+-- misc effects
+require("systems.particles_trail")
+require("systems.particles_blast")
+
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local precache_models={}
   
@@ -112,14 +116,6 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
         remove=function(_,ent)
           -- mark entity for deletion
           ent.free = true
-          -- detach from ECS
-          for name,system in pairs(_components) do
-            local c=ent[name]
-            if c then
-              system:free(c)
-              ent[name] = nil
-            end
-          end
         end,
         set_skill=function(self,skill)
           logging.debug("Selected skill level: "..skill)

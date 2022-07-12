@@ -251,7 +251,7 @@ return function(world, vm, collisionMap)
 			-- todo: less friction not on ground
 			velocity[1] = velocity[1] * 0.8
 			velocity[2] = velocity[2] * 0.8
-			velocity[3] = velocity[3] - 1 
+			velocity[3] = velocity[3] - 0.7
 			-- check next position 
 			local vn,vl=v_normz(velocity)      
 			local on_ground = ent.on_ground
