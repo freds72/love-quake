@@ -34,7 +34,8 @@ function TrailEmitter:new(owner,params)
                     gravity[1],gravity[2],gravity[3],
                     ttl,
                     ttl,
-                    params.ramp or 1
+                    params.ramp or 1,
+                    params.gravity_z or 0
                 )
                 add(active_particles,p)
             end
