@@ -59,13 +59,12 @@ local misc=function(progs)
             ttl={0.5,1},
             mins={-8,-8,-8},
             maxs={8,8,8},
-            gravity={0,0,30},
+            gravity_z=30,
             ramp=3
         }
         local blast={
-            mins={-8,-8,-8},
-            maxs={8,8,8},
-            gravity={0,0,-10},
+            radius={5,12},
+            gravity_z=-600,
             ttl={0.1,0.4},
             speed={50,150}
         }

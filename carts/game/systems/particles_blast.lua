@@ -15,9 +15,9 @@ function BlastEmitter:new(owner,params)
         for i=1,50 do        
             local ttl=lerp(params.ttl[1],params.ttl[2],rnd())    
             local angle,speed=rnd(),lerp(params.speed[1],params.speed[2],rnd())
-            local azimuth=cos(rnd())
+            local azimuth=rnd()
             -- velocity direction
-            local dir={azimuth*cos(angle),azimuth*sin(angle),azimuth}
+            local dir={sin(azimuth)*cos(angle),sin(azimuth)*sin(angle),cos(azimuth)}
             local pos=v_add(origin, dir, lerp(params.radius[1],params.radius[2],rnd()))
             local p=pool:pop(
                 pos[1],pos[2],pos[3],
