@@ -254,36 +254,10 @@ local SurfaceCache=function(rasterizer)
                 local scale = texture.bright and 32 or (activeLights[lightstyles[1]] or 0)
                 ffi.fill(lightmap,w*h,mid(63-flr(scale),0,63))
             end
-            -- mix with texture map
-            local ptr=texture.mips[mip+1] 
-            local tw,th=texture.width/texscale,texture.height/texscale
-            -- texture offset to be aligned with lightmap
-            local xmin,ymin=self.umin,self.vmin
-            -- backup pointer
-            local dst = img
-            local dt=texscale/16
-            local t=dt/2
-            for y=0,imgh-1 do
-                local s=dt/2
-                local t0,tfrac,t1=flr(t),t%1,ceil(t)
-                for x=0,imgw-1 do
-                  local s0,sfrac,s1=flr(s),s%1,ceil(s)
-                  local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
-                  -- todo: cache lightmaps when needed
-                  --print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
-                  local a=lightmap[s0t0] * (1-sfrac) + lightmap[s1t0] * sfrac
-                  local b=lightmap[s0t1] * (1-sfrac) + lightmap[s1t1] * sfrac
-                  local lexel = a*(1-tfrac) + b*tfrac
-                  local tx,ty=(x+xmin)%tw,(y+ymin)%th
-                  --dst[x]=8+8*mip
-                  dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
-                  --dst[x]=colormap.ptr[15 + flr(lexel)*256]
-                  s = s + dt
-                end
-                dst = dst + imgw
-                t = t + dt
-            end
 
+            ffi.fill(lightmap,w*h,63)--mid(63-flr(scale),0,63))
+
+            -- point light?
             -- mix with point lights
             if point_light then
               -- projected radius
@@ -300,13 +274,26 @@ local SurfaceCache=function(rasterizer)
                 -- project point into face
                 local x0=x*s[0]+y*s[1]+z*s[2]+s_offset
                 local y0=x*t[0]+y*t[1]+z*t[2]+t_offset
-                x0=(x0-face.umin)/texscale
-                y0=(y0-face.vmin)/texscale
+                x0=(x0-face.umin)/16+0.5
+                y0=(y0-face.vmin)/16+0.5
                 local r=point_light.r * point_light.r - dist * dist
-                printh("dist: "..dist)
                 if r>0 then
-                  r=sqrt(r)/texscale
+                  r=sqrt(r)/16
+                  --printh(x0.." "..y0.." / "..w.." x "..h)
+                  local lm=lightmap
+                  for y=0,h-1 do
+                    local rr=r*r-(y-y0)*(y-y0)
+                    if rr>=0 then
+                      local xx=sqrt(rr)
+                      for x=max(flr(x0-xx),0),min(flr(x0+xx),w)-1 do
+                        lm[x]=max(lm[x]-16,0)
+                      end
+                    end
+                    lm=lm+w
+                  end
+
                   -- draw circle
+                  --[[
                   local function pset(x0,y0)
                     if x0>=0 and y0>=0 and x0<imgw and y0<imgh then
                       img[x0+y0*imgw] = colormap.ptr[15]
@@ -343,8 +330,39 @@ local SurfaceCache=function(rasterizer)
                     end
                   end
                   circfill(x0,y0,r)
+                  ]]
                 end
               end
+            end
+
+            -- mix with texture map
+            local ptr=texture.mips[mip+1] 
+            local tw,th=texture.width/texscale,texture.height/texscale
+            -- texture offset to be aligned with lightmap
+            local xmin,ymin=self.umin,self.vmin
+            -- backup pointer
+            local dst = img
+            local dt=texscale/16
+            local t=dt/2
+            for y=0,imgh-1 do
+                local s=dt/2
+                local t0,tfrac,t1=flr(t),t%1,ceil(t)
+                for x=0,imgw-1 do
+                  local s0,sfrac,s1=flr(s),s%1,ceil(s)
+                  local s0t0,s0t1,s1t0,s1t1=s0+t0*w,s0+t1*w,s1+t0*w,s1+t1*w
+                  -- todo: cache lightmaps when needed
+                  --print(s.." / "..t.." @ ".._lightw.." x ".._lighth)
+                  local a=lightmap[s0t0] * (1-sfrac) + lightmap[s1t0] * sfrac
+                  local b=lightmap[s0t1] * (1-sfrac) + lightmap[s1t1] * sfrac
+                  local lexel = a*(1-tfrac) + b*tfrac
+                  local tx,ty=(x+xmin)%tw,(y+ymin)%th
+                  --dst[x]=8+8*mip
+                  dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
+                  --dst[x]=colormap.ptr[15 + flr(lexel)*256]
+                  s = s + dt
+                end
+                dst = dst + imgw
+                t = t + dt
             end
 
             self.ptr=img

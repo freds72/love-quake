@@ -834,6 +834,7 @@ local BSPRenderer=function(world,rasterizer)
         surfaceCache:endFrame()
 
         -- draw surfaces within a radius
+        --[[
         if _cam then
           local world_entity = world.entities[1]
           local main_model = world_entity.model
@@ -841,6 +842,7 @@ local BSPRenderer=function(world,rasterizer)
           local leaves=bsp.touches(main_model.hulls[1],_cam.origin,96)
           drawLeaves(_cam,world.entities[1],resources.verts,leaves)
         end
+        ]]
       end,
       draw=function(self,cam)
         -- nothing to draw (eg. no scene/world)
@@ -856,7 +858,7 @@ local BSPRenderer=function(world,rasterizer)
         local resources = world.level.model
         local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
         -- collect point lights
-        local point_lights=bsp.touches(main_model.hulls[1],_cam.origin,96)
+        local point_lights=bsp.touches(main_model.hulls[1],_cam.origin,128)
 
         -- world entity
         drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves,point_lights)
