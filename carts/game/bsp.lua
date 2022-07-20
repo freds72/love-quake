@@ -9,7 +9,79 @@ function bsp.locate(node,pos)
     end
     return node
 end
+
+function bsp.tostring(node,depth)
+    if not node then return end
+    depth=depth or 0
+    local s=""
+    local coma=""
+    if node.contents then
+        s="\"content\":"..node.contents
+        if #node>0 then
+            s=s..",\"faces\":["
+            local n
+            for i=1,#node do
+                local face=node[i]
+                local x,y,z=planes.get(face.plane)
+                local ns="["..x..", "..y..", "..z.."]"
+                if n~=ns then
+                    if n then
+                        s=s..","
+                    end
+                    s=s..ns                    
+                    n=ns
+                end
+            end
+            s=s.."]"
+        end
+        coma=","
+    end
+    local left=bsp.tostring(node[true])
+    if left then
+        s=s..coma.."\"left\":"..left
+        coma=","
+    end
+    local right=bsp.tostring(node[false])
+    if right then
+        s=s..coma.."\"right\":"..right
+    end
+    return "{"..s.."}"
+end
+
+-- collects all leaves within a radius
+local function sphere_bsp_intersect(node,pos,radius,out)
+    if node.contents then
+        if node.contents~=-2 then
+            -- printh("dist:"..dist.." faces:"..#node)
+            out[node]={origin=pos,r=radius}
+        end
+        return
+    end
   
+    local dist,d=planes.dot(node.plane,pos)
+    -- not touching plane
+    if dist > d + radius then
+        sphere_bsp_intersect(node[true],pos,radius,out)
+        return
+    end
+    -- not touching plane (other side)
+    if dist < d - radius then
+        sphere_bsp_intersect(node[false],pos,radius,out)
+        return
+    end
+    
+    -- overlapping plane
+    sphere_bsp_intersect(node[true],pos,radius,out)
+    sphere_bsp_intersect(node[false],pos,radius,out)     
+end
+
+-- find all touching leaves within radius
+function bsp.touches(node,pos,radius)
+    local out={}
+    sphere_bsp_intersect(node,pos,radius,out)
+    return out
+end
+
   -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
   -- hull location
   -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c

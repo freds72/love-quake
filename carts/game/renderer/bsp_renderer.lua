@@ -478,7 +478,7 @@ local BSPRenderer=function(world,rasterizer)
         return visleaves  
     end
 
-    local function drawModel(cam,ent,textures,verts,leaves,lstart,lend)
+    local function drawModel(cam,ent,textures,verts,leaves,lstart,lend,point_lights)
         if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
           return 
         end
@@ -542,12 +542,63 @@ local BSPRenderer=function(world,rasterizer)
                         if n>2 then
                           -- texture mip
                           local mip=3-mid(flr(1536*maxw),0,3)
-                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),debugColor)      
+                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip,point_lights and point_lights[leaf]),debugColor)      
                         end
                     end
                 end
             end
         end
+    end
+
+    -- debug function
+    local function drawLeaves(cam,ent,verts,leaves)
+
+      local m=cam.m
+      -- todo: entity matrix is overkill as brush models never rotate
+      v_cache:init(m_x_m(m,ent.m))
+      vbo:reset()
+
+      local cam_pos=v_add(cam.origin,ent.origin,-1)
+      local poly,f_cache={},{}
+      for leaf in pairs(leaves) do
+        for j=1,#leaf do
+          local face = leaf[j]
+          if not f_cache[face] and planes.dot(face.plane,cam_pos)>face.cp~=face.side then
+              -- mark visited
+              f_cache[face]=true
+              local vertref,outcode,clipcode,maxw=face.verts,0xffff,0,-math.huge
+              for k=1,#vertref do
+                local v=verts[vertref[k]]
+                local a=v_cache:transform(v)
+                -- get vertex pointer
+                local pa=vboptr + a
+                local code = pa[VBO_OUTCODE]
+                outcode=band(outcode,code)
+                clipcode=clipcode + band(code,2)
+
+                poly[k] = a
+              end                      
+
+              if outcode==0 then
+                  local n=#face.verts
+                  if clipcode>0 then
+                      poly,n = z_poly_clip(poly,n)
+                  end
+                  if n>2 then
+                    local a0=poly[n]
+                    for i=1,n do
+                      local a1=poly[i]
+                      -- get vertex pointer
+                      local p0 = vboptr + a0
+                      local p1 = vboptr + a1
+                      line(p0[VBO_X],p0[VBO_Y],p1[VBO_X],p1[VBO_Y],15)
+                      a0=a1
+                    end                    
+                  end
+              end
+          end
+        end
+      end
     end
 
     -- clip against world
@@ -774,12 +825,22 @@ local BSPRenderer=function(world,rasterizer)
       end
     end
 
+    local _cam
     return {
       beginFrame=function()
           surfaceCache:beginFrame()
       end,
       endFrame=function()
         surfaceCache:endFrame()
+
+        -- draw surfaces within a radius
+        if _cam then
+          local world_entity = world.entities[1]
+          local main_model = world_entity.model
+          local resources = world.level.model
+          local leaves=bsp.touches(main_model.hulls[1],_cam.origin,96)
+          drawLeaves(_cam,world.entities[1],resources.verts,leaves)
+        end
       end,
       draw=function(self,cam)
         -- nothing to draw (eg. no scene/world)
@@ -788,13 +849,17 @@ local BSPRenderer=function(world,rasterizer)
         end
         debugColor=8
         
+        _cam = cam
         -- refresh visible set
         local world_entity = world.entities[1]
         local main_model = world_entity.model
         local resources = world.level.model
         local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
+        -- collect point lights
+        local point_lights=bsp.touches(main_model.hulls[1],_cam.origin,96)
+
         -- world entity
-        drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves)
+        drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves,point_lights)
 
         -- visible entities
         local visents = collect_entities(world.entities)

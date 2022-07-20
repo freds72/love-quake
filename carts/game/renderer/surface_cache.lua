@@ -147,7 +147,7 @@ local SurfaceCache=function(rasterizer)
           recyclesByRegion[i]=0
         end
       end,
-      makeTextureProxy=function(self,texture,ent,face,mip)
+      makeTextureProxy=function(self,texture,ent,face,mip,point_light)
         if texture.swirl then
           -- swirling texture? special handling
           return makeSwirlTextureProxy(texture,face,mip)
@@ -191,7 +191,7 @@ local SurfaceCache=function(rasterizer)
         local texscale=shl(1,mip)
         -- round up odd sized faces
         local imgw,imgh=max(flr(face.width/texscale+0.5),1),max(flr(face.height/texscale+0.5),1)
-        cached_tex[key] = setmetatable({
+        local textureProxy = setmetatable({
             scale=texscale,
             width=imgw,
             height=imgh,
@@ -284,11 +284,75 @@ local SurfaceCache=function(rasterizer)
                 t = t + dt
             end
 
+            -- mix with point lights
+            if point_light then
+              -- projected radius
+              local dist,d=planes.dot(face.plane,point_light.origin)
+              -- visible from face?
+              if dist>face.cp~=face.side then
+                dist=d-dist
+                if not face.side then
+                  dist=-dist
+                end
+                local texinfo = face.texinfo
+                local s,s_offset,t,t_offset = texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
+                local x,y,z=unpack(point_light.origin)
+                -- project point into face
+                local x0=x*s[0]+y*s[1]+z*s[2]+s_offset
+                local y0=x*t[0]+y*t[1]+z*t[2]+t_offset
+                x0=(x0-face.umin)/texscale
+                y0=(y0-face.vmin)/texscale
+                local r=point_light.r * point_light.r - dist * dist
+                printh("dist: "..dist)
+                if r>0 then
+                  r=sqrt(r)/texscale
+                  -- draw circle
+                  local function pset(x0,y0)
+                    if x0>=0 and y0>=0 and x0<imgw and y0<imgh then
+                      img[x0+y0*imgw] = colormap.ptr[15]
+                    end                
+                  end
+                  local function circfill(x0,y0,r)
+                    if r==0 then
+                      return
+                    end
+                    x0=flr(x0)
+                    y0=flr(y0)
+                    local x,y=flr(r),0
+                    local d=1-x
+
+                    while x>=y do
+                      pset(x0-x,y0+y)
+                      pset(x0+x,y0+y)
+                      pset(x0-x,y0-y)
+                      pset(x0+x,y0-y)
+                      y=y+1
+
+                      if d<0 then
+                        d=d+shl(y,1)+1
+                      else
+                        if x>=y then
+                          pset(x0-y,y0+x)
+                          pset(x0+y,y0+x)
+                          pset(x0-y,y0-x)
+                          pset(x0+y,y0-x)
+                        end
+                        x=x-1
+                        d=d+shl(y-x+1,1)
+                      end
+                    end
+                  end
+                  circfill(x0,y0,r)
+                end
+              end
+            end
+
             self.ptr=img
             return img
           end
         })
-        return cached_tex[key]
+        --cached_tex[key] = textureProxy
+        return textureProxy
       end,
       stats=function(self)
         local s=""
