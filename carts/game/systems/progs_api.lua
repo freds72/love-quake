@@ -6,9 +6,10 @@ local messages = require("systems.message")
 local stateSystem = require("engine.state_system")
 local gameState = require("systems.game_state")
 
--- misc effects
+-- misc effects (to be moved elsewhere?)
 require("systems.particles_trail")
 require("systems.particles_blast")
+require("systems.follow_light")
 
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local precache_models={}

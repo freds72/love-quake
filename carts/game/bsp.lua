@@ -48,45 +48,11 @@ function bsp.tostring(node,depth)
     return "{"..s.."}"
 end
 
--- collects all leaves within a radius
-local function sphere_bsp_intersect(node,pos,radius,out)
-    if node.contents then
-        if node.contents~=-2 then
-            -- printh("dist:"..dist.." faces:"..#node)
-            out[node]={origin=pos,r=radius}
-        end
-        return
-    end
-  
-    local dist,d=planes.dot(node.plane,pos)
-    -- not touching plane
-    if dist > d + radius then
-        sphere_bsp_intersect(node[true],pos,radius,out)
-        return
-    end
-    -- not touching plane (other side)
-    if dist < d - radius then
-        sphere_bsp_intersect(node[false],pos,radius,out)
-        return
-    end
-    
-    -- overlapping plane
-    sphere_bsp_intersect(node[true],pos,radius,out)
-    sphere_bsp_intersect(node[false],pos,radius,out)     
-end
-
--- find all touching leaves within radius
-function bsp.touches(node,pos,radius)
-    local out={}
-    sphere_bsp_intersect(node,pos,radius,out)
-    return out
-end
-
-  -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
-  -- hull location
-  -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
-  -- https://developer.valvesoftware.com/wiki/BSP
-  -- ray/bsp intersection
+-- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/WinQuake/world.c
+-- hull location
+-- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
+-- https://developer.valvesoftware.com/wiki/BSP
+-- ray/bsp intersection
 local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     local contents=node.contents  
     if contents then

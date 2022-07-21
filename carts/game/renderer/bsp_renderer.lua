@@ -1,7 +1,7 @@
 -- collect and send BSP geometry to rasterizer
 local bsp=require("bsp")
 local ffi=require("ffi")
-local BSPRenderer=function(world,rasterizer)
+local BSPRenderer=function(world,rasterizer, lights)
 -- "vertex buffer" layout:
   -- 0: x (cam)
   -- 1: y (cam)
@@ -29,7 +29,7 @@ local BSPRenderer=function(world,rasterizer)
   local visleaves,visframe,prev_leaf={},0
 
   -- surface (eg lighted texture) cache
-  local surfaceCache = require("renderer.surface_cache")(rasterizer)
+  local surfaceCache = require("renderer.surface_cache")(rasterizer, lights)
 
   local h_ratio,v_ratio=(480-480/2)/270,(270-270/2)/270
   -- pre-computed normals for alias models
@@ -427,7 +427,8 @@ local BSPRenderer=function(world,rasterizer)
     end
   }
 
-    local function collect_entities(entities)
+  -- BSP function helpers
+    local function collectVisibleEntities(entities)
       local ents={}
       -- skip world
       for i=2,#entities do
@@ -445,14 +446,14 @@ local BSPRenderer=function(world,rasterizer)
       end
       return ents
     end
-    local function collect_leaves(cam,root,leaves)
+    local function collectVisibleLeaves(cam,root,leaves)
         local current_leaf=bsp.locate(root,cam.origin)
         
         if not current_leaf or not current_leaf.pvs then
           -- debug
           return leaves
         end
-  
+
         -- changed sector?
         if current_leaf and current_leaf~=prev_leaf then
           prev_leaf = current_leaf
@@ -478,7 +479,42 @@ local BSPRenderer=function(world,rasterizer)
         return visleaves  
     end
 
-    local function drawModel(cam,ent,textures,verts,leaves,lstart,lend,point_lights)
+    -- collects all leaves within a radius
+    local function collectLightedLeaves(idx,pos,radius,node,out)
+        if node.contents then
+            if node.contents~=-2 then
+                -- printh("dist:"..dist.." faces:"..#node)
+                local turned_on=out[node] or 0
+                out[node] = bor(turned_on, shl(1,idx-1))
+            end
+            return
+        end
+      
+        local dist,d=planes.dot(node.plane,pos)
+        -- not touching plane
+        if dist > d + radius then
+          collectLightedLeaves(idx,pos,radius,node[true],out)
+          return
+        end
+        -- not touching plane (other side)
+        if dist < d - radius then
+          collectLightedLeaves(idx,pos,radius,node[false],out)
+          return
+        end
+        
+        -- overlapping plane
+        collectLightedLeaves(idx,pos,radius,node[true],out)
+        collectLightedLeaves(idx,pos,radius,node[false],out)     
+    end
+    
+    -- find all leaves touched by lights
+    function collectLights(node)
+        local out={}
+        lights:visit(collectLightedLeaves,node,out)
+        return out
+    end
+    
+    local function drawModel(cam,ent,textures,verts,leaves,lstart,lend,lighted_leaves)
         if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
           return 
         end
@@ -493,6 +529,8 @@ local BSPRenderer=function(world,rasterizer)
         local poly,f_cache={},{}
         for i=lstart,lend do
             local leaf = leaves[i]
+            -- dynamic lights bitmask (e.g. enabled lights for this leaf)
+            local active_lights = lighted_leaves and lighted_leaves[leaf] or 0
             for j=1,#leaf do
                 local face = leaf[j]
                 if not f_cache[face] and planes.dot(face.plane,cam_pos)>face.cp~=face.side then
@@ -542,7 +580,7 @@ local BSPRenderer=function(world,rasterizer)
                         if n>2 then
                           -- texture mip
                           local mip=3-mid(flr(1536*maxw),0,3)
-                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip,point_lights and point_lights[leaf]),debugColor)      
+                          rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip,active_lights),debugColor)      
                         end
                     end
                 end
@@ -856,15 +894,15 @@ local BSPRenderer=function(world,rasterizer)
         local world_entity = world.entities[1]
         local main_model = world_entity.model
         local resources = world.level.model
-        local leaves = collect_leaves(cam,main_model.hulls[1],resources.leaves)
+        local leaves = collectVisibleLeaves(cam,main_model.hulls[1],resources.leaves)
         -- collect point lights
-        local point_lights=bsp.touches(main_model.hulls[1],_cam.origin,128)
+        local lighted_leaves=collectLights(main_model.hulls[1])
 
         -- world entity
-        drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves,point_lights)
+        drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves,lighted_leaves)
 
         -- visible entities
-        local visents = collect_entities(world.entities)
+        local visents = collectVisibleEntities(world.entities)
         
         for i=1,#visents do
           local ent=visents[i]

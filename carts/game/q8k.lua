@@ -4,10 +4,11 @@ local input=require("engine.input_system")
 local world=require("systems.world")
 local camera=require("systems.camera")(world)
 local particles=require("systems.particles")
+local lights=require("systems.dynamic_lights")
 local messages=require("systems.message")
 local rasterizer=require("renderer.span_rasterizer")
 --local rasterizer=require("renderer.wireframe_rasterizer")
-local renderer=require("renderer.bsp_renderer")(world, rasterizer)
+local renderer=require("renderer.bsp_renderer")(world, rasterizer, lights)
 
 -- global "pluggable" components
 _components = {}
@@ -29,6 +30,7 @@ function _update()
     messages:update()
     world:update()
     particles:update()
+    lights:update()
     camera:update()
     stateSystem:update()
 end

@@ -2,7 +2,7 @@ local ffi=require("ffi")
 local logging=require("engine.logging")
 local lights=require("systems.lightstyles")
 
-local SurfaceCache=function(rasterizer)
+local SurfaceCache=function(rasterizer, dynamic_lights)
     -- allocate a big lightmap - to be reused
     local lightmap = ffi.new("unsigned char[?]", 64*64)
     -- from conf?
@@ -147,7 +147,8 @@ local SurfaceCache=function(rasterizer)
           recyclesByRegion[i]=0
         end
       end,
-      makeTextureProxy=function(self,texture,ent,face,mip,point_light)
+      -- active_lights: light index bitmask
+      makeTextureProxy=function(self,texture,ent,face,mip,active_dynamic_lights)
         if texture.swirl then
           -- swirling texture? special handling
           return makeSwirlTextureProxy(texture,face,mip)
@@ -259,78 +260,84 @@ local SurfaceCache=function(rasterizer)
 
             -- point light?
             -- mix with point lights
-            if point_light then
-              -- projected radius
-              local dist,d=planes.dot(face.plane,point_light.origin)
-              -- visible from face?
-              if dist>face.cp~=face.side then
-                dist=d-dist
-                if not face.side then
-                  dist=-dist
-                end
-                local texinfo = face.texinfo
-                local s,s_offset,t,t_offset = texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
-                local x,y,z=unpack(point_light.origin)
-                -- project point into face
-                local x0=x*s[0]+y*s[1]+z*s[2]+s_offset
-                local y0=x*t[0]+y*t[1]+z*t[2]+t_offset
-                x0=(x0-face.umin)/16+0.5
-                y0=(y0-face.vmin)/16+0.5
-                local r=point_light.r * point_light.r - dist * dist
-                if r>0 then
-                  r=sqrt(r)/16
-                  --printh(x0.." "..y0.." / "..w.." x "..h)
-                  local lm=lightmap
-                  for y=0,h-1 do
-                    local rr=r*r-(y-y0)*(y-y0)
-                    if rr>=0 then
-                      local xx=sqrt(rr)
-                      for x=max(flr(x0-xx),0),min(flr(x0+xx),w)-1 do
-                        lm[x]=max(lm[x]-16,0)
-                      end
+            if active_dynamic_lights then
+              for i=1,8 do
+                if band(active_dynamic_lights,shl(1,i-1))~=0 then
+                  -- printh("active light: "..i.."/"..active_dynamic_lights)
+                  local light = dynamic_lights[i]
+                  -- projected radius
+                  local dist,d=planes.dot(face.plane,light.origin)
+                  -- visible from face?
+                  if dist>face.cp~=face.side then
+                    dist=d-dist
+                    if not face.side then
+                      dist=-dist
                     end
-                    lm=lm+w
-                  end
-
-                  -- draw circle
-                  --[[
-                  local function pset(x0,y0)
-                    if x0>=0 and y0>=0 and x0<imgw and y0<imgh then
-                      img[x0+y0*imgw] = colormap.ptr[15]
-                    end                
-                  end
-                  local function circfill(x0,y0,r)
-                    if r==0 then
-                      return
-                    end
-                    x0=flr(x0)
-                    y0=flr(y0)
-                    local x,y=flr(r),0
-                    local d=1-x
-
-                    while x>=y do
-                      pset(x0-x,y0+y)
-                      pset(x0+x,y0+y)
-                      pset(x0-x,y0-y)
-                      pset(x0+x,y0-y)
-                      y=y+1
-
-                      if d<0 then
-                        d=d+shl(y,1)+1
-                      else
-                        if x>=y then
-                          pset(x0-y,y0+x)
-                          pset(x0+y,y0+x)
-                          pset(x0-y,y0-x)
-                          pset(x0+y,y0-x)
+                    local texinfo = face.texinfo
+                    local s,s_offset,t,t_offset = texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
+                    local x,y,z=unpack(light.origin)
+                    -- project point into face
+                    local x0=x*s[0]+y*s[1]+z*s[2]+s_offset
+                    local y0=x*t[0]+y*t[1]+z*t[2]+t_offset
+                    x0=(x0-face.umin)/16+0.5
+                    y0=(y0-face.vmin)/16+0.5
+                    local r = light.radius * light.radius - dist * dist
+                    if r>0 then
+                      r=sqrt(r)/16
+                      --printh(x0.." "..y0.." / "..w.." x "..h)
+                      local lm=lightmap
+                      for y=0,h-1 do
+                        local rr=r*r-(y-y0)*(y-y0)
+                        if rr>=0 then
+                          local xx=sqrt(rr)
+                          for x=max(flr(x0-xx),0),min(flr(x0+xx),w)-1 do
+                            lm[x]=max(lm[x]-16,0)
+                          end
                         end
-                        x=x-1
-                        d=d+shl(y-x+1,1)
+                        lm=lm+w
                       end
+
+                      -- draw circle
+                      --[[
+                      local function pset(x0,y0)
+                        if x0>=0 and y0>=0 and x0<imgw and y0<imgh then
+                          img[x0+y0*imgw] = colormap.ptr[15]
+                        end                
+                      end
+                      local function circfill(x0,y0,r)
+                        if r==0 then
+                          return
+                        end
+                        x0=flr(x0)
+                        y0=flr(y0)
+                        local x,y=flr(r),0
+                        local d=1-x
+
+                        while x>=y do
+                          pset(x0-x,y0+y)
+                          pset(x0+x,y0+y)
+                          pset(x0-x,y0-y)
+                          pset(x0+x,y0-y)
+                          y=y+1
+
+                          if d<0 then
+                            d=d+shl(y,1)+1
+                          else
+                            if x>=y then
+                              pset(x0-y,y0+x)
+                              pset(x0+y,y0+x)
+                              pset(x0-y,y0-x)
+                              pset(x0+y,y0-x)
+                            end
+                            x=x-1
+                            d=d+shl(y-x+1,1)
+                          end
+                        end
+                      end
+                      circfill(x0,y0,r)
+                      ]]
                     end
                   end
-                  circfill(x0,y0,r)
-                  ]]
                 end
               end
             end
