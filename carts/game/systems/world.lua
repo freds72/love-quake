@@ -262,6 +262,8 @@ function WorldSystem:update()
                     physic.walk(ent, velocity, dt)
                 elseif ent.MOVETYPE_BOUNCE then
                     physic.bounce(ent, velocity, dt)
+                elseif ent.MOVETYPE_FLY then
+                    physic.fly(ent, velocity, dt)
                 else
                     ent.origin = v_add(ent.origin, velocity)
                 end

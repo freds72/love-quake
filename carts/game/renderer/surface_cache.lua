@@ -256,7 +256,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
                 ffi.fill(lightmap,w*h,mid(63-flr(scale),0,63))
             end
 
-            ffi.fill(lightmap,w*h,63)--mid(63-flr(scale),0,63))
+            -- ffi.fill(lightmap,w*h,63)--mid(63-flr(scale),0,63))
 
             -- point light?
             -- mix with point lights

@@ -246,6 +246,16 @@ return function(world, vm, collisionMap)
 			-- use corrected velocity
 			ent.velocity = v_scale(velocity, 1/dt)
 		end,
+		fly=function(ent, velocity, dt)
+			local move = collisionMap:fly(ent,ent.origin,velocity)
+			ent.origin = v_add(ent.origin, velocity)
+			-- valid pos?
+
+			-- hit other entity?
+			if move.ent then
+				vm:call(ent,"touch",move.ent)
+			end
+		end,
 		walk=function(ent, velocity, dt)
 			-- gravity
 			-- todo: less friction not on ground
