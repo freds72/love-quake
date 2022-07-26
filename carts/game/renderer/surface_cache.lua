@@ -170,7 +170,15 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
             end
         end
 
+        -- in case no lights
+        active_dynamic_lights = active_dynamic_lights or 0
+        -- "kill" cache entry in case of dynamic light
         local cached_tex=textureCache[face]
+        if active_dynamic_lights==0 then
+          cached_tex = nil
+          textureCache[key] = nil
+        end
+
         if cached_tex and cached_tex[key] then
             return cached_tex[key]
         end
@@ -203,9 +211,11 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
             -- grab memory region
             local size,img = imgw * imgh
             for k,region in ipairs(regions) do
+              -- does required size fit in region?
               if flr(size/region.block)==0 then
                 local tbr=texturesByRegion[k]
                 local block
+                -- out of free slots?
                 if #tbr==region.len then
                   block=del(tbr,1)
                   -- kill previous texture
@@ -256,12 +266,10 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
                 ffi.fill(lightmap,w*h,mid(63-flr(scale),0,63))
             end
 
-            -- ffi.fill(lightmap,w*h,63)--mid(63-flr(scale),0,63))
-
             -- point light?
             -- mix with point lights
-            if active_dynamic_lights then
-              for i=1,8 do
+            if active_dynamic_lights>0 then
+              for i=1,32 do
                 if band(active_dynamic_lights,shl(1,i-1))~=0 then
                   -- printh("active light: "..i.."/"..active_dynamic_lights)
                   local light = dynamic_lights[i]
@@ -376,7 +384,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
             return img
           end
         })
-        --cached_tex[key] = textureProxy
+        cached_tex[key] = textureProxy
         return textureProxy
       end,
       stats=function(self)

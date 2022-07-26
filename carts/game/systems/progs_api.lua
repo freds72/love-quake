@@ -10,6 +10,7 @@ local gameState = require("systems.game_state")
 require("systems.particles_trail")
 require("systems.particles_blast")
 require("systems.follow_light")
+require("systems.fading_light")
 
 local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local precache_models={}
