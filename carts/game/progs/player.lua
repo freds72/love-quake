@@ -74,6 +74,21 @@ local player=function(progs)
             end
         end
 
+        local particles={
+            rate=50, -- 50 particles/sec
+            ttl={0.5,1},
+            mins={-8,-8,-8},
+            maxs={8,8,8},
+            gravity_z=30,
+            ramp=3
+        }
+        local blast={
+            radius={5,12},
+            gravity_z=-600,
+            ttl={0.1,0.4},
+            speed={50,150}
+        }
+
         self.prethink=function(input)
             -- damping      
             angle[2]=angle[2]*0.8
@@ -120,11 +135,34 @@ local player=function(progs)
             end
 
             if input:released("fire") then
-                printh("fired thing!")
                 local fwd,up = m_fwd(self.m),m_up(self.m)
                 local eye_pos = v_add(self.origin,up,16)
                 local aim_pos = v_add(eye_pos,fwd,1024)
                 
+                local fireball = progs:spawn()
+                fireball.SOLID_TRIGGER = true
+                fireball.MOVETYPE_FLY = true
+                fireball.DRAW_NOT=true
+                fireball.mins={-8,-8,-8}
+                fireball.maxs={8,8,8}
+                fireball.velocity = v_scale(fwd,600)
+                fireball.touch=function(other)
+                    if other~=self then
+                        progs:attach(fireball,"blast",blast)
+                        progs:attach(fireball,"fadinglight",{
+                            ttl={0.1,0.3},
+                            radius={96,112}
+                        })
+                        progs:remove(fireball)
+                    end
+                end
+                progs:setorigin(fireball,eye_pos)
+                progs:attach(fireball,"trail",particles)
+                progs:attach(fireball,"light",{
+                    radius={64,64}
+                })
+
+                -- immediate hit
                 local touched = progs:traceline(self,eye_pos,aim_pos)
                 -- todo: refactor
                 if touched and touched.die then
