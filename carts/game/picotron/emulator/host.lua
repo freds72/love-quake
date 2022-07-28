@@ -152,15 +152,16 @@ print=function(s,x,y,c)
 end
 
 -- gfx
+local _color=0
 cls=function(color)
-    ffi.fill(vid_ptr, framebufferLen, 0)
+    color = flr(color or _color or 0)%activeColormap.width
+    ffi.fill(vid_ptr, framebufferLen, color)
 end
 flip=function()
     -- wait for display sync 
     this_time = channels:wait({"flip",fb,activeColormap._data, activeColormapRow * activeColormap.width})
     _frame = _frame + 1
 end
-local _color=0
 color=function(c)
     _color=c or 0
 end
@@ -195,6 +196,7 @@ tline3d=function(x0,y0,x1,_,u,v,w,du,dv,dw)
         w = w + dw
     end
 end
+-- note: lines are inclusive
 line=function(x0,y0,x1,y1,c)   
     c = flr(c or _color or 0)%activeColormap.width
     _color = c
@@ -207,11 +209,14 @@ line=function(x0,y0,x1,y1,c)
         if x0<0 then
             y0=y0-x0*dy x0=0
         end
-        for x=flr(x0),min(flr(x1),480)-1 do
+        x0=flr(x0)
+        local dst=vid_ptr + x0
+        for x=x0,min(flr(x1),480-1) do
             if y0>=0 and y0<270 then                
-                vid_ptr[x+480*flr(y0)]=c
+                dst[480*flr(y0)]=c
             end
             y0 = y0 + dy
+            dst = dst + 1
         end
     else
         if y0>y1 then
@@ -220,12 +225,15 @@ line=function(x0,y0,x1,y1,c)
         local dx=(x1-x0)/(y1-y0)
         if y0<0 then
             x0=x0-y0*dx y0=0
-        end        
-        for y=flr(y0),min(flr(y1),270)-1 do
+        end   
+        y0=flr(y0)
+        local dst=vid_ptr + 480*y0
+        for y=flr(y0),min(flr(y1),270-1) do
             if x0>=0 and x0<480 then
-                vid_ptr[flr(x0)+480*y]=c
+                dst[flr(x0)]=c
             end
             x0 = x0 + dx
+            dst = dst + 480
         end            
     end
 end
