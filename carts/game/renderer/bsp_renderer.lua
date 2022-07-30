@@ -27,7 +27,7 @@ local BSPRenderer=function(world,rasterizer, lights)
   local vboptr = vbo:ptr(0)
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
-
+  
   -- surface (eg lighted texture) cache
   local surfaceCache = require("renderer.surface_cache")(rasterizer, lights)
 
@@ -521,8 +521,9 @@ local BSPRenderer=function(world,rasterizer, lights)
   
         local m=cam.m
         -- todo: entity matrix is overkill as brush models never rotate
-        v_cache:init(m_x_m(m,ent.m))
-        v_cache_sky:init(m_x_m(m,ent.m),cam.origin)
+        local viewm=m_x_m(m,ent.m)
+        v_cache:init(viewm)
+        v_cache_sky:init(viewm,cam.origin)
         vbo:reset()
 
         local cam_pos=v_add(cam.origin,ent.origin,-1)
@@ -719,7 +720,7 @@ local BSPRenderer=function(world,rasterizer, lights)
               if n>2 then
                 -- texture mip
                 local mip=3-mid(flr(1536*maxw),0,3)
-                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),250)      
+                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),62)      
               end
             end
           end
@@ -863,33 +864,20 @@ local BSPRenderer=function(world,rasterizer, lights)
       end
     end
 
-    local _cam
     return {
       beginFrame=function()
           surfaceCache:beginFrame()
       end,
       endFrame=function()
         surfaceCache:endFrame()
-
-        -- draw surfaces within a radius
-        --[[
-        if _cam then
-          local world_entity = world.entities[1]
-          local main_model = world_entity.model
-          local resources = world.level.model
-          local leaves=bsp.touches(main_model.hulls[1],_cam.origin,96)
-          drawLeaves(_cam,world.entities[1],resources.verts,leaves)
-        end
-        ]]
       end,
       draw=function(self,cam)
         -- nothing to draw (eg. no scene/world)
         if not cam.ready then
             return
         end
-        debugColor=8
+        debugColor=12
         
-        _cam = cam
         -- refresh visible set
         local world_entity = world.entities[1]
         local main_model = world_entity.model

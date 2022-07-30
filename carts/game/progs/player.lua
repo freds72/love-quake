@@ -1,6 +1,5 @@
 local player=function(progs)
 
-    progs:precache_model ("progs/v_shot.mdl")
     progs:precache_model ("progs/player.mdl")
 
     -- progs.info_player_start=function(self)

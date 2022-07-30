@@ -46,6 +46,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
             imgw=w,
             width=w,
             height=h,
+            transparent=texture.transparent,
             umin=flr(face.umin/scale),
             vmin=flr(face.vmin/scale),
             ptr=ffi.new("unsigned char[?]",w*h)
@@ -204,6 +205,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
             scale=texscale,
             width=imgw,
             height=imgh,
+            transparent=texture.transparent,
             umin=flr(face.umin/texscale),
             vmin=flr(face.vmin/texscale)
         },{
