@@ -275,8 +275,10 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
                 if band(active_dynamic_lights,shl(1,i-1))~=0 then
                   -- printh("active light: "..i.."/"..active_dynamic_lights)
                   local light = dynamic_lights[i]
+                  -- shift origin to model
+                  local origin = v_add(light.origin,ent.origin,-1)
                   -- projected radius
-                  local dist,d=planes.dot(face.plane,light.origin)
+                  local dist,d=planes.dot(face.plane,origin)
                   -- visible from face?
                   if dist>face.cp~=face.side then
                     dist=d-dist
@@ -285,7 +287,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
                     end
                     local texinfo = face.texinfo
                     local s,s_offset,t,t_offset = texinfo.s,texinfo.s_offset,texinfo.t,texinfo.t_offset  
-                    local x,y,z=unpack(light.origin)
+                    local x,y,z=unpack(origin)
                     -- project point into face
                     local x0=x*s[0]+y*s[1]+z*s[2]+s_offset
                     local y0=x*t[0]+y*t[1]+z*t[2]+t_offset
