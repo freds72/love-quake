@@ -302,33 +302,11 @@ local WireframeRasterizer={
     end,
     -- push a surface to rasterize
     addSurface=function(p,np,texture)
-        -- layout
-        local VBO_1 = 0
-        local VBO_2 = 1
-        local VBO_3 = 2
-        local VBO_X = 3
-        local VBO_Y = 4
-        local VBO_W = 5
-        local VBO_OUTCODE = 6
-        local VBO_U = 7
-        local VBO_V = 8
-
 		if texture.transparent then
 			-- copy poly data
 			local poly={}
 			for i=1,np do
-				local pi=_vboptr + p[i]
-				-- todo: ffi memcpy
-				poly[i]=_vbo_btf:pop(
-					pi[0],
-					pi[1],
-					pi[2],
-					pi[3],
-					pi[4],
-					pi[5],
-					pi[6],
-					pi[7],
-					pi[8])
+				poly[i]=_vbo_btf:copy(_vboptr + p[i])
 			end
 			add(_transparent_surfaces,{
 				poly=poly,

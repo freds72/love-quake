@@ -154,7 +154,7 @@ end
 -- gfx
 local _color=0
 cls=function(color)
-    color = flr(color or _color or 0)%activeColormap.width
+    color = flr(color or 0)%activeColormap.width
     ffi.fill(vid_ptr, framebufferLen, color)
 end
 flip=function()
@@ -196,6 +196,19 @@ tline3d=function(x0,y0,x1,_,u,v,w,du,dv,dw)
         w = w + dw
     end
 end
+tline3d_fillp=function(x0,y0,x1,_,u,v,w,du,dv,dw)
+    local ptr,width,height=_texture.ptr,_texture.width,_texture.height
+    local offset=y0%2
+    for x=x0+480*y0,x1+480*y0 do
+        if (x+offset)%2==0 then
+            vid_ptr[x]=ptr[(flr(u/w)%width)+width*(flr(v/w)%height)]
+        end
+        u = u + du
+        v = v + dv
+        w = w + dw
+    end
+end
+
 -- note: lines are inclusive
 line=function(x0,y0,x1,y1,c)   
     c = flr(c or _color or 0)%activeColormap.width
