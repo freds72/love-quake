@@ -39,7 +39,6 @@ local DynamicLights=setmetatable({
     },{
         -- return active light based on unique id
         __index=function(self,k)
-            assert(active_lights[k],"invalid light id: "..k)
             return active_lights[k]
         end
     })    

@@ -144,7 +144,7 @@ local player=function(progs)
                 fireball.DRAW_NOT=true
                 fireball.mins={-8,-8,-8}
                 fireball.maxs={8,8,8}
-                fireball.velocity = v_scale(fwd,600)
+                fireball.velocity = v_scale(fwd,1200)
                 fireball.touch=function(other)
                     if other~=self then
                         progs:attach(fireball,"blast",blast)
