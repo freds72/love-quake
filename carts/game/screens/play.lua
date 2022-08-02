@@ -43,7 +43,7 @@ return function(level)
             end
 
             if player then
-                print("content: "..player.contents.."\nground: "..tostring(player.on_ground and player.on_ground.classname).."\nhp:"..player.health,2,2,15)
+                print("content: "..player.contents.." ("..player.water_level..")\nground: "..tostring(player.on_ground and player.on_ground.classname).."\nhp:"..player.health,2,2,15)
             end
 
             if player.deadflag>0 and flr(time()*2)%2==0 then

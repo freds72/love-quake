@@ -23,10 +23,8 @@ local player=function(progs)
 
         self.health = 100
         self.max_health = 100
-        self.dmgtime = 0
+        local dmgtime = 0
         self.deadflag = DEAD_NO
-        -- todo: compute
-        self.waterlevel = 1
 
         self.velocity={0,0,0}
         -- set size and link into world
@@ -34,6 +32,9 @@ local player=function(progs)
         self.frame = "stand1"
         self.mangles = {0,0,self.angle or 0}
         progs:setmodel(self, "progs/player.mdl")
+        -- liquid depth information
+        progs:attach(self,"liquid",{24,48})
+
         -- from mesh
         self.eyepos = self.model.eyepos
 
@@ -49,26 +50,44 @@ local player=function(progs)
         local angle,dangle={0,0,0},{0,0,0}
 
         local death_angle=0
+        local air_time
+
         local water_move=function()
             if self.health < 0 then
                 return
             end
 
-            -- todo: add water level support
+            -- todo: run component pre-think outside?
+            self.liquid:update()
+
             -- todo: add falling damage
 
-            local dmg = 2
+            -- -3: Water, the vision is troubled.
+            if self.contents==-3 and self.water_level>1 then
+                -- not already under water?
+                if not air_time then
+                    air_time = progs:time() + 10
+                end
+            else
+                air_time = nil
+            end
+            -- -4: Slime, green acid that hurts the player.
+            -- -5: Lava, vision turns red and the player is badly hurt.   
+            local dmg = 0
             if self.contents==-5 then
                 dmg = 10
             elseif self.contents==-4 then
                 dmg = 4
+            elseif air_time and progs:time()>air_time then
+                -- drowning
+                dmg = 2
             end
 
-            if self.contents<-1 then
-                if self.dmgtime < progs:time() then
-                    self.dmgtime = progs:time() + 0.2
+            if dmg>0 then
+                if dmgtime < progs:time() then
+                    dmgtime = progs:time() + 0.2
         
-                    take_damage(self, nil, nil, dmg*self.waterlevel)
+                    take_damage(self, nil, nil, dmg*self.water_level)
                 end
             end
         end

@@ -223,11 +223,6 @@ local CollisionMap=function(world)
             ent.absmaxs[3] = ent.absmaxs[3] + 1
         end
 
-        -- find current content (origin only)
-        -- todo: move to "classify" player position
-        local node = bsp.locate(_root,ent.origin)
-        ent.contents = node.contents
-
         -- register to 2d map
         register_map(_map, ent)
     end
