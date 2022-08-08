@@ -113,7 +113,19 @@ local player=function(progs)
             dangle = v_scale(dangle,0.6)
       
             water_move()
-            
+
+            -- underwater: change move params
+            local jump_scale=1
+            if self.water_level>1 then
+                self.friction = 0.7
+                self.gravity = 0.5
+                -- avoid overpowered jump under water
+                jump_scale = 0.08
+            else
+                self.friction = nil
+                self.gravity = nil
+            end
+        
             if self.deadflag >= DEAD_DEAD then
                 death_think()
                 return
@@ -137,7 +149,7 @@ local player=function(progs)
           
             local a,dx,dz=angle[3],acc[2],acc[1]
             local c,s=cos(a),sin(a)            
-            self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,(self.on_ground and acc[3] or 0)},60)
+            self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,((self.on_ground or self.water_level>1) and acc[3]*jump_scale or 0)},60)
             self.mangles = angle
 
             -- action?
