@@ -534,12 +534,17 @@ local ModelReader = function(pak)
                 end
                 local sky=sub(texname,0,3)=="sky"
                 local swirl=sub(texname,1,1)=="*"
+                local fence=sub(texname,1,1)=="{"
                 local texinfo = {
                     width = mt.width,
                     height = mt.height,
                     mips = imgs,
                     sky=sky,
                     swirl=swirl,
+                    -- to be drawn front to back
+                    transparent=swirl or fence,
+                    -- to be drawn using transparent colormap
+                    alpha=fence,
                     bright = swirl or sky
                 }
                 -- part of a sequence?

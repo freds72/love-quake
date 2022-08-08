@@ -4,6 +4,7 @@ local PoolCls=function(name,stride,size)
 
     local cursor,total=0,size*stride
     local pool=ffi.new("float[?]", total)
+    local block_sz = ffi.sizeof("float[?]", stride)
     return setmetatable({
         -- reserve an entry in pool
         pop=function(self,...)
@@ -33,6 +34,16 @@ local PoolCls=function(name,stride,size)
             pool[idx+4]=e
             return idx
         end, 
+        copy=function(self,src)
+            -- init values
+            local idx=cursor
+            cursor = cursor + stride
+            if cursor>=total then
+                assert(false,"Pool: "..name.." full: "..cursor.."/"..total)
+            end
+            ffi.copy(pool + idx, src, block_sz)
+            return idx
+        end,
         ptr=function(self,offset)     
             return pool + offset
         end,

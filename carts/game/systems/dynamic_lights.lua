@@ -26,9 +26,11 @@ local DynamicLights=setmetatable({
     -- parameter 1: light id
     -- parameter 2: light pos
     -- parameter 3: light radius
-    visit=function(self,fn,...)
+    visit=function(self,ent,fn,...)
         for idx,light in pairs(active_lights) do
-            fn(idx,light.origin,light.radius,...)
+            -- rebase light in entity space
+            local origin=v_add(light.origin,ent.origin,-1)
+            fn(idx,origin,light.radius,...)
         end
     end,
     get=function(self,k)
@@ -37,7 +39,6 @@ local DynamicLights=setmetatable({
     },{
         -- return active light based on unique id
         __index=function(self,k)
-            assert(active_lights[k],"invalid light id: "..k)
             return active_lights[k]
         end
     })    

@@ -259,9 +259,10 @@ return function(world, vm, collisionMap)
 		walk=function(ent, velocity, dt)
 			-- gravity
 			-- todo: less friction not on ground
-			velocity[1] = velocity[1] * 0.8
-			velocity[2] = velocity[2] * 0.8
-			velocity[3] = velocity[3] - 0.7
+			velocity[1] = velocity[1] * (ent.friction or 0.8)
+			velocity[2] = velocity[2] * (ent.friction or 0.8)
+			
+			velocity[3] = velocity[3] - (ent.gravity or 0.7)
 			-- check next position 
 			local vn,vl=v_normz(velocity)      
 			local on_ground = ent.on_ground

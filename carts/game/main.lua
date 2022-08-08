@@ -156,7 +156,10 @@ function love.run()
                 break 
             elseif name=="load" then
                 -- a: filename
-                local paths, filename, data, err = { conf.mod_path and conf.mod_path.."/"..a or "", love.filesystem.getSourceBaseDirectory().."/"..arg[1].."/"..a, conf.root_path.."/"..a }
+                local paths, filename, data, err = { 
+                    conf.mod_path and conf.mod_path.."/"..a or "", 
+                    love.filesystem.getSourceBaseDirectory().."/"..arg[1].."/"..a, 
+                    conf.root_path.."/"..a }
                 
                 -- try reading file and fallback through mod_path, source path and root_path
                 for _,fn in ipairs(paths) do

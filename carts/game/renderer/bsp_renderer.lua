@@ -27,7 +27,7 @@ local BSPRenderer=function(world,rasterizer, lights)
   local vboptr = vbo:ptr(0)
   local up={0,1,0}
   local visleaves,visframe,prev_leaf={},0
-
+  
   -- surface (eg lighted texture) cache
   local surfaceCache = require("renderer.surface_cache")(rasterizer, lights)
 
@@ -276,7 +276,7 @@ local BSPRenderer=function(world,rasterizer, lights)
     if side==2 then return empty_set,v end
     -- straddling
     -- copy original face reference
-    local res,out_res,v0,d0={face=v.face},{face=v.face},v[#v],dists[#v]
+    local res,out_res,v0,d0={face=v.face,active_lights=v.active_lights},{face=v.face,active_lights=v.active_lights},v[#v],dists[#v]
     for i=1,#v do
       local v1,d1=v[i],dists[i]
       if d0<=0 then
@@ -508,9 +508,9 @@ local BSPRenderer=function(world,rasterizer, lights)
     end
     
     -- find all leaves touched by lights
-    function collectLights(node)
+    function collectLights(ent,node)
         local out={}
-        lights:visit(collectLightedLeaves,node,out)
+        lights:visit(ent,collectLightedLeaves,node,out)
         return out
     end
     
@@ -521,8 +521,9 @@ local BSPRenderer=function(world,rasterizer, lights)
   
         local m=cam.m
         -- todo: entity matrix is overkill as brush models never rotate
-        v_cache:init(m_x_m(m,ent.m))
-        v_cache_sky:init(m_x_m(m,ent.m),cam.origin)
+        local viewm=m_x_m(m,ent.m)
+        v_cache:init(viewm)
+        v_cache_sky:init(viewm,cam.origin)
         vbo:reset()
 
         local cam_pos=v_add(cam.origin,ent.origin,-1)
@@ -640,7 +641,7 @@ local BSPRenderer=function(world,rasterizer, lights)
     end
 
     -- clip against world
-    local function drawMovingModel(cam,hull,ent,textures,verts,leaves,lstart,lend)
+    local function drawMovingModel(cam,hull,ent,textures,verts,leaves,lstart,lend,lighted_leaves)
       if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
         return
       end
@@ -653,10 +654,11 @@ local BSPRenderer=function(world,rasterizer, lights)
         local out,brush_verts={},{}
         for j=lstart,lend do
           local leaf=leaves[j]    
+          local active_lights = lighted_leaves and lighted_leaves[leaf] or 0
           for i=1,#leaf do
             -- face index
             local face=leaf[i]     
-            local poly,vertref={face=face},face.verts
+            local poly,vertref={face=face,active_lights=active_lights},face.verts
             for k=1,#vertref do
               local vi=vertref[k]
               local v=brush_verts[vi]
@@ -719,14 +721,14 @@ local BSPRenderer=function(world,rasterizer, lights)
               if n>2 then
                 -- texture mip
                 local mip=3-mid(flr(1536*maxw),0,3)
-                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip),250)      
+                rasterizer.addSurface(poly,n,surfaceCache:makeTextureProxy(texture,ent,face,mip,poly_verts.active_lights),62)      
               end
             end
           end
         end
       else
         -- no: regular draw
-        drawModel(cam,ent,textures,verts,leaves,lstart,lend,15)
+        drawModel(cam,ent,textures,verts,leaves,lstart,lend,lighted_leaves)
       end 
     end
 
@@ -863,40 +865,27 @@ local BSPRenderer=function(world,rasterizer, lights)
       end
     end
 
-    local _cam
     return {
       beginFrame=function()
           surfaceCache:beginFrame()
       end,
       endFrame=function()
         surfaceCache:endFrame()
-
-        -- draw surfaces within a radius
-        --[[
-        if _cam then
-          local world_entity = world.entities[1]
-          local main_model = world_entity.model
-          local resources = world.level.model
-          local leaves=bsp.touches(main_model.hulls[1],_cam.origin,96)
-          drawLeaves(_cam,world.entities[1],resources.verts,leaves)
-        end
-        ]]
       end,
       draw=function(self,cam)
         -- nothing to draw (eg. no scene/world)
         if not cam.ready then
             return
         end
-        debugColor=8
+        debugColor=12
         
-        _cam = cam
         -- refresh visible set
         local world_entity = world.entities[1]
         local main_model = world_entity.model
         local resources = world.level.model
         local leaves = collectVisibleLeaves(cam,main_model.hulls[1],resources.leaves)
         -- collect point lights
-        local lighted_leaves=collectLights(main_model.hulls[1])
+        local lighted_leaves=collectLights(world_entity, main_model.hulls[1])
 
         -- world entity
         drawModel(cam,world_entity,resources.textures,resources.verts,leaves,1,#leaves,lighted_leaves)
@@ -910,13 +899,15 @@ local BSPRenderer=function(world,rasterizer, lights)
           -- todo: find out a better way to detect type
           if m.leaf_start then
             local resources = ent.resources or resources
+            -- collect point lights for this model
+            local lighted_leaves=collectLights(ent, m.hulls[1])
             if ent.MOVING_BSP then
-              drawMovingModel(cam,main_model.hulls[1],ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+              drawMovingModel(cam,main_model.hulls[1],ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end,lighted_leaves)
               -- 
-              -- drawBBox(cam,{ent.absmins[1],ent.absmins[2],ent.absmaxs[3]},v_add(ent.absmaxs,{0,0,1}))
+              -- drawBBox(cam,ent.absmins,ent.absmaxs)
 
             else
-              drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end)
+              drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end,lighted_leaves)
             end
           else
             drawAliasModel(

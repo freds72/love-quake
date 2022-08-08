@@ -10,10 +10,15 @@ local VBO_U = 7
 local VBO_V = 8
 
 local vbo = require("engine.pool")("vertex_cache",9,7500)
+-- dedicated vbo for alpha/transparent surfaces
+local _vbo_btf = require("engine.pool")("vertex_cache_btf",9,1200)
 local _vboptr=vbo:ptr(0)
+local _vboptr_btf=_vbo_btf:ptr(0)
+
 local _pool=require("engine.pool")("spans",5,25000)
 local _ptr=_pool:ptr(0)
 local _spans={}
+local _transparent_surfaces = {}
 
 local _testTexture = {width=4,height=4,ptr={
 	[0]=19,24,19,24,
@@ -171,6 +176,123 @@ local function spanfill(x0,x1,y,u,v,w,du,dv,dw,fn)
 	end
 end
 
+local function polytex(p,np,texture,tline)
+	tline = tline or tline3d
+	-- layout
+	local VBO_1 = 0
+	local VBO_2 = 1
+	local VBO_3 = 2
+	local VBO_X = 3
+	local VBO_Y = 4
+	local VBO_W = 5
+	local VBO_OUTCODE = 6
+	local VBO_U = 7
+	local VBO_V = 8
+
+	local mipscale,umin,vmin=texture.scale,texture.umin,texture.vmin
+	local miny,maxy,mini=32000,-32000
+	-- find extent
+	for i=1,np do
+		local pi=_vboptr + p[i]
+		local y,w=pi[VBO_Y],pi[VBO_W]
+		if y<miny then
+			mini,miny=i,y
+		end
+		if y>maxy then
+			maxy=y
+		end
+	end
+
+	-- set active texture
+	tput(texture)
+
+	--data for left & right edges:
+	local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
+	if maxy>=270 then
+		maxy=270-1
+	end
+	if miny<0 then
+		miny=-1
+	end
+	for y=flr(miny)+1,maxy do
+		--maybe update to next vert
+		while ly<y do
+			local v0=p[lj]
+			lj=lj+1
+			if lj>np then lj=1 end
+			local v1=p[lj]
+			local p0,p1=_vboptr + v0,_vboptr + v1
+			local y0,y1=p0[VBO_Y],p1[VBO_Y]
+			local dy=y1-y0
+			ly=flr(y1)
+			lx=p0[VBO_X]
+			lw=p0[VBO_W]
+			lu=(p0[VBO_U]/mipscale - umin) * lw
+			lv=(p0[VBO_V]/mipscale - vmin) * lw
+			ldx=(p1[VBO_X]-lx)/dy
+			local w1=p1[VBO_W]
+			ldu=((p1[VBO_U]/mipscale - umin) * w1 - lu)/dy
+			ldv=((p1[VBO_V]/mipscale - vmin) * w1 - lv)/dy
+			ldw=(w1-lw)/dy
+			--sub-pixel correction
+			local cy=y-y0
+			lx=lx+cy*ldx
+			lu=lu+cy*ldu
+			lv=lv+cy*ldv
+			lw=lw+cy*ldw
+		end   
+		while ry<y do
+			local v0=p[rj]
+			rj=rj-1
+			if rj<1 then rj=np end
+			local v1=p[rj]
+			local p0,p1=_vboptr + v0,_vboptr + v1
+			local y0,y1=p0[VBO_Y],p1[VBO_Y]
+			local dy=y1-y0
+			ry=flr(y1)
+			rx=p0[VBO_X]
+			rw=p0[VBO_W]
+			ru=(p0[VBO_U]/mipscale - umin)*rw 
+			rv=(p0[VBO_V]/mipscale - vmin)*rw 
+			rdx=(p1[VBO_X]-rx)/dy
+			local w1=p1[VBO_W]
+			rdu=((p1[VBO_U]/mipscale - umin) * w1 - ru)/dy
+			rdv=((p1[VBO_V]/mipscale - vmin) * w1 - rv)/dy
+			rdw=(w1-rw)/dy
+			--sub-pixel correction
+			local cy=y-y0
+			rx=rx+cy*rdx
+			ru=ru+cy*rdu
+			rv=rv+cy*rdv
+			rw=rw+cy*rdw
+		end
+	
+		local dx=lx-rx
+		local du,dv,dw=(lu-ru)/dx,(lv-rv)/dx,(lw-rw)/dx
+		-- todo: faster to clip polygon?
+		local x0,x1,u,v,w=rx,lx,ru,rv,rw
+		if x0<0 then
+			u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
+		end
+		--sub-pixel correction
+		local sa=1-x0%1
+		if x1>480 then
+			x1=480
+		end
+
+		spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline)
+
+		lx=lx+ldx
+		lu=lu+ldu
+		lv=lv+ldv
+		lw=lw+ldw
+		rx=rx+rdx
+		ru=ru+rdu
+		rv=rv+rdv
+		rw=rw+rdw
+    end
+end
+
 local WireframeRasterizer={
     frame = 0,
     -- shared "memory" with renderer
@@ -180,119 +302,20 @@ local WireframeRasterizer={
     end,
     -- push a surface to rasterize
     addSurface=function(p,np,texture)
-        -- layout
-        local VBO_1 = 0
-        local VBO_2 = 1
-        local VBO_3 = 2
-        local VBO_X = 3
-        local VBO_Y = 4
-        local VBO_W = 5
-        local VBO_OUTCODE = 6
-        local VBO_U = 7
-        local VBO_V = 8
+		if texture.transparent then
+			-- copy poly data
+			local poly={}
+			for i=1,np do
+				poly[i]=_vbo_btf:copy(_vboptr + p[i])
+			end
+			add(_transparent_surfaces,{
+				poly=poly,
+				np=np,
+				texture=texture})
+			return
+		end
     
-        local mipscale,umin,vmin=texture.scale,texture.umin,texture.vmin
-        local miny,maxy,mini=32000,-32000
-        -- find extent
-        for i=1,np do
-			local pi=_vboptr + p[i]
-            local y,w=pi[VBO_Y],pi[VBO_W]
-            if y<miny then
-                mini,miny=i,y
-            end
-            if y>maxy then
-                maxy=y
-            end
-        end
-
-		-- set active texture
-		tput(texture)
-
-        --data for left & right edges:
-        local lj,rj,ly,ry,lx,lu,lv,lw,ldx,ldu,ldv,ldw,rx,ru,rv,rw,rdx,rdu,rdv,rdw=mini,mini,miny,miny
-        if maxy>=270 then
-            maxy=270-1
-        end
-        if miny<0 then
-            miny=-1
-        end
-        for y=flr(miny)+1,maxy do
-            --maybe update to next vert
-            while ly<y do
-                local v0=p[lj]
-                lj=lj+1
-                if lj>np then lj=1 end
-                local v1=p[lj]
-				local p0,p1=_vboptr + v0,_vboptr + v1
-                local y0,y1=p0[VBO_Y],p1[VBO_Y]
-                local dy=y1-y0
-                ly=flr(y1)
-                lx=p0[VBO_X]
-                lw=p0[VBO_W]
-                lu=(p0[VBO_U]/mipscale - umin) * lw
-                lv=(p0[VBO_V]/mipscale - vmin) * lw
-                ldx=(p1[VBO_X]-lx)/dy
-                local w1=vbo[v1 + VBO_W]
-                ldu=((p1[VBO_U]/mipscale - umin) * w1 - lu)/dy
-                ldv=((p1[VBO_V]/mipscale - vmin) * w1 - lv)/dy
-                ldw=(w1-lw)/dy
-                --sub-pixel correction
-                local cy=y-y0
-                lx=lx+cy*ldx
-                lu=lu+cy*ldu
-                lv=lv+cy*ldv
-                lw=lw+cy*ldw
-            end   
-            while ry<y do
-                local v0=p[rj]
-                rj=rj-1
-                if rj<1 then rj=np end
-                local v1=p[rj]
-				local p0,p1=_vboptr + v0,_vboptr + v1
-                local y0,y1=p0[VBO_Y],p1[VBO_Y]
-                local dy=y1-y0
-                ry=flr(y1)
-                rx=p0[VBO_X]
-                rw=p0[VBO_W]
-                ru=(p0[VBO_U]/mipscale - umin)*rw 
-                rv=(p0[VBO_V]/mipscale - vmin)*rw 
-                rdx=(p1[VBO_X]-rx)/dy
-                local w1=vbo[v1 + VBO_W]
-                rdu=((p1[VBO_U]/mipscale - umin) * w1 - ru)/dy
-                rdv=((p1[VBO_V]/mipscale - vmin) * w1 - rv)/dy
-                rdw=(w1-rw)/dy
-                --sub-pixel correction
-                local cy=y-y0
-                rx=rx+cy*rdx
-                ru=ru+cy*rdu
-                rv=rv+cy*rdv
-                rw=rw+cy*rdw
-            end
-        
-            local dx=lx-rx
-            local du,dv,dw=(lu-ru)/dx,(lv-rv)/dx,(lw-rw)/dx
-            -- todo: faster to clip polygon?
-            local x0,x1,u,v,w=rx,lx,ru,rv,rw
-            if x0<0 then
-                u=u-x0*du v=v-x0*dv w=w-x0*dw x0=0
-            end
-            --sub-pixel correction
-            local sa=1-x0%1
-            if x1>480 then
-                x1=480
-            end
-    
-            spanfill(flr(x0),flr(x1)-1,y,u+sa*du,v+sa*dv,w+sa*dw,du,dv,dw,tline3d)
-
-            lx=lx+ldx
-            lu=lu+ldu
-            lv=lv+ldv
-            lw=lw+ldw
-            rx=rx+rdx
-            ru=ru+rdu
-            rv=rv+rdv
-            rw=rw+rdw
-        end
+		polytex(p,np,texture)
     end,
 	addQuad=function(x0,y0,x1,y1,w,c)
 		if y1>=270 then
@@ -318,10 +341,25 @@ local WireframeRasterizer={
 		end
 	end,	
     endFrame=function()
-        _pool:reset()
+		-- draw alpha surfaces
+		local ptr=_vboptr
+		_vboptr = _vboptr_btf
+		for i=#_transparent_surfaces,1,-1 do
+			local surf=_transparent_surfaces[i]
+			polytex(surf.poly,surf.np,surf.texture,tline3d_fillp)
+		end
+		_vboptr = ptr
+
+		_pool:reset()
+		_vbo_btf:reset()
+
         for y in pairs(_spans) do
             _spans[y]=nil
         end  
+
+		for k in pairs(_transparent_surfaces) do
+			_transparent_surfaces[k]=nil
+		end
     end
 }
 
