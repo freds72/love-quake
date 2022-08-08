@@ -11,14 +11,17 @@ function BlastEmitter:new(owner,params)
     local emitter={}
     local origin = v_clone(owner.origin)
 
+    local radius0,radius1=unpack(params.radius)
+    local ttl0,ttl1=unpack(params.ttl)
+    local speed0,speed1=unpack(params.speed)
     function emitter:update(pool,active_particles,dt)
         for i=1,50 do        
-            local ttl=lerp(params.ttl[1],params.ttl[2],rnd())    
-            local angle,speed=rnd(),lerp(params.speed[1],params.speed[2],rnd())
+            local ttl=lerp(ttl0,ttl1,rnd())    
+            local angle,speed=rnd(),lerp(speed0,speed1,rnd())
             local azimuth=rnd()
             -- velocity direction
             local dir={sin(azimuth)*cos(angle),sin(azimuth)*sin(angle),cos(azimuth)}
-            local pos=v_add(origin, dir, lerp(params.radius[1],params.radius[2],rnd()))
+            local pos=v_add(origin, dir, lerp(radius0,radius1,rnd()))
             local p=pool:pop(
                 pos[1],pos[2],pos[3],
                 speed*dir[1],speed*dir[2],speed*dir[3],
