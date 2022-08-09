@@ -175,7 +175,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
         active_dynamic_lights = active_dynamic_lights or 0
         -- "kill" cache entry in case of dynamic light
         local cached_tex=textureCache[face]
-        if active_dynamic_lights==0 then
+        if active_dynamic_lights~=0 then
           cached_tex = nil
           textureCache[key] = nil
         end
