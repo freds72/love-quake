@@ -21,6 +21,7 @@ local value_factory={
     delay=tonumber,
     spawnflags = tonumber,
     health = tonumber,
+    worldtype = tonumber,
     message = function(value)
         -- fixes \n into real \n!
         local msg = string.gsub(value, "\\n", "\n")

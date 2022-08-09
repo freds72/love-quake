@@ -25,6 +25,8 @@ local player=function(progs)
         self.max_health = 100
         local dmgtime = 0
         self.deadflag = DEAD_NO
+        -- inventory
+        self.items = 0
 
         self.velocity={0,0,0}
         -- set size and link into world

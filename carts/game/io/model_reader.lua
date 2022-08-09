@@ -603,7 +603,7 @@ local ModelReader = function(pak)
         local aliasframe = ffi.cast('daliasframe_t*', ptr)
 
         local name = ffi.string(aliasframe.name)
-        -- logging.debug("Loading frame: "..name)
+        logging.debug("Loading frame: "..name)
 
         local frame={
             verts = {},
