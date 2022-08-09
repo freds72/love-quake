@@ -74,6 +74,7 @@ local triggers=function(progs)
 
         if not self.target then
             progs:objerror("no target")
+            return
         end
 
         self.touch=function(other)
@@ -102,11 +103,14 @@ local triggers=function(progs)
         self.DRAW_NOT = true
         -- set size and link into world
         progs:setmodel(self, self.model)   
-        set_move_dir(self)
+
+        local angle = set_move_dir(self)
 
         self.use=function(other)
-            -- todo: set angle + velocity
-            other.velocity = v_clone(self.movedir)
+            -- force angle
+            other.fixangle = true
+            other.mangles = {0,0,angle}
+            other.velocity = v_scale(self.movedir, 300)
             progs:setorigin(other, origin)
         end
     end

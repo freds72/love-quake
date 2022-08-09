@@ -10,13 +10,15 @@ local subs=function(progs)
             -- down
             self.movedir = {0,0,-1}
         else
-            local angle=angle/180
+            angle=angle/180
             self.movedir={cos(angle),sin(angle),0}
         end
         
         self.angles = {0,0,0}
         -- kill "move" angle
         self.angle = nil
+
+        return angle
     end
 
     function calc_move(self, tdest, tspeed, func)

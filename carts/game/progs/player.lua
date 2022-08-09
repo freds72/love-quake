@@ -150,7 +150,13 @@ local player=function(progs)
             local a,dx,dz=angle[3],acc[2],acc[1]
             local c,s=cos(a),sin(a)            
             self.velocity=v_add(self.velocity,{s*dx-c*dz,c*dx+s*dz,((self.on_ground or self.water_level>1) and acc[3]*jump_scale or 0)},60)
-            self.mangles = angle
+            if self.fixangle then
+                -- force angle
+                angle = self.mangles
+                self.fixangle = nil
+            else                
+                self.mangles = angle
+            end
 
             -- action?
             if input:released("action") then
