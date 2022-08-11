@@ -45,7 +45,7 @@ local CameraSystem=function(world)
                       make_m_from_euler(angle[1],0,0)),
                       make_m_from_euler(0,angle[2],0))
                 
-                track(parent,v_add(player.origin,player.eyepos,-1),m,player.water_level>1)
+                track(parent,v_add(player.origin,player.eyepos),m,player.water_level>2)
             end
         }
     end

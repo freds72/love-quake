@@ -9,19 +9,30 @@ function Liquid:new(owner, params)
 
     local depth={}
     function depth:update()
-        -- find current content (origin only)
-        local node = bsp.locate(root,owner.origin)
-        owner.contents = node.contents
 
-        local water_level = node.contents<-2 and 1 or 0
+        local origin = v_clone(owner.origin)
+        local z = owner.origin[3]
+        origin[3] = z + owner.mins[3] + 1
+        -- find current content (origin only)
+        local node = bsp.locate(root,origin)
+        owner.contents = -1
+
+        local water_level = 0
         -- find "depth"
         if node.contents<-2 then
-            for i=1,#params do
-                local node = bsp.locate(root,v_add(owner.origin,{0,0,params[i]}))
-                if node.contents>-2 then
-                    break
+            water_level = 1
+            owner.contents = node.contents
+
+            origin[3] = z + (owner.mins[3] + owner.maxs[3])*0.5
+            node = bsp.locate(root,origin)
+            if node.contents<-2 then
+                water_level = 2
+
+                origin[3] = z + owner.eyepos[3]
+                node = bsp.locate(root,origin)
+                if node.contents<-2 then
+                    water_level = 3
                 end
-                water_level = i+1
             end
         end
         owner.water_level = water_level

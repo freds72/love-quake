@@ -38,7 +38,9 @@ local player=function(progs)
         progs:attach(self,"liquid",{24,48})
 
         -- from mesh
-        self.eyepos = self.model.eyepos
+        self.eyepos = {0,0,22}
+        self.mins = {-16,-16,-24}
+        self.maxs = {16,16,32}
 
         -- moves
         local moves={
@@ -120,9 +122,9 @@ local player=function(progs)
             local jump_scale=1
             if self.water_level>1 then
                 self.friction = 0.7
-                self.gravity = 0.5
+                self.gravity = 0.05
                 -- avoid overpowered jump under water
-                jump_scale = 0.08
+                jump_scale = 0.03
             else
                 self.friction = nil
                 self.gravity = nil

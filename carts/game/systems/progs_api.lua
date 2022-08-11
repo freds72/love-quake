@@ -143,9 +143,9 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
         end,
         drop_to_floor=function(self,ent)
           -- find "ground"
-          local hits = collisionMap:hitscan(ent.mins,ent.maxs,v_add(ent.origin,{0,0,8}),v_add(ent.origin,{0,0,-256}),{},{world.entities[1]},ent)
+          local hits = collisionMap:hitscan(ent.mins,ent.maxs,ent.origin,v_add(ent.origin,{0,0,-256}),{},{world.entities[1]},ent)
           if not hits or hits.t==1 or hits.all_solid then
-            logging.critical("Entity: "..ent.classname.." unable to find resting ground")
+            logging.critical("Entity: "..ent.classname.." unable to find resting ground")        
             return
           end
           self:setorigin(ent,hits.pos)

@@ -7,6 +7,9 @@ local doors=function(progs)
     local STATE_UP      = 2
     local STATE_DOWN    = 3
     
+    local IT_KEY1 = 0x20000
+    local IT_KEY2 = 0x40000
+
     -- internal helpers
     local function init(self)
         -- easier to find siblings
@@ -16,6 +19,7 @@ local doors=function(progs)
         set_defaults(self,{
             spawnflags=0,
             speed=100,
+            items=0,
             wait=3,
             lip=8,
             dmg=2,
@@ -37,6 +41,9 @@ local doors=function(progs)
         -- constants
         local DOOR_START_OPEN = 1
         local DOOR_DONT_LINK = 4
+        local DOOR_TOGGLE = 32
+        local DOOR_GOLD_KEY = 8
+        local DOOR_SILVER_KEY = 16
         local DOOR_TOGGLE = 32
 
         -- init entity
@@ -128,12 +135,10 @@ local doors=function(progs)
         end
 
         door_fire=function()
-            -- play use key sound  
-            --[[      
-            if self.items then
-                sound (self, CHAN_VOICE, self.noise4, 1, ATTN_NORM)
+            -- play use key sound      
+            if self.items~=0 then
+                -- sound (self, CHAN_VOICE, self.noise4, 1, ATTN_NORM)
             end
-            ]]
         
             self.message = nil
             local oself=self
@@ -208,20 +213,19 @@ local doors=function(progs)
             if self.owner.message then
                 progs:print(self.owner.message)
             end
-            
-            -- door is triggered by something
-            if self.targetname then
+
+            -- key'ed door
+            if self.items==0 then
                 return
             end
 
-            -- key door stuff
-            --[[
-            if (!self.items)
-                return;
-            ]]
+            -- instigator is missing item
+            if band(other.items, self.items)==0 then
+                progs:print("You need a key...")
+                return
+            end
 
-            -- todo: item management
-
+            other.items = bxor(other.items, self.items)
             self.touch = nil
             if self.enemy then
                 -- kill touch for linked door
@@ -230,9 +234,21 @@ local doors=function(progs)
             door_use()
         end
 
+        if band(self.spawnflags,DOOR_SILVER_KEY)~=0 then
+		    self.items = IT_KEY1
+        end
+	    if band(self.spawnflags,DOOR_GOLD_KEY)~=0 then
+            self.items = IT_KEY2
+        end
+
         self.blocked = door_blocked
         self.use = door_use
         self.touch = door_touch
+
+        -- never close again
+        if self.items~=0 then
+            self.wait = -1
+        end
 
         -- wait until everything has already been set
         self.nextthink = progs:time() + 0.1
@@ -249,7 +265,6 @@ local doors=function(progs)
 
             local doors = progs:find(self, "classname", self.classname)
             local mins,maxs=self.mins,self.maxs
-            --local mins,maxs=self.mins,self.maxs
             local link_mins,link_maxs=self.mins,self.maxs
             -- note: assumes doors are in closed position/origin = 0 0 0
             local prev=self
@@ -284,12 +299,10 @@ local doors=function(progs)
 			if self.health>0 or self.targetname then
                 return
             end
-            -- todo: items
-            --[[
-            if self.items then
+            -- items
+            if self.items~=0 then
                 return
             end
-            ]]
             
             -- spawn a big trigger field around
             local trigger = progs:spawn()

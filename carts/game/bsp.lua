@@ -58,7 +58,7 @@ local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     if contents then
         -- is "solid" space (bsp)
         if contents~=-2 then
-            out.all_solid = false
+            out.all_solid = nil
             if contents==-1 then
                 out.in_open = true
             else

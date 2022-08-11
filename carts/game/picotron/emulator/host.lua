@@ -55,6 +55,7 @@ bor=bit.bor
 shl=bit.lshift
 shr=bit.rshift
 bnot=bit.bnot
+bxor=bit.bxor
 add=table.insert
 del=table.remove
 sub=string.sub

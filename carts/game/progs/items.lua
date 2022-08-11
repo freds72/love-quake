@@ -15,15 +15,16 @@ local items=function(progs)
     local IT_KEY2 = 0x40000
 
     local function start_item(self)
+        self.MOVETYPE_TOSS = true
         self.nextthink = progs:time() + 0.2
         -- plants the object on the floor
         self.think = function()
             self.FL_ITEM = true
             self.SOLID_TRIGGER = true
-            self.MOVETYPE_TOSS = true
             self.velocity = {0,0,0}
             progs:setorigin(self, v_add(self.origin, {0,0,6}))
             progs:drop_to_floor(self)
+            self.MOVETYPE_TOSS = nil
         end
     end
 
