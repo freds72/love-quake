@@ -269,11 +269,13 @@ local doors=function(progs)
             -- note: assumes doors are in closed position/origin = 0 0 0
             local prev=self
             self.owner = self
+
             for _,door in ipairs(doors) do
                 -- overlap?
                 if  mins[1]<=door.maxs[1] and maxs[1]>=door.mins[1] and
                     mins[2]<=door.maxs[2] and maxs[2]>=door.mins[2] and
                     mins[3]<=door.maxs[3] and maxs[3]>=door.mins[3] then
+
                     -- link to "master" door
                     door.owner = self
                     -- create linked door chain
@@ -326,6 +328,10 @@ local doors=function(progs)
         
         -- init entity
         init(self)
+
+        -- avoid door linking picking up secret doors
+        self.classname = "secret_door"
+        
         set_defaults(self,{
             speed=50,
             dmg = 2,
