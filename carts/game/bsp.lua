@@ -80,9 +80,9 @@ local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     -- crossing a node
     local t=dist-node_dist
     if t<0 then
-        t=t-0.03125
-    else
         t=t+0.03125
+    else
+        t=t-0.03125
     end  
     -- cliping fraction
     local frac=mid(t/(dist-otherdist),0,1)
@@ -126,7 +126,7 @@ function bsp.firstNode(node,ent)
         -- find first stradling plane
         local sides=planes.classifyBBox(node.plane,c,e)
         if sides==3 then
-            return node,count
+            return node
         end
         if band(sides,1)~=0 then
             node=node[false]

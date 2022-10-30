@@ -92,141 +92,6 @@ function WorldSystem:call(ent,fn,...)
     vm:call(ent,fn,...)
 end
 
-local 	STOP_EPSILON    = 0.1
-
---
--- Slide off of the impacting object
--- returns the blocked flags (1 = floor, 2 = step / wall)
-local function PM_ClipVelocity(origin, normal, out, overbounce)
-    local blocked = 0
-    if normal[3] > 0 then
-        blocked = bor(blocked, 1) --floor
-    end
-    if normal[3]==0 then
-        blocked = bor(blocked,2)  -- step
-    end
-    local backoff = v_dot (origin, normal) * overbounce
-
-    for i=1,3 do
-        local change = normal[i]*backoff
-        out[i] = origin[i] - change
-        if out[i] > -STOP_EPSILON and out[i] < STOP_EPSILON then
-            out[i] = 0
-        end
-    end
-    
-    return blocked
-end
-
-local MAX_CLIP_PLANES=5
-
--- The basic solid body movement clip that slides along multiple planes
-local function PM_FlyMove(world, pmove)	
-	local numbumps = 4
-	
-	local blocked = 0
-	local original_velocity = v_clone(pmove.velocity)
-	local primal_velocity = v_clone(pmove.velocity)
-	local planes = {}
-	local time_left = 1/60
-
-	for bumpcount=0,numbumps-1 do
-        local move_end = v_add(pmove.origin, pmove.velocity, time_left)
-
-		local trace = PM_PlayerMove (pmove.origin, move_end)
-
-		if  trace.startsolid or trace.allsolid then
-		    -- entity is trapped in another solid
-            pmove.velocity = {0,0,0}
-			return 3
-        end
-
-		if trace.fraction > 0 then
-		    -- actually covered some distance
-            pmove.origin = trace.endpos
-			planes={}
-        end
-
-		if trace.fraction == 1 then
-            -- moved the entire distance
-			 break
-        end
-
-		-- save entity for contact
-		add(pmove.touched,trace.ent)
-
-		if trace.n[3] > 0.7 then
-			blocked = bor(blocked, 1) -- floor
-        end
-		if trace.n[2]==0 then
-			blocked = bor(blocked, 2) --step
-        end
-
-		time_left = time_left - time_left * trace.fraction
-		
-	    -- cliped to another plane
-		if #planes >= MAX_CLIP_PLANES then
-		    -- this shouldn't really happen
-            pmove.velocity = {0,0,0}			
-			break
-        end
-
-        add(planes, trace.n)
-
-    --
-    -- modify original_velocity so it parallels all of the clip planes
-    --
-        local all_clear=true
-        for i=1,#planes do
-			PM_ClipVelocity (original_velocity, planes[i], pmove.velocity, 1)
-            local clear=true
-            for j=1,#planes do
-				if j ~= i then
-					if v_dot(pmove.velocity, planes[j]) < 0 then
-                        -- not ok
-                        clear = nil
-						break
-                    end
-				end
-            end
-			if clear then
-                all_clear = nil
-				break
-            end
-		end
-		
-		if not all_clear then
-			-- go along this plane		
-		else
-		
-            -- go along the crease
-			if #planes ~= 2 then
-                printh("clip velocity, numplanes == "..#planes)
-                pmove.velocity = {0,0,0}
-				break
-            end
-            local dir = v_cross(planes[1], planes[2])
-			local d = v_dot (dir, pmove.velocity)
-            dir = v_scale(dir, pmove.velocity, d)
-		end
-
-        --
-        -- if original velocity is against the original velocity, stop dead
-        -- to avoid tiny occilations in sloping corners
-        --
-		if v_dot(pmove.velocity, primal_velocity) <= 0 then
-            pmove.velocity = {0,0,0}
-			break
-        end
-	end
-
-	if pmove.waterjumptime>0 then
-        pmove.velocity = primal_velocity
-    end
-		
-	return blocked
-end
-
 -- update world / run physics / create late entities / ...
 function WorldSystem:update()
     -- transfer new entities to active list     
@@ -254,7 +119,7 @@ function WorldSystem:update()
         local ent = active_entities[i]
         if not platforms[ent] then
             if ent.velocity then
-                local velocity = v_scale(ent.velocity,dt)
+                local velocity = ent.velocity--v_scale(ent.velocity,dt)
 
                 if ent.MOVETYPE_TOSS then
                     physic.toss(ent, velocity, dt)
@@ -265,7 +130,7 @@ function WorldSystem:update()
                 elseif ent.MOVETYPE_FLY then
                     physic.fly(ent, velocity, dt)
                 else
-                    ent.origin = v_add(ent.origin, velocity)
+                    ent.origin = v_add(ent.origin, velocity, dt)
                 end
 
                 -- link to world

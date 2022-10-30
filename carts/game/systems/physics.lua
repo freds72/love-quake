@@ -32,6 +32,14 @@ return function(world, vm, collisionMap)
 		return false
 	end
 
+	local function testPushEntity(ent,push)
+		local end_origin=v_add(ent.origin,push)
+		local mins,maxs=
+			v_min(ent.absmins,v_add(ent.absmins,push)),
+			v_max(ent.absmaxs,v_add(ent.absmaxs,push))
+		local touches = collisionMap:touches(mins,maxs,ent)
+		return collisionMap:hitscan(ent.mins,ent.maxs,ent.origin,end_origin,{},touches,ent)
+	end
 
 	-- SV_Push
 	local function push(pusher, move)
@@ -154,6 +162,7 @@ return function(world, vm, collisionMap)
 		return true
 	end
 
+	local STEPSIZE=18
 	-- SV_PushMove
 	local function pushMove(pusher, dt)
 		-- nothing to do?
@@ -171,7 +180,7 @@ return function(world, vm, collisionMap)
 		end
 	end
 
-	-- SV_Physics_Pusher
+	-- all physic "resolvers"
 	return {
 		pusher=function(ent, dt)
 			local oldltime = ent.ltime
@@ -261,23 +270,47 @@ return function(world, vm, collisionMap)
 			-- todo: less friction not on ground
 			velocity[1] = velocity[1] * (ent.friction or 0.8)
 			velocity[2] = velocity[2] * (ent.friction or 0.8)
-			
-			velocity[3] = velocity[3] - (ent.gravity or 0.7)
+			velocity[3] = velocity[3] - (ent.gravity or 18)
 			-- check next position 
 			local vn,vl=v_normz(velocity)      
 			local on_ground = ent.on_ground
+			local origin=ent.origin
 			if vl>0.1 then
-				local move = collisionMap:slide(ent,ent.origin,velocity)   
-				on_ground = move.on_ground
-				if on_ground and move.on_wall and move.fraction<1 then
-					local up_move = collisionMap:slide(ent,v_add(ent.origin,{0,0,18}),velocity) 
-					-- largest distance?
-					if not up_move.invalid and up_move.fraction>move.fraction then
-						move = up_move
+				local oldvel=v_clone(velocity)
+				local oldorg=v_clone(ent.origin)
+				local move = collisionMap:slide(ent,origin,velocity)   
+				-- on_ground = move.on_ground and 
+				origin = move.pos
+				velocity = move.velocity
+
+				if move.on_wall then
+					local nosteporg,nostepvel=v_clone(origin),v_clone(velocity)
+					local upmove,downmove={0,0,0},{0,0,0}
+					upmove[3] = STEPSIZE
+					downmove[3] = -STEPSIZE + oldvel[3] * 1/60
+					
+					ent.origin=oldorg
+					local steptrace = testPushEntity(ent, upmove)
+					ent.origin=v_add(oldorg,upmove)--steptrace and steptrace.pos or v_add(oldorg,upmove)
+					origin = v_add(oldorg,upmove)
+
+					local upvelocity=v_clone(oldvel)
+					upvelocity[3]=0
+					local flymove = collisionMap:slide(ent,origin,upvelocity)   
+					ent.origin = flymove.pos
+					origin = flymove.pos
+
+					local downtrace = testPushEntity(ent, downmove)
+					if downtrace and downtrace.n and downtrace.n[3]>0.7 then
+						printh("on ground")
+						origin = downtrace.pos
+						on_ground = downtrace.ent
+					else
+						printh("no steps")
+						origin = nosteporg
+						velocity = nostepvel
 					end
-				end
-				ent.origin = move.pos
-				velocity = move.velocity                        
+				end				
 
 				-- trigger touched items
 				for other_ent in pairs(move.touched) do
@@ -290,7 +323,8 @@ return function(world, vm, collisionMap)
 			ent.on_ground = on_ground                    
 
 			-- use corrected velocity
-			ent.velocity = v_scale(velocity, 1/dt)
+			ent.origin = origin
+			ent.velocity = velocity
 		end,
 		unstuck=function(ent)
 			return not testEntityPosition(ent)

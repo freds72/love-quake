@@ -284,14 +284,17 @@ local CollisionMap=function(world)
                     triggers[other_ent] = true
                 end
 
-                if tmphits.n then
+                if tmphits.n then                    
                     -- closest hit?
                     -- printh(other_ent.classname.." @ "..tmphits.t)
                     if other_ent.SOLID_TRIGGER then
                         -- damage or other actions
                         triggers[other_ent] = true
                     elseif tmphits.t<(hits and hits.t or 32000) then
+                        -- adjust pos                        
                         hits = tmphits
+                        -- rebase to world space
+                        hits.pos=v_add(hits.pos,other_ent.origin)
                     end
                 end
             end
@@ -299,15 +302,38 @@ local CollisionMap=function(world)
         return hits
     end
 
+    local STOP_EPSILON = 0.1
+    function clipVelocity(velocity,normal,out,overbounce)
+        local blocked = 0
+        if normal[3] > 0 then
+            blocked = bor(blocked,1) -- floor
+        end
+        if normal[3]==0 then
+            blocked = bor(blocked,2) -- step
+        end
+
+        local backoff = v_dot(velocity, normal) * overbounce
+        local out={}
+        for i=1,3 do
+            local v = velocity[i] - normal[i]*backoff
+            if v > -STOP_EPSILON and v < STOP_EPSILON then
+                v = 0
+            end
+            out[i]=v
+        end
+        
+        return out,blocked
+    end
+
     -- slide on wall move (players, npc...)
     function this:slide(ent,origin,velocity)
-        local vel2d = {velocity[1],velocity[2],0}
-        local vl = v_len(vel2d)
-        local vl0 = vl
-        local next_pos=v_add(origin,velocity)
-        local on_ground,blocked = false,false
-        local invalid=false
-    
+        local primal_origin=v_clone(origin)
+        local original_velocity=v_clone(velocity)
+        local primal_velocity=v_clone(velocity)
+        local blocked = 0
+        local time_left = 1/60
+        local planes={}
+
         -- avoid touching the same non-solid multiple times (ex: triggers)
         local touched = {}
         -- collect all potential touching entities (done only once)
@@ -315,47 +341,92 @@ local CollisionMap=function(world)
         local ents=self:touches(v_add(ent.absmins,{-256,-256,-256}), v_add(ent.absmaxs,{256,256,256}),ent)
         -- check current to target pos
         for i=1,4 do
+            local next_pos=v_add(origin,velocity,time_left)
+
             local hits = self:hitscan(ent.mins,ent.maxs,origin,next_pos,touched,ents)
             if not hits then
-                goto clear
+                -- all clear
+                printh("all clear")
+                origin=next_pos
+                break
             end
             if hits.start_solid or hits.all_solid then
-                goto blocked
+                printh("in solid")
+    			velocity={0,0,0}
+                break
+            end
+            -- actually covered some distance
+            if hits.t>0 then
+                origin=hits.pos
+                planes={}
+            end
+            if hits.t==1 then
+                break
             end
 
-            if hits.n then            
-                local fix=v_dot(hits.n,velocity)
-                -- not separating?
-                if fix<0 then  
-                    -- printh("hit:"..v_tostring(hits.n).." "..v_tostring(velocity).." fix: "..fix.." ground: "..tostring(hits.n[3]>0.7))
-                    
-                    vl = vl + v_dot(vel2d,hits.n)
-                    velocity=v_add(velocity,hits.n,-fix)
-                    -- print("fix pos:"..fix.." before: "..v_tostring(old_vel).." after: "..v_tostring(velocity))      
-                    -- floor?
-                    if hits.n[3]>0.7 then
-                        on_ground=hits.ent
-                    end
-                    -- wall hit?
-                    if not hits.ent.SOLID_SLIDEBOX and hits.n[3]==0 then
-                        blocked=true
+            if hits.n[3]>0.7 then
+                blocked = bor(blocked,1)
+            end
+            if hits.n[3]==0 then
+                blocked = bor(blocked,2)
+            end
+
+            time_left = time_left - time_left*hits.t
+            if #planes>5 then
+                printh("too many planes: "..#planes)
+    			velocity={0,0,0}
+                break
+            end
+            add(planes,hits.n)
+
+            local i,np=1,#planes
+            while i<=np do
+                -- adjust velocity
+                velocity=clipVelocity(original_velocity,planes[i],velocity,1)
+                local clear=true
+                for j=1,np do
+                    if i~=j then
+                        if v_dot(velocity, planes[j])<0 then
+                            clear = false
+                            break
+                        end
                     end
                 end
-                next_pos=v_add(origin,velocity)
+                if clear then
+                    break
+                end
+                i=i+1
+            end
+            if i<=np then
+                -- go along
+            else
+                if np~=2 then
+                    printh("Collision error - too many planes: "..np)
+                    velocity={0,0,0}
+                    break
+                end
+                local dir=v_cross(planes[1],planes[2])
+                local d=v_dot(dir,velocity)
+                printh("course correction: "..d)
+                velocity=v_scale(dir,d)
+            end
+
+            -- if original velocity is against the original velocity, stop dead
+            -- to avoid tiny occilations in sloping corners
+
+            if v_dot(velocity, primal_velocity) <= 0 then
+                --printh("opposite velocities!")
+    			velocity={0,0,0}
+                break
             end
         end
-    ::blocked::        
-        invalid = true
-        velocity={0,0,0}
-        next_pos=origin
-    ::clear::
-    
+
         return {
-            pos=next_pos,--v_add(origin,velocity),
+            pos=origin,--v_add(origin,velocity),
             velocity=velocity,
-            on_ground=on_ground,
-            on_wall=blocked,
-            fraction=max(0,vl/vl0),
+            on_ground=band(blocked,1)>0,
+            on_wall=band(blocked,2)>0,
+            fraction=time_left*60,
             touched=touched,
             invalid=invalid}
     end
