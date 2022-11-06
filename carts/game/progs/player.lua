@@ -36,7 +36,9 @@ local player=function(progs)
         progs:attach(self,"liquid",{24,48})
 
         -- from mesh
-        self.eyepos = self.model.eyepos
+        local eye_pos = self.model.eyepos
+        self.eyepos = eye_pos
+        self.eye_offset = 0
 
         -- moves
         local moves={
@@ -176,6 +178,7 @@ local player=function(progs)
                 local aim_pos = v_add(eye_pos,fwd,1024)
                 
                 local fireball = progs:spawn()
+                fireball.owner = self
                 fireball.SOLID_TRIGGER = true
                 fireball.MOVETYPE_FLY = true
                 fireball.DRAW_NOT=true
@@ -207,8 +210,12 @@ local player=function(progs)
             end
         end
 
-        self.postthink=function(input)
-            -- update weapon pos            
+        self.postthink=function()
+            -- update weapon pos      
+
+            -- dampen stairs up "jump"
+            self.eyepos=v_add(eye_pos,{0,0,self.eye_offset})
+            self.eye_offset=lerp(self.eye_offset,0,0.4)
         end
 
         self.pain=function()

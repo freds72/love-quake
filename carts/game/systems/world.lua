@@ -149,6 +149,9 @@ function WorldSystem:update()
                 m_set_pos(ent.m, ent.origin)
             end
         end
+        if ent.postthink then
+            ent.postthink()
+        end
     end
 
     -- drop "free" entities

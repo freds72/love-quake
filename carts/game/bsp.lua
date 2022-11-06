@@ -53,6 +53,15 @@ end
 -- https://github.com/id-Software/Quake/blob/bf4ac424ce754894ac8f1dae6a3981954bc9852d/QW/client/pmovetst.c
 -- https://developer.valvesoftware.com/wiki/BSP
 -- ray/bsp intersection
+-- fills "out" with:
+--      t: fraction
+--      n: normal at impact + distance
+--      pos: pos at impact
+--      all_solid: start/end in solid
+--      start_solid: start in solid
+--      in_open: clear space
+--      in_water: in "water" volume
+--      ent: touched entity
 local function ray_bsp_intersect(node,p0,p1,t0,t1,out)
     local contents=node.contents  
     if contents then
