@@ -23,7 +23,7 @@ local soldier=function(progs)
             assert(pose, "Unknown pose: "..name)
 
             local length,anim=pose.length,pose.random and flr(rnd(pose.length)) or 0
-            local t0 = self.ltime
+            local t0 = progs:time()
             
             -- first frame
             self.frame = name..((anim%length)+1)
@@ -33,7 +33,7 @@ local soldier=function(progs)
                     anim = min(anim, length-1)
                 end
                 self.frame = name..((anim%length)+1)
-                local t1 = self.ltime
+                local t1 = progs:time()
                 self.nextthink = t1 + ttl
                 -- gives total elapsed time since last pose switch
                 if think then
@@ -42,7 +42,7 @@ local soldier=function(progs)
             end
         end
 
-        self.nextthink = self.ltime + 0.1
+        self.nextthink = progs:time() + 0.1
         self.think=select_pose(
             "stand",
             0.1,
