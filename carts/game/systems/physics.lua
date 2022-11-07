@@ -13,25 +13,55 @@ local conf = require("game_conf")
 
 return function(world, vm, collisionMap)
 
+	local v_one = {1,1,1}
 	local function ent_tostring(ent)
 		return "ent: "..ent.classname.."\n origin: "..v_tostring(ent.origin).."\n"..v_tostring(ent.absmins).." x "..v_tostring(ent.absmaxs)
 	end
 
+	-- return true if position is invalid
 	local function testEntityPosition(ent)
 		-- 
 		local mins,maxs=
 			v_add(ent.origin,ent.mins),
 			v_add(ent.origin,ent.maxs)
-		local touches = collisionMap:touches(v_add(mins,{1,1,1},-8), v_add(maxs,{1,1,1},8), ent)
+		local touches = collisionMap:touches(v_add(mins,v_one,-8), v_add(maxs,v_one,8), ent)
 		local trace = collisionMap:hitscan(ent.mins,ent.maxs,ent.origin,ent.origin,{},touches,ent)
 
-		if trace and (trace.start_solid or trace.all_solid) then
-			-- printh("invalid position: "..ent_tostring(trace.ent))
-			return true
-		end
-		return false
+		return trace.start_solid or trace.all_solid
 	end
 
+	-- return trace information moving entity by "push" amount
+	local function testPushEntity(ent,push)
+		local end_origin=v_add(ent.origin,push)		
+		local l=max(0.03125,2*v_len(push))
+		local mins,maxs=
+			v_add(ent.origin,ent.mins),
+			v_add(ent.origin,ent.maxs)
+		local touches = collisionMap:touches(v_add(mins,v_one,-l), v_add(maxs,v_one,l), ent)
+		return collisionMap:hitscan(ent.mins,ent.maxs,ent.origin,end_origin,{},touches,ent)
+	end
+
+	-- SV_WallFriction
+	function applyFriction(ent, velocity, trace)
+		local fwd = m_fwd(ent.m)
+		local d = v_dot(trace.n, fwd)
+		
+		d = d + 0.5
+		if d >= 0 then
+			return velocity
+		end
+			
+		-- cut the tangential velocity
+		local i = v_dot (trace.n, velocity)
+		local into = v_scale(trace.n, i)
+		local side = v_add(velocity, into, -1)
+		
+		return {
+			side[1] * (1 + d),
+			side[2] * (1 + d),
+			velocity[3]
+		}
+	end
 
 	-- SV_Push
 	local function push(pusher, move)
@@ -154,6 +184,7 @@ return function(world, vm, collisionMap)
 		return true
 	end
 
+	local STEPSIZE=18
 	-- SV_PushMove
 	local function pushMove(pusher, dt)
 		-- nothing to do?
@@ -171,7 +202,7 @@ return function(world, vm, collisionMap)
 		end
 	end
 
-	-- SV_Physics_Pusher
+	-- all physic "resolvers"
 	return {
 		pusher=function(ent, dt)
 			local oldltime = ent.ltime
@@ -247,13 +278,17 @@ return function(world, vm, collisionMap)
 			ent.velocity = v_scale(velocity, 1/dt)
 		end,
 		fly=function(ent, velocity, dt)
+			velocity = v_scale(velocity, dt)
 			local move = collisionMap:fly(ent,ent.origin,velocity)
-			ent.origin = v_add(ent.origin, velocity)
-			-- valid pos?
 
 			-- hit other entity?
-			if move.ent then
+			if move.ent or (move.all_solid or move.start_solid) then
+				if move.pos then
+					ent.origin = move.pos
+				end
 				vm:call(ent,"touch",move.ent)
+			else
+				ent.origin = v_add(ent.origin, velocity)
 			end
 		end,
 		walk=function(ent, velocity, dt)
@@ -261,36 +296,102 @@ return function(world, vm, collisionMap)
 			-- todo: less friction not on ground
 			velocity[1] = velocity[1] * (ent.friction or 0.8)
 			velocity[2] = velocity[2] * (ent.friction or 0.8)
-			
-			velocity[3] = velocity[3] - (ent.gravity or 0.7)
+			velocity[3] = velocity[3] - (ent.gravity or 18)
 			-- check next position 
 			local vn,vl=v_normz(velocity)      
-			local on_ground = ent.on_ground
+			local ground = ent.on_ground
+			local origin = ent.origin
+			local move
 			if vl>0.1 then
-				local move = collisionMap:slide(ent,ent.origin,velocity)   
-				on_ground = move.on_ground
-				if on_ground and move.on_wall and move.fraction<1 then
-					local up_move = collisionMap:slide(ent,v_add(ent.origin,{0,0,18}),velocity) 
-					-- largest distance?
-					if not up_move.invalid and up_move.fraction>move.fraction then
-						move = up_move
-					end
-				end
-				ent.origin = move.pos
-				velocity = move.velocity                        
+				local oldvel=v_clone(velocity)
+				local oldorg=v_clone(ent.origin)
+				move = collisionMap:slide(ent,origin,velocity)   
+				ground = move.ground 
+				origin = move.pos
+				velocity = move.velocity
 
-				-- trigger touched items
-				for other_ent in pairs(move.touched) do
-					vm:call(other_ent,"touch",ent)
-				end                               
+				if move.on_wall then
+					local nosteporg,nostepvel=v_clone(origin),v_clone(velocity)
+					local upmove,downmove={0,0,0},{0,0,0}
+					upmove[3] = STEPSIZE
+					downmove[3] = -STEPSIZE + oldvel[3] * 1/60
+					
+					-- move up
+					ent.origin = oldorg
+					local uptrace = testPushEntity(ent, upmove)		
+					origin = uptrace.pos
+
+					-- move fwd
+					local upvelocity=v_clone(oldvel)
+					upvelocity[3]=0
+					local steptrace = collisionMap:slide(ent,origin,upvelocity)   
+
+					if steptrace.on_ground or steptrace.on_wall then
+						if abs(oldorg[1] - steptrace.pos[1]) < 0.03125 and
+						   abs(oldorg[2] - steptrace.pos[2]) < 0.03125 then						
+							-- stepping up didn't make any progress
+							-- clip = SV_TryUnstick (ent, oldvel);
+							printh("stuck?")
+						end
+					end
+					
+					if steptrace.on_wall then
+						velocity = applyFriction(ent, velocity, steptrace)
+					end
+
+					origin = steptrace.pos
+					ent.origin = origin
+
+					local downtrace = testPushEntity(ent, downmove)
+
+					if downtrace.n and downtrace.n[3]>0.7 then
+						origin = downtrace.pos
+						ground = downtrace.ent
+						-- record how much the stairs up is changing position
+						ent.eye_offset = ent.eye_offset + origin[3] - nosteporg[3]
+					else
+						origin = nosteporg
+						velocity = nostepvel
+					end
+				end				
 			else
 				velocity = {0,0,0}
 			end
 			-- "debug"
-			ent.on_ground = on_ground                    
+			ent.on_ground = ground                    
 
 			-- use corrected velocity
-			ent.velocity = v_scale(velocity, 1/dt)
+			ent.origin = origin
+			ent.velocity = velocity
+
+			-- apply triggers *after* move is applied
+			if move then
+				-- trigger touched items
+				for other_ent in pairs(move.touched) do
+					vm:call(other_ent,"touch",ent)
+				end                               
+			end
+
+			if ent.postthink then
+				ent.postthink()
+			end
+			--printh("invalid? "..tostring))
+			if testEntityPosition(ent) then
+				printh("STUCK!")
+				for z=0,17 do
+					for i=-1,1 do
+						for j=-1,1 do
+							ent.origin = v_add(origin, {i,j,z})
+							if not testEntityPosition(ent) then
+								printh("nudge: "..v_tostring({i,j,z}))
+								goto unstuck
+							end
+						end
+					end
+				end
+				assert(false, "invalid position...")
+::unstuck::
+			end
 		end,
 		unstuck=function(ent)
 			return not testEntityPosition(ent)

@@ -18,7 +18,8 @@ local platforms=function(progs)
             spawnflags=0,
             speed=150,
             dmg=2,
-            velocity={0,0,0}
+            velocity={0,0,0},
+            height=0
         })
 
         self.SOLID_BSP = true
@@ -41,7 +42,7 @@ local platforms=function(progs)
 
         self.pos1 = v_clone(self.origin)
         self.pos2 = v_clone(self.origin)
-        if  self.height then
+        if  self.height>0 then
             self.pos2[3] = self.origin[3] - self.height
         else
             self.pos2[3] = self.origin[3] - self.size[3] + 8
@@ -145,7 +146,7 @@ local platforms=function(progs)
             end
         end
 
-        if self.height then
+        if self.height>0 then
 		    self.pos2[3] = self.origin[3] - self.height
 	    else
 		    self.pos2[3] = self.origin[3] - self.size[3] + 8
