@@ -201,10 +201,11 @@ local BSPRenderer=function(world, rasterizer, lights)
     {-0.688191, -0.587785, -0.425325}, 	
     }
 
+  local z_near = 1
   local function z_poly_clip(v,nv)
     local res,v0={},v[nv]
     local p0=vboptr + v0
-    local d0=p0[VBO_3] - 8
+    local d0=p0[VBO_3] - z_near
     for i=1,nv do
       local side=d0>0
       if side then
@@ -212,7 +213,7 @@ local BSPRenderer=function(world, rasterizer, lights)
       end
       local v1=v[i]
       local p1=vboptr + v1
-      local d1=p1[VBO_3]-8
+      local d1=p1[VBO_3] - z_near
       -- not same sign?
       if (d1>0)~=side then
         local t = d0/(d0-d1)
@@ -220,7 +221,7 @@ local BSPRenderer=function(world, rasterizer, lights)
           lerp(p0[VBO_1],p1[VBO_1],t),
           lerp(p0[VBO_2],p1[VBO_2],t),
           lerp(p0[VBO_3],p1[VBO_3],t)
-        local w=fov/8
+        local w=fov/z_near
         res[#res+1]=vbo:pop(          
           x,y,z,
           480/2+(270*x*w),
