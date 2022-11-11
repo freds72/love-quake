@@ -42,9 +42,9 @@ return function(world, vm, collisionMap)
 	end
 
 	-- SV_WallFriction
-	function applyFriction(ent, velocity, trace)
+	function applyFriction(ent, velocity, n)
 		local fwd = m_fwd(ent.m)
-		local d = v_dot(trace.n, fwd)
+		local d = v_dot(n, fwd)
 		
 		d = d + 0.5
 		if d >= 0 then
@@ -52,8 +52,8 @@ return function(world, vm, collisionMap)
 		end
 			
 		-- cut the tangential velocity
-		local i = v_dot (trace.n, velocity)
-		local into = v_scale(trace.n, i)
+		local i = v_dot(n, velocity)
+		local into = v_scale(n, i)
 		local side = v_add(velocity, into, -1)
 		
 		return {
@@ -312,9 +312,7 @@ return function(world, vm, collisionMap)
 
 				if move.on_wall then
 					local nosteporg,nostepvel=v_clone(origin),v_clone(velocity)
-					local upmove,downmove={0,0,0},{0,0,0}
-					upmove[3] = STEPSIZE
-					downmove[3] = -STEPSIZE + oldvel[3] * 1/60
+					local upmove,downmove={0,0,STEPSIZE},{0,0,-STEPSIZE + oldvel[3] * 1/60}
 					
 					-- move up
 					ent.origin = oldorg
@@ -336,12 +334,13 @@ return function(world, vm, collisionMap)
 					end
 					
 					if steptrace.on_wall then
-						velocity = applyFriction(ent, velocity, steptrace)
+						velocity = applyFriction(ent, velocity, steptrace.n)
 					end
 
 					origin = steptrace.pos
 					ent.origin = origin
 
+					-- find flat ground
 					local downtrace = testPushEntity(ent, downmove)
 
 					if downtrace.n and downtrace.n[3]>0.7 then
@@ -350,6 +349,7 @@ return function(world, vm, collisionMap)
 						-- record how much the stairs up is changing position
 						ent.eye_offset = ent.eye_offset + origin[3] - nosteporg[3]
 					else
+						-- no stairs, fallback to normal slide move
 						origin = nosteporg
 						velocity = nostepvel
 					end
@@ -372,9 +372,6 @@ return function(world, vm, collisionMap)
 				end                               
 			end
 
-			if ent.postthink then
-				ent.postthink()
-			end
 			--printh("invalid? "..tostring))
 			if testEntityPosition(ent) then
 				printh("STUCK!")

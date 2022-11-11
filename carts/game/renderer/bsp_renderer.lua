@@ -1,7 +1,7 @@
 -- collect and send BSP geometry to rasterizer
 local bsp=require("bsp")
 local ffi=require("ffi")
-local BSPRenderer=function(world,rasterizer, lights)
+local BSPRenderer=function(world, rasterizer, lights)
 -- "vertex buffer" layout:
   -- 0: x (cam)
   -- 1: y (cam)
@@ -30,8 +30,11 @@ local BSPRenderer=function(world,rasterizer, lights)
   
   -- surface (eg lighted texture) cache
   local surfaceCache = require("renderer.surface_cache")(rasterizer, lights)
-
-  local h_ratio,v_ratio=(480-480/2)/270,(270-270/2)/270
+  
+  local conf = require("game_conf")
+  
+  local fov = cos(conf.fov/360)
+  local h_ratio,v_ratio=(480-480/2)/270/fov,(270-270/2)/270/fov
   -- pre-computed normals for alias models
   local _normals={
     {-0.525731, 0.000000, 0.850651}, 
@@ -217,11 +220,12 @@ local BSPRenderer=function(world,rasterizer, lights)
           lerp(p0[VBO_1],p1[VBO_1],t),
           lerp(p0[VBO_2],p1[VBO_2],t),
           lerp(p0[VBO_3],p1[VBO_3],t)
+        local w=fov/8
         res[#res+1]=vbo:pop(          
           x,y,z,
-          480/2+(270*x/8),
-          270/2-(270*y/8),
-          1/8,
+          480/2+(270*x*w),
+          270/2-(270*y*w),
+          w,
           0,
           lerp(p0[VBO_U],p1[VBO_U],t),
           lerp(p0[VBO_V],p1[VBO_V],t))
@@ -369,7 +373,7 @@ local BSPRenderer=function(world,rasterizer, lights)
         elseif ay<-v_ratio*az then code = code + 32 end
         -- save world space coords for clipping
         -- to screen space
-        local w=1/az
+        local w=fov/az
         idx=vbo:pop(ax,ay,az,480/2+270*ax*w,270/2-270*ay*w,w,code)
         self.cache[v]=idx
       end
@@ -408,7 +412,7 @@ local BSPRenderer=function(world,rasterizer, lights)
         elseif ay<-v_ratio*az then code = code + 32 end
         -- save world space coords for clipping
         -- to screen space
-        local w=1/az
+        local w=fov/az
 
         -- intersection with sky plane
         local e={-ax*w,-1,-ay*w}
