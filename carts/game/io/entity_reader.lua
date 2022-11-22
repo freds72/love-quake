@@ -69,7 +69,11 @@ function EntityReader:unpack(str)
                 local k,v=stack[1],stack[2]      
                 -- convert values to lua objects/numbers          
                 local fn=value_factory[k]
-                obj[k]=fn and fn(v) or v
+                -- avoid falsy fallback
+                if fn then
+                    v=fn(v)
+                end
+                obj[k]=v
                 stack={}
             end
         elseif first=="}" then

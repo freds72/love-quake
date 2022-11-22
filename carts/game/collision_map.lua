@@ -318,7 +318,7 @@ local CollisionMap=function(world)
     end
 
     local STOP_EPSILON = 0.1
-    function clipVelocity(velocity,normal,out,overbounce)
+    function clipVelocity(velocity,normal,overbounce)
         local blocked = 0
         if normal[3] > 0 then
             blocked = bor(blocked,1) -- floor
@@ -327,8 +327,7 @@ local CollisionMap=function(world)
             blocked = bor(blocked,2) -- step
         end
 
-        local backoff = v_dot(velocity, normal) * overbounce
-        local out={}
+        local out, backoff = {}, v_dot(velocity, normal) * overbounce
         for i=1,3 do
             local v = velocity[i] - normal[i]*backoff
             if v > -STOP_EPSILON and v < STOP_EPSILON then
@@ -403,14 +402,14 @@ local CollisionMap=function(world)
             end
             add(planes,hits.n)
 
-            local i,np=1,#planes
+            local i,np,new_vel=1,#planes
             while i<=np do
                 -- adjust velocity
-                velocity = clipVelocity(original_velocity,planes[i],velocity,1)
+                new_vel = clipVelocity(original_velocity,planes[i],1)
                 local clear=true
                 for j=1,np do
                     if i~=j then
-                        if v_dot(velocity, planes[j])<0 then
+                        if v_dot(new_vel, planes[j])<0 then
                             clear = false
                             break
                         end
@@ -423,6 +422,7 @@ local CollisionMap=function(world)
             end
             if i<=np then
                 -- go along
+                velocity = new_vel
             else
                 if np~=2 then
                     -- printh("Collision error - too many planes: "..np)

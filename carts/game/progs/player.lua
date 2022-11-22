@@ -46,7 +46,7 @@ local player=function(progs)
             down={0,-1,0},
             left={1,0,0},
             right={-1,0,0},
-            jump={0,0,9}
+            jump={0,0,4}
         }
 
         local angle,dangle={0,0,0},{0,0,0}

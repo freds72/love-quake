@@ -13,7 +13,8 @@ local triggers=function(progs)
         set_defaults(self,{
             nextthink = -1,
             health = 0,
-            spawnflags = 0
+            spawnflags = 0,
+            wait = -1
         })
 
         -- set size and link into world
@@ -124,8 +125,6 @@ local triggers=function(progs)
 
     progs.trigger_once=function(self)
         -- init entity        
-        self.wait = -1
-
         init_multiple(self)
     end
 
@@ -194,6 +193,25 @@ local triggers=function(progs)
             -- avoid reentrancy
             self.touch = nil    
             progs:load(self.map, band(self.spawnflags,NO_INTERMISSION)~=0)
+        end
+    end
+
+    progs.trigger_relay=function(self)
+        init_trigger(self)    
+        -- ??
+        self.use = function(other)
+            if self.nextthink>progs:time() then
+                return
+            end
+
+            if self.delay and self.delay>0 then
+                self.nextthink = progs:time() + self.delay
+                self.think = function()
+                    use_targets(self, other)
+                end
+            else
+                use_targets(self, other)
+            end            
         end
     end
 
