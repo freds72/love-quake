@@ -17,6 +17,7 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
     local precache_models={}
   
     return {
+      -- secrets
         total_secrets = 0,
         found_secrets = 0,
         lightstyle=function(self, id, lightstyle)
@@ -33,6 +34,13 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           if not precache_models[id] then
             precache_models[id] = modelLoader:load(id)
           end
+        end,
+        attachmodel=function(self,ent,id,prop)
+          local cached_model = precache_models[id]
+          if not cached_model then
+              logging.critical("Unknown alias model: "..id)
+          end
+          ent[prop] = cached_model.alias          
         end,
         setmodel=function(self,ent,id,offset)
           if not id then
@@ -141,10 +149,10 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
             stateSystem:next("screens.play",map)
           end
         end,
-        drop_to_floor=function(self,ent)
+        drop_to_floor=function(self,ent)      
           -- find "ground"
-          local hits = collisionMap:hitscan(ent.mins,ent.maxs,v_add(ent.origin,{0,0,8}),v_add(ent.origin,{0,0,-256}),{},{world.entities[1]},ent)
-          if not hits or hits.t==1 or hits.all_solid then
+          local hits = collisionMap:hitscan({0,0,0},{0,0,0},v_add(ent.origin,{0,0,8}),v_add(ent.origin,{0,0,-256}),{},{world.entities[1]},ent)
+          if hits.t==1 or hits.all_solid then
             logging.critical("Entity: "..ent.classname.." unable to find resting ground")
             return
           end
@@ -164,14 +172,14 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           local ents = collisionMap:touches(absmins, absmaxs, ent)                      
           local triggers = {}
           local trace = collisionMap:hitscan({0,0,0},{0,0,0},p0,p1,triggers,ents)
-          if trace and trace.n then
+          if trace.n then
             return trace.ent
           end
         end,
         -- call an entity function
         call=function(_,ent,fn,...)
           world:call(ent,fn,...)
-        end
+        end,        
       }
 end
 return ProgsAPI

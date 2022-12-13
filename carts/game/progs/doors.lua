@@ -313,6 +313,8 @@ local doors=function(progs)
         
         -- init entity
         init(self)
+        -- ensure secret doors are not "attached" to door multi bsp models
+        self.classname = "door_secret"
         set_defaults(self,{
             speed=50,
             dmg = 2,

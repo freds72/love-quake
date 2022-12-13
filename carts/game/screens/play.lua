@@ -30,13 +30,43 @@ return function(level)
             end
         end,
         -- draw
-        function()    
+        function(_,rasterizer, camera, renderer)    
             -- crosshair 
+            -- todo: replace hardcoded values?
             local hw,hh=480/2,270/2
             pset(hw-1,hh,8)       
             pset(hw+1,hh,8)       
             pset(hw,  hh-1,8)       
-            pset(hw,  hh+1,8)       
+            pset(hw,  hh+1,8)  
+            
+            -- weapon?
+            if player and player.deadflag==0 and camera.ready then
+                -- something to display?
+                rasterizer:beginFrame()
+
+                -- 
+                renderer:beginFrame()
+                local fwd=m_fwd(player.m)
+                local up=m_up(player.m)
+                local origin=v_add(v_add(player.origin,player.eyepos),fwd,48)
+
+                local angle=player.mangles
+                local to_world=m_x_m(
+                    m_x_m(
+                      make_m_from_euler(0,0,angle[3]),
+                      make_m_from_euler(angle[1],0,0)),
+                      make_m_from_euler(0,angle[2],0))
+                m_set_pos(to_world, v_add(v_add(player.origin, player.eyepos, -1),{0,0,-player.eye_offset/16}))
+
+                local to_local=make_m_from_euler(0,0,-0.5)
+                m_set_pos(to_local,{0,0,0})
+                local local_to_world=m_x_m(to_world, to_local)
+                renderer:drawModel(camera,{0,0,0},local_to_world,player.weapon,"shot"..player.weaponframe)
+                renderer:endFrame()
+                rasterizer:endFrame()
+                
+            end
+
             -- any messages? (dont't display if player dead)
             if messages.msg and not death_ttl then
                 print(messages.msg,480/2-#messages.msg*4/2,110,15)

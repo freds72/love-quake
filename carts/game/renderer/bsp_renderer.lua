@@ -737,12 +737,7 @@ local BSPRenderer=function(world, rasterizer, lights)
       end 
     end
 
-    local function drawAliasModel(cam,ent,model,skin,frame_name)      
-      -- check bounding box
-      if not isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
-        return 
-      end
-
+    local function drawAliasModel(cam,origin,orientation,model,skin,frame_name)      
       local skin = model.skins[skin]
       local frame = model.frames[frame_name]
       local uvs = model.uvs
@@ -750,16 +745,11 @@ local BSPRenderer=function(world, rasterizer, lights)
       -- positions + normals are in the frame
       local verts, normals = frame.verts, frame.normals
       
-      v_cache:init(m_x_m(cam.m,ent.m))
-      local origin=ent.origin
-      if ent.offset then
-        -- visual offset?
-        origin = v_add(origin,ent.offset)
-      end
+      v_cache:init(m_x_m(cam.m,orientation))
       local cam_pos=v_add(cam.origin,origin,-1)
 
       -- transform light vector into model space
-      local light_n=m_inv_x_n(ent.m,{0,0.707,-0.707})
+      local light_n=m_inv_x_n(orientation,{0,0.707,-0.707})
 
       for i=1,#faces,4 do    
         -- read vertex references
@@ -795,7 +785,7 @@ local BSPRenderer=function(world, rasterizer, lights)
               poly,n = z_poly_clip(poly,n)
             end
             if n>2 then
-              rasterizer.addSurface(poly,n,skin)    
+              rasterizer.addSurface(poly,n,skin)   
             end
           end
         end
@@ -803,7 +793,8 @@ local BSPRenderer=function(world, rasterizer, lights)
     end
 
     -- debug bounding box
-    local function drawBBox(cam,mins,maxs)
+    local function drawBBox(cam,mins,maxs,color)
+      color=color or 15
       local verts={
         {-1,-1,-1},
         { 1,-1,-1},
@@ -863,7 +854,7 @@ local BSPRenderer=function(world, rasterizer, lights)
             -- get vertex pointer
             local p0 = vboptr + a0
             local p1 = vboptr + a1
-            line(p0[VBO_X],p0[VBO_Y],p1[VBO_X],p1[VBO_Y],15)
+            line(p0[VBO_X],p0[VBO_Y],p1[VBO_X],p1[VBO_Y],color)
             a0=a1
           end
         end
@@ -876,6 +867,18 @@ local BSPRenderer=function(world, rasterizer, lights)
       end,
       endFrame=function()
         surfaceCache:endFrame()
+      end,
+      drawModel=function(self,cam,origin,orientation,model,frame)
+        if not cam.ready then
+          return 
+        end
+        drawAliasModel(
+          cam,
+          origin, 
+          orientation,
+          model,
+          1,
+          frame) 
       end,
       draw=function(self,cam)
         -- nothing to draw (eg. no scene/world)
@@ -915,21 +918,59 @@ local BSPRenderer=function(world, rasterizer, lights)
               drawModel(cam,ent,resources.textures,resources.verts,resources.leaves,m.leaf_start,m.leaf_end,lighted_leaves)
             end
           else
-            drawAliasModel(
-              cam,
-              ent, 
-              m,
-              ent.skin,
-              ent.frame)        
+            -- check bounding box
+            if isBBoxVisible(cam,ent.absmins,ent.absmaxs) then
+              local origin=ent.origin
+              if ent.offset then         
+                -- visual offset?
+                origin = v_add(origin,ent.offset)
+              end
+        
+              drawAliasModel(
+                cam,
+                origin, 
+                ent.m,
+                m,
+                ent.skin,
+                ent.frame)        
+            end
           end
         end   
 
         if false then
+          v_cache:init(cam.m)
           for i=1,#world.entities do
             local ent=world.entities[i]
             -- todo: find out a better way to detect type
-            if ent.SOLID_TRIGGER then
+            if ent.absmins then              
               drawBBox(cam, ent.absmins, ent.absmaxs)
+
+              local mins,maxs=ent.absmins,ent.absmaxs
+              local c={
+                  0.5*(mins[1]+maxs[1]),
+                  0.5*(mins[2]+maxs[2]),
+                  0.5*(mins[3]+maxs[3])
+              }
+
+              c=ent.origin
+              local a0,a1,c0=
+                v_cache:transform(v_add(c,{0,0,8})),
+                v_cache:transform(v_add(c,{0,0,-256})),
+                v_cache:transform(c)
+              -- work with direct offsets
+              a0,a1,c0=
+                vboptr + a0,
+                vboptr + a1,
+                vboptr + c0
+              local outcode=band(0xffff,band(a0[VBO_OUTCODE],a1[VBO_OUTCODE]))
+     
+              if outcode==0 then
+                line(a0[VBO_X],a0[VBO_Y],a1[VBO_X],a1[VBO_Y],48)
+
+                local x,y=c0[VBO_X],c0[VBO_Y]
+                line(x-8,y-8,x+8,y+8,56)
+                line(x-8,y+8,x+8,y-8,56)
+              end
             end
           end   
         end

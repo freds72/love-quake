@@ -190,7 +190,10 @@ end
 tline3d=function(x0,y0,x1,_,u,v,w,du,dv,dw)
     local ptr,width,height=_texture.ptr,_texture.width,_texture.height
     for x=x0+480*y0,x1+480*y0 do
-        vid_ptr[x]=ptr[(flr(u/w)%width)+width*(flr(v/w)%height)]
+        local c=ptr[(flr(u/w)%width)+width*(flr(v/w)%height)]
+        --if c~=255 then
+            vid_ptr[x]=c
+        --end
         u = u + du
         v = v + dv
         w = w + dw

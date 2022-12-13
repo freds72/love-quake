@@ -90,25 +90,23 @@ local PlanePool=function()
         end,
         -- mins/maxs must be absolute corners
         classifyBBox=function(pi,c,e)
-            --local t,n=plane.type,plane.normal
-            -- todo: optimize
-            -- if t<3 then
-            --     if n[t]*mins[t+1]<=plane.dist then
-            --         return 1
-            --     elseif n[t]*maxs[t+1]>=plane.dist then
-            --         return 2
-            --     end
-            --     return 3
-            -- end
             -- cf: https://gdbooks.gitbooks.io/3dcollisions/content/Chapter2/static_aabb_plane.html
 
-            -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
-            local nx,ny,nz=_planes[pi],_planes[pi+1],_planes[pi+2]
-            local r = e[1]*abs(nx) + e[2]*abs(ny) + e[3]*abs(nz)
-        
-            -- Compute distance of box center from plane
-            local s = nx*c[1]+ny*c[2]+nz*c[3] - _planes[pi+3]
-        
+            local t,s,r=_planes[pi+4]
+            if t<3 then
+                local n=_planes[pi+t]
+                r = e[t+1]*abs(n)
+            
+                -- Compute distance of box center from plane
+                s = n*c[t+1] - _planes[pi+3]            
+            else
+                -- Compute the projection interval radius of b onto L(t) = b.c + t * p.n
+                local nx,ny,nz=_planes[pi],_planes[pi+1],_planes[pi+2]
+                r = e[1]*abs(nx) + e[2]*abs(ny) + e[3]*abs(nz)
+            
+                -- Compute distance of box center from plane
+                s = nx*c[1]+ny*c[2]+nz*c[3] - _planes[pi+3]
+            end
             -- Intersection occurs when distance s falls within [-r,+r] interval
             if s<=-r then
                 return 1

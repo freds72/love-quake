@@ -1,6 +1,10 @@
 local player=function(progs)
 
     progs:precache_model ("progs/player.mdl")
+    progs:precache_model ("progs/v_shot.mdl")
+    progs:precache_model ("progs/v_nail.mdl")
+    progs:precache_model ("progs/v_shot2.mdl")
+    progs:precache_model ("progs/v_rock.mdl")
 
     -- progs.info_player_start=function(self)
     --     self.SOLID_NOT = true
@@ -25,6 +29,8 @@ local player=function(progs)
         self.max_health = 100
         local dmgtime = 0
         self.deadflag = DEAD_NO
+        -- no inventory
+        self.items = 0
 
         self.velocity={0,0,0}
         -- set size and link into world
@@ -40,6 +46,11 @@ local player=function(progs)
         self.eyepos = eye_pos
         self.eye_offset = 0
 
+        -- default weapon
+        progs:attachmodel(self, "progs/v_shot.mdl", "weapon")
+        self.ammo = {}
+        self.weaponframe = 1
+
         -- moves
         local moves={
             up={0,1,0},
@@ -53,6 +64,13 @@ local player=function(progs)
 
         local death_angle=0
         local air_time
+
+        local weapon_anim
+        local function wait_async(ttl)
+            while progs:time()<ttl do
+                coroutine.yield()
+            end
+        end
 
         local water_move=function()
             if self.health < 0 then
@@ -201,6 +219,14 @@ local player=function(progs)
                     radius={64,64}
                 })
 
+                weapon_anim=coroutine.create(function()                    
+                    for i=1,6 do
+                        self.weaponframe = i
+                        wait_async(progs:time()+0.08)
+                    end
+                    self.weaponframe = 1
+                end)
+                
                 -- immediate hit
                 local touched = progs:traceline(self,eye_pos,aim_pos)
                 -- todo: refactor
@@ -212,6 +238,13 @@ local player=function(progs)
 
         self.postthink=function()
             -- update weapon pos      
+            if weapon_anim then
+                if coroutine.status(weapon_anim)=="suspended" then
+                    coroutine.resume(weapon_anim)
+                else
+                    weapon_anim = nil
+                end
+            end
 
             -- dampen stairs up "jump"
             self.eyepos=v_add(eye_pos,{0,0,self.eye_offset})
@@ -237,6 +270,15 @@ local player=function(progs)
                 velocity[3] = velocity[3] + 100 + rnd()*200
             end
             death_angle = rnd()>0.5 and 0.25 or -0.25
+        end
+
+        self.switch_weapon=function(model)
+            progs:attachmodel(self, model, "weapon")
+            weapon_anim = nil
+            self.weaponframe = 1
+            
+            --self.weapon = progs:attachmodel(model)
+            --self.ammo[id] = ammo
         end
     end
 end

@@ -39,7 +39,9 @@ function WorldSystem:load(level_name)
 
     -- 2d/3d collision map
     collisionMap=require("collision_map")(self)
-
+    -- debug
+    self.collisionMap = collisionMap
+    
     -- live entities
     self.entities=require("entities")(active_entities)
     -- context

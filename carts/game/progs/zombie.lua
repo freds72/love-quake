@@ -8,9 +8,8 @@ local zombie=function(progs)
         -- crucified?        
         local crucified = band(self.spawnflags or 0, 1)~=0        
         self.frame = crucified and "cruc_1" or "stand1"
-        self.mangles = {0,0,(self.angle or 0)/180}
+        self.mangles = {0,0,(self.angle or 0)/180}        
         progs:setmodel(self, "progs/zombie.mdl")
-        progs:drop_to_floor(self)
         
         local anim = flr(rnd() * 16)
         self.nextthink = progs:time() + 0.1
@@ -25,6 +24,7 @@ local zombie=function(progs)
                 self.frame = "stand"..((anim%15)+1)
                 self.nextthink = progs:time() + 0.1
                 anim = anim+1
+                self.velocity={0,0,-1}
             end
         end
     end

@@ -69,6 +69,14 @@ function v_normz(v)
 end
 
 -- matrix functions
+function m_clone(a)
+	local m={}
+	for k,v in pairs(a) do
+		m[k]=v
+	end
+	return m
+end
+
 -- matrix vector multiply
 function m_x_v(m,v)
 	local x,y,z=v[1],v[2],v[3]

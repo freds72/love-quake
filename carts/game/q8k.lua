@@ -51,7 +51,7 @@ function _draw()
 
     rasterizer:endFrame()
 
-    stateSystem:draw()
+    stateSystem:draw(rasterizer, camera, renderer)
 
     --local report = profiler.report(20)
     --printh(report)

@@ -295,7 +295,7 @@ local function polytex(p,np,texture,tline)
     end
 end
 
-local WireframeRasterizer={
+local SpanRasterizer={
     frame = 0,
     -- shared "memory" with renderer
     vbo = vbo,
@@ -365,4 +365,4 @@ local WireframeRasterizer={
     end
 }
 
-return WireframeRasterizer
+return SpanRasterizer

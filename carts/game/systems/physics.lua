@@ -20,13 +20,15 @@ return function(world, vm, collisionMap)
 
 	-- return true if position is invalid
 	local function testEntityPosition(ent)
+		if ent.SOLID_NOT then
+			return false
+		end
 		-- 
 		local mins,maxs=
 			v_add(ent.origin,ent.mins),
 			v_add(ent.origin,ent.maxs)
 		local touches = collisionMap:touches(v_add(mins,v_one,-8), v_add(maxs,v_one,8), ent)
 		local trace = collisionMap:hitscan(ent.mins,ent.maxs,ent.origin,ent.origin,{},touches,ent)
-
 		return trace.start_solid or trace.all_solid
 	end
 
@@ -153,9 +155,9 @@ return function(world, vm, collisionMap)
 			-- solid trigger???
 			if check.SOLID_NOT or check.SOLID_TRIGGER then
 				-- corpse						
-				check.mins[1] = 0
-				check.mins[2] = 0
-				check.maxs = v_clone(check.mins)
+				--check.mins[1] = 0
+				--check.mins[2] = 0
+				--check.maxs = v_clone(check.mins)
 				collisionMap:register(check)
 				goto continue
 			end
@@ -297,6 +299,18 @@ return function(world, vm, collisionMap)
 			velocity[1] = velocity[1] * (ent.friction or 0.8)
 			velocity[2] = velocity[2] * (ent.friction or 0.8)
 			velocity[3] = velocity[3] - (ent.gravity or 18)
+
+			if ent.SOLID_NOT then
+				local move = collisionMap:slide(ent,ent.origin,velocity)   
+				-- "debug"
+				ent.on_ground = move.ground                     
+
+				-- use corrected velocity
+				ent.origin = move.pos
+				ent.velocity = velocity
+				return
+			end
+
 			-- check next position 
 			local vn,vl=v_normz(velocity)      
 			local ground = ent.on_ground

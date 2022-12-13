@@ -11,12 +11,13 @@ local soldier=function(progs)
     progs.monster_army=function(self)
         self.SOLID_SLIDEBOX = true
         self.MOVETYPE_NONE = true
+        --self.MOVETYPE_WALK = true
         self.skin = 1     
         self.frame = "stand1"
         self.mangles = {0,0,self.angle or 0}
         self.health = 30
         progs:setmodel(self, "progs/soldier.mdl")
-
+        --self.velocity = {0,0,-18}
         --     
         local select_pose=function(name,ttl,think)    
             local pose=poses[name]

@@ -19,7 +19,11 @@ local items=function(progs)
         progs:setmodel(self, "maps/b_shell0.bsp")
         progs:drop_to_floor(self)
 
-        self.touch=function()
+        self.touch=function(other)
+            if other.classname ~= "player" then
+                return
+            end
+
             progs:remove(self)
             
             -- todo:    
@@ -52,11 +56,11 @@ local items=function(progs)
         progs:drop_to_floor(self)
         
         self.touch=function(other)
-            progs:remove(self)
-
             if other.classname ~= "player" then
                 return
             end
+
+            progs:remove(self)
 
             -- todo: sound
             take_heal(other, self.healamount)
