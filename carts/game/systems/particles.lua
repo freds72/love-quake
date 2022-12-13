@@ -64,6 +64,7 @@ local ParticleSystem={
                 pool[idx + VBO_X],
                 pool[idx + VBO_Y],
                 pool[idx + VBO_Z]})
+            -- todo: don't draw if outside of frustrum
             if w>0 then
                 local t=1-pool[idx + VBO_TTL]/pool[idx + VBO_MAXTTL]
                 -- ensure particles are always visible

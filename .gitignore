@@ -8,4 +8,5 @@ tools/__pycache__
 *.blend1
 /env/
 /.vscode/
+/.env/
 carts/game/user_conf.lua

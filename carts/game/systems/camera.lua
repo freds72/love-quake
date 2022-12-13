@@ -1,5 +1,6 @@
 -- camera
 local logging = require("engine.logging")
+local conf = require("game_conf")
 local CameraSystem=function(world)
     local function track(self,pos,m, water)
         --pos=v_add(v_add(pos,m_fwd(m),-24),m_up(m),24)	      
@@ -84,11 +85,15 @@ local CameraSystem=function(world)
     end
 
     local activeCam
+
+    local fov = cos(conf.fov/360)
+    local h_ratio,v_ratio=(480-480/2)/270/fov,(270-270/2)/270/fov
+  
     return {
         ready=false,
         project=function(self,pos)
             pos=m_x_v(self.m,pos)
-            local w=1/pos[2]
+            local w=fov/pos[2]
             return 480/2+270*pos[1]*w,270/2-270*pos[3]*w,w
         end,
         update=function(self)

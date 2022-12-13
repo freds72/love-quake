@@ -456,7 +456,7 @@ local CollisionMap=function(world)
     
     -- missile type move (no course correction)
     function this:fly(ent,origin,velocity,no_world)
-        local next_pos=v_add(origin,velocity)
+        local next_pos=v_add(origin,velocity,1/60)
         local invalid,hit_ent=false
     
         -- avoid touching the same non-solid multiple times (ex: triggers)

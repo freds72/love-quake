@@ -247,15 +247,17 @@ return function(world, vm, collisionMap)
 		end,
 		toss=function(ent, velocity, dt)
 			-- gravity
-			velocity[3] = velocity[3] - conf.gravity_z*dt
+			velocity[3] = velocity[3] - conf.gravity_z
 			local move = collisionMap:fly(ent,ent.origin,velocity)
 			ent.origin = move.pos
 			-- hit other entity?
 			if move.ent then
+				ent.velocity = {0,0,0}
 				vm:call(ent,"touch",move.ent)
+			else
+				-- use corrected velocity
+				ent.velocity = velocity
 			end
-			-- use corrected velocity
-			ent.velocity = v_scale(velocity, 1/dt)
 		end,
 		bounce=function(ent, velocity, dt)
 			local orig = v_clone(ent.origin)
