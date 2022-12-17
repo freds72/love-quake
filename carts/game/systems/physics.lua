@@ -282,17 +282,11 @@ return function(world, vm, collisionMap)
 			ent.velocity = v_scale(velocity, 1/dt)
 		end,
 		fly=function(ent, velocity, dt)
-			velocity = v_scale(velocity, dt)
 			local move = collisionMap:fly(ent,ent.origin,velocity)
-
+			ent.origin = move.pos
 			-- hit other entity?
 			if move.ent or (move.all_solid or move.start_solid) then
-				if move.pos then
-					ent.origin = move.pos
-				end
 				vm:call(ent,"touch",move.ent)
-			else
-				ent.origin = v_add(ent.origin, velocity)
 			end
 		end,
 		walk=function(ent, velocity, dt)

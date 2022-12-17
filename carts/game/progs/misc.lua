@@ -8,6 +8,7 @@ local misc=function(progs)
     progs:precache_model("progs/flame.mdl")
     progs:precache_model("progs/flame2.mdl")
     progs:precache_model("progs/lavaball.mdl")
+    progs:precache_model("progs/laser.mdl")
 
     progs.misc_explobox=function(self)
         self.SOLID_BSP = true
@@ -126,6 +127,57 @@ local misc=function(progs)
             0,0,1,0,
             0,0,0,1}
         progs:setorigin(self, self.origin)
+    end
+
+    local blast={
+        radius={5,12},
+        gravity_z=-600,
+        ttl={0.1,0.4},
+        speed={50,150}
+    }
+
+    -- traps
+    progs.trap_spikeshooter=function(self)
+        self.DRAW_NOT = true
+        self.MOVETYPE_NONE = true
+        set_move_dir(self)
+        self.mins = {0,0,0}
+        self.maxs = {0,0,0}
+        self.m={
+            1,0,0,0,
+            0,1,0,0,
+            0,0,1,0,
+            0,0,0,1}
+        progs:setorigin(self, self.origin)
+
+        self.use=function()
+            local spikes = progs:spawn()
+            spikes.classname = "spikes"
+            spikes.SOLID_TRIGGER = true
+            spikes.MOVETYPE_FLY = true
+            spikes.velocity = v_scale(self.movedir,200)
+            spikes.touch=function(other)
+                progs:attach(spikes,"blast",blast)
+                take_damage(spikes,spikes,other,25,"Perforated")
+                progs:remove(spikes)
+            end
+            -- ttl
+            spikes.nextthink = progs:time() + 5
+            spikes.think=function()
+                progs:remove(spikes)
+            end
+            spikes.mangles=m_fwd(make_m_look_at(self.movedir,{0,0,1}))
+
+            spikes.mins = {0,0,0}
+            spikes.maxs = {0,0,0}
+            progs:setorigin(spikes, self.origin) -- v_add(self.origin,{0,0,-1},8))                  
+            spikes.skin = 1     
+            spikes.frame = "frame1"
+            progs:setmodel(spikes,"progs/laser.mdl")
+            spikes.mins = {0,0,0}
+            spikes.maxs = {0,0,0}
+            -- move!
+        end
     end
 end
 return misc

@@ -88,10 +88,10 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
             ent.size = v_add(frame.maxs,frame.mins,-1)
             ent.mins = v_clone(frame.mins)
             ent.maxs = v_clone(frame.maxs)
-          else
-            ent.size = v_add(m.maxs,m.mins,-1)
-            ent.mins = v_clone(m.mins)
-            ent.maxs = v_clone(m.maxs)
+          else            
+            ent.mins = m.mins and v_clone(m.mins) or ent.mins
+            ent.maxs = m.maxs and v_clone(m.maxs) or ent.maxs
+            ent.size = v_add(ent.maxs,ent.mins,-1)
           end
           ent.absmins=v_add(ent.origin,ent.mins)
           ent.absmaxs=v_add(ent.origin,ent.maxs)
