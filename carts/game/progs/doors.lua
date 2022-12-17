@@ -199,18 +199,19 @@ local doors=function(progs)
             if other.classname ~= "player" then
                 return
             end 
-            if self.owner.attack_finished > progs:time() then
+            local door=self.owner
+            if door.attack_finished > progs:time() then
                 return
             end
 
-            self.owner.attack_finished = progs:time() + 2
+            door.attack_finished = progs:time() + 2
 
-            if self.owner.message then
+            if door.message then
                 progs:print(self.owner.message)
             end
             
             -- door is triggered by something
-            if self.targetname then
+            if door.targetname then
                 return
             end
 

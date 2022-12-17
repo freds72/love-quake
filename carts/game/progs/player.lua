@@ -51,6 +51,37 @@ local player=function(progs)
         self.ammo = {}
         self.weaponframe = 1
 
+        local particles={
+            rate=50, -- 50 particles/sec
+            ttl={0.5,1},
+            mins={-8,-8,-8},
+            maxs={8,8,8},
+            gravity_z=30,
+            ramp=3
+        }
+        local blast={
+            radius={5,12},
+            gravity_z=-600,
+            ttl={0.1,0.4},
+            speed={50,150}
+        }
+
+        local dust={
+            radius={5,8},
+            gravity_z=-600,
+            ttl={0.1,0.4},
+            speed={0,50},
+            ramp=3,
+            count=20
+        }
+        local blood={
+            radius={2,6},
+            gravity_z=-600,
+            ttl={0.1,0.4},
+            speed={50,75},
+            ramp=1
+        }
+
         -- moves
         local moves={
             up={0,1,0},
@@ -111,21 +142,6 @@ local player=function(progs)
                 end
             end
         end
-
-        local particles={
-            rate=50, -- 50 particles/sec
-            ttl={0.5,1},
-            mins={-8,-8,-8},
-            maxs={8,8,8},
-            gravity_z=30,
-            ramp=3
-        }
-        local blast={
-            radius={5,12},
-            gravity_z=-600,
-            ttl={0.1,0.4},
-            speed={50,150}
-        }
 
         self.prethink=function(input)
             -- damping      
@@ -191,10 +207,11 @@ local player=function(progs)
             end
 
             if input:released("fire") then
-                local fwd,up = m_fwd(self.m),m_up(self.m)
+                local fwd,up,right = m_fwd(self.m),m_up(self.m),m_right(self.m)
                 local eye_pos = v_add(self.origin,up,16)
                 local aim_pos = v_add(eye_pos,fwd,1024)
                 
+                --[[
                 local fireball = progs:spawn()
                 fireball.owner = self
                 fireball.SOLID_TRIGGER = true
@@ -218,7 +235,8 @@ local player=function(progs)
                 progs:attach(fireball,"light",{
                     radius={64,64}
                 })
-
+                ]]
+                
                 weapon_anim=coroutine.create(function()                    
                     for i=1,6 do
                         self.weaponframe = i
@@ -227,11 +245,40 @@ local player=function(progs)
                     self.weaponframe = 1
                 end)
                 
-                -- immediate hit
-                local touched = progs:traceline(self,eye_pos,aim_pos)
-                -- todo: refactor
-                if touched and touched.die then
-                    take_damage(touched, self, self, 10)
+                progs:attach(self,"fadinglight",{
+                    ttl={0.05,0.1},
+                    radius={96,112}
+                })
+
+                for i=1,3 do
+                    -- spread
+                    local a,r=2*rnd(),64*rnd()
+                    aim_pos=v_add(aim_pos,right,r*cos(a))
+                    aim_pos=v_add(aim_pos,up,r*sin(a))
+                    
+                    -- immediate hit
+                    local hit,hit_pos = progs:traceline(self,eye_pos,aim_pos)
+                    -- todo: refactor
+                    if hit then
+                        local impact = progs:spawn()
+                        impact.owner = self
+                        impact.SOLID_NOT = true
+                        impact.DRAW_NOT = true
+                        impact.mins = {0,0,0}
+                        impact.maxs = {0,0,0}
+                        impact.nextthink = progs:time() + 5
+                        impact.think=function()
+                            progs:remove(impact)
+                        end
+                        progs:setorigin(impact,hit_pos)
+        
+                        if hit.die then
+                            take_damage(hit, self, self, 10)
+                            progs:attach(impact,"blast",blood)
+                        else
+                            progs:attach(impact,"blast",dust)
+                        end
+                    end
                 end
             end
         end

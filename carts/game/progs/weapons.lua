@@ -5,8 +5,9 @@ local weapons=function(progs)
         {model="progs/g_shot.mdl",fps_model="progs/v_shot2.mdl", classname="weapon_supershotgun",ammo="ammo_shells",gives=25},
     }
     for k,weapon in pairs(weapons) do
-        local model,class,fps_model=weapon.model,weapon.classname,weapon.fps_model
+        local model,fps_model=weapon.model,weapon.fps_model
         progs:precache_model(model)
+        progs:precache_model(fps_model)
         progs[weapon.classname]=function(self)
             self.SOLID_TRIGGER = true
             self.MOVETYPE_NONE = true
@@ -19,7 +20,7 @@ local weapons=function(progs)
             
             self.nextthink = progs:time() + 0.1
             self.think=function()            
-                self.mangles={0,0,progs:time()}
+                self.mangles = {0,0,progs:time()}
                 self.nextthink = progs:time() + 0.01
             end 
             
@@ -31,7 +32,7 @@ local weapons=function(progs)
                 progs:remove(self)
     
                 -- todo: sound
-                progs:call(other,"switch_weapon",fps_model,50)
+                progs:call(other,"switch_weapon",fps_model,weapon.gives)
                 
                 -- linked actions?
                 use_targets(self)

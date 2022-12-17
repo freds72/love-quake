@@ -5,6 +5,7 @@ local shambler=function(progs)
     progs.monster_shambler=function(self)
         self.SOLID_SLIDEBOX = true
         self.MOVETYPE_NONE = true
+        self.health = 50
         self.skin = 1
         self.frame = "stand1"
         self.mangles = {0,0,self.angle or 0}

@@ -166,14 +166,15 @@ local ProgsAPI=function(modelLoader, models, world, collisionMap)
           end
           ent[system]=c:new(ent,args)
         end,
-        -- returns the closest entity in the light of sight
+        -- returns the closest entity in the line of sight
+        -- returns entity, pos, normal
         traceline=function(self,ent,p0,p1,monsters)
           local absmins,absmaxs=v_min(p0,p1),v_max(p0,p1)
           local ents = collisionMap:touches(absmins, absmaxs, ent)                      
           local triggers = {}
           local trace = collisionMap:hitscan({0,0,0},{0,0,0},p0,p1,triggers,ents)
           if trace.n then
-            return trace.ent
+            return trace.ent,trace.pos,trace.n
           end
         end,
         -- call an entity function

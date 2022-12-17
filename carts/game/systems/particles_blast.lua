@@ -7,6 +7,7 @@ local particles = require("systems.particles")
 -- gravity: gravity vector
 -- ttl: particle min/max lifetime
 -- speed: particle min/max velocity
+-- count: [optional] number of particles to spawn (default: 50)
 function BlastEmitter:new(owner,params)
     local emitter={}
     local origin = v_clone(owner.origin)
@@ -15,7 +16,7 @@ function BlastEmitter:new(owner,params)
     local ttl0,ttl1=unpack(params.ttl)
     local speed0,speed1=unpack(params.speed)
     function emitter:update(pool,active_particles,dt)
-        for i=1,50 do        
+        for i=1,params.count or 50 do        
             local ttl=lerp(ttl0,ttl1,rnd())    
             local angle,speed=rnd(),lerp(speed0,speed1,rnd())
             local azimuth=rnd()

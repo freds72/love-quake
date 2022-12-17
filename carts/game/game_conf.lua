@@ -15,7 +15,8 @@ local GameConf={
         jump = {'space'},
         fire = {'lmb'},
         action = {'rmb','e'},
-        ok = {'space'}
+        ok = {'space'},
+        weapon_1 = {"1"}
     },
     mouse_speed=0.3,
     -- supported entities & various "programs"

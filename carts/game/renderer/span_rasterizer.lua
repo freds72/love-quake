@@ -348,7 +348,7 @@ local SpanRasterizer={
 		_vboptr = _vboptr_btf
 		for i=#_transparent_surfaces,1,-1 do
 			local surf=_transparent_surfaces[i]
-			polytex(surf.poly,surf.np,surf.texture,tline3d_fillp)
+			polytex(surf.poly,surf.np,surf.texture,tline3d_trans)
 		end
 		_vboptr = ptr
 

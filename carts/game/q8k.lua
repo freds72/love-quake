@@ -21,7 +21,7 @@ function _init()
     local arg1, arg2 = args()
     stateSystem:next("screens.play", arg1, arg2)
 
-    profiler = require("lib.profile") 
+    --profiler = require("lib.profile") 
     --profiler.start()
 end
 
