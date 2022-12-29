@@ -491,7 +491,7 @@ local ModelReader = function(pak)
                     -- 32 unit clip nodes
                     clipnodes[model.headnode[1]+1],
                     -- 64 unit clip nodes
-                    clipnodes[model.headnode[1]+2],
+                    clipnodes[model.headnode[2]+1],
                 },
                 leaf_start=leaf_base + 2,
                 leaf_end=leaf_base + model.visleafs + 1})
