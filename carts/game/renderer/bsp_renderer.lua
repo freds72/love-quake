@@ -249,7 +249,7 @@ local BSPRenderer=function(world, rasterizer, lights)
       local code,ax,az,ay=0,m1*x+m5*y+m9*z+m13,m2*x+m6*y+m10*z+m14,m3*x+m7*y+m11*z+m15
   
       -- znear=8
-      if az<8 then code=2 end
+      if az<z_near then code=2 end
       --if az>2048 then code|=1 end
       if ax>h_ratio*az then code = code + 4
       elseif ax<-h_ratio*az then code = code + 8 end
