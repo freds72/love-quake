@@ -33,7 +33,7 @@ local BSPRenderer=function(world, rasterizer, lights)
   
   local conf = require("game_conf")
   
-  local fov = cos(conf.fov/360)
+  local fov = cos(conf.fov/360/2)
   local h_ratio,v_ratio=(480-480/2)/270/fov,(270-270/2)/270/fov
   -- pre-computed normals for alias models
   local _normals={

@@ -38,11 +38,11 @@ mid=function(x, a, b)
 end
 -- rebase angle to 0..1
 cos=function(angle)
-    return math.cos(math.pi * angle)
+    return math.cos(2 * math.pi * angle)
 end
 -- rebase angle to 0..1
 sin=function(angle)
-    return math.sin(math.pi * angle)
+    return math.sin(2 * math.pi * angle)
 end
 flr=math.floor
 ceil=math.ceil

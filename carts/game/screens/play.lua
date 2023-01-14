@@ -58,13 +58,23 @@ return function(level)
                       make_m_from_euler(0,angle[2],0))
                 m_set_pos(to_world, v_add(v_add(player.origin, player.eyepos, -1),{0,0,-player.eye_offset/16}))
 
-                local to_local=make_m_from_euler(0,0,-0.5)
+                local to_local=make_m_from_euler(0,0,-0.25)
                 m_set_pos(to_local,{0,0,0})
                 local local_to_world=m_x_m(to_world, to_local)
                 renderer:drawModel(camera,{0,0,0},local_to_world,player.weapon,"shot"..player.weaponframe)
                 renderer:endFrame()
                 rasterizer:endFrame()
                 
+                -- draw hit pos
+                --[[
+                local origin=v_add(player.origin,player.eyepos)
+                local trace = world.collisionMap:hitscan({0,0,0},{0,0,0},player.origin,v_add(player.origin,fwd,1024),{},{world.entities[1]},player)
+                if trace.n then
+                    local x0,y0=camera:project(trace.pos)
+                    local x1,y1=camera:project(v_add(trace.pos,trace.n,16))
+                    line(x0,y0,x1,y1,32)
+                end
+                ]]
             end
 
             -- any messages? (dont't display if player dead)

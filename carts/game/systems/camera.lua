@@ -7,7 +7,7 @@ local CameraSystem=function(world)
         self.m={unpack(m)} 
         -- screen wobbling if under water/lava/...           
         if water then
-            local w,h=0.98+0.04*cos(time()/2),0.98+0.04*sin(time()/2)
+            local w,h=0.98+0.04*cos(time()),0.98+0.04*sin(time())
             m[1] = m[1] * w
             m[2] = m[2] * w
             m[3] = m[3] * w
@@ -86,7 +86,7 @@ local CameraSystem=function(world)
 
     local activeCam
 
-    local fov = cos(conf.fov/360)
+    local fov = cos(conf.fov/360/2)
     local h_ratio,v_ratio=(480-480/2)/270/fov,(270-270/2)/270/fov
   
     return {

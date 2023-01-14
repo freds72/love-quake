@@ -252,7 +252,7 @@ local player=function(progs)
 
                 for i=1,3 do
                     -- spread
-                    local a,r=2*rnd(),64*rnd()
+                    local a,r=rnd(),64*rnd()
                     aim_pos=v_add(aim_pos,right,r*cos(a))
                     aim_pos=v_add(aim_pos,up,r*sin(a))
                     
