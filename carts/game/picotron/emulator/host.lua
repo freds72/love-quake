@@ -60,6 +60,9 @@ del=table.remove
 sub=string.sub
 ord=string.byte
 rnd=function(start_range, end_range)
+    if type(start_range)=="table" then
+        return start_range[flr(math.random()*#start_range)+1]
+    end
     start_range = start_range or 0
     end_range = end_range or 1
     return start_range + (end_range - start_range) * math.random()

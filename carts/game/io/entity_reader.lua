@@ -15,6 +15,15 @@ local function parse_str(str, pos, val)
     return parse_str(str,pos+1,val..c)
 end
 
+local function tovector(value)
+    local coords=split(value," ")
+    -- conver to numbers
+    for k,v in pairs(coords) do
+        coords[k]=tonumber(v)          
+    end
+    return coords
+end
+
 local value_factory={
     angle=tonumber,
     wait=tonumber,
@@ -27,14 +36,10 @@ local value_factory={
         local msg = string.gsub(value, "\\n", "\n")
         return msg
     end,
-    origin=function(value)
-        local coords=split(value," ")
-        -- conver to numbers
-        for k,v in pairs(coords) do
-            coords[k]=tonumber(v)          
-        end
-        return coords
-    end
+    origin=tovector,
+    mangle=tovector,
+    size=tovector,
+    distance=tonumber
 }
 
 -- public values and functions.

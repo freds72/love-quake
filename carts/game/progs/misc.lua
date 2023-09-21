@@ -100,6 +100,9 @@ local misc=function(progs)
                 fireball.frame = "frame1"
                 progs:setmodel(fireball,"progs/lavaball.mdl")
                 progs:attach(fireball,"trail",particles)
+                progs:attach(fireball,"light",{
+                    radius={60,64}
+                })
 
                 -- attach a particle system
                 self.nextthink = progs:time() + 5 * rnd()
@@ -137,9 +140,22 @@ local misc=function(progs)
     }
 
     -- traps
-    progs.trap_spikeshooter=function(self)
+    progs.trap_spikeshooter0=function(self)
         self.DRAW_NOT = true
         self.MOVETYPE_NONE = true
+        
+        local angle = self.angle or 0
+        local mangles
+        if angle == -1 then
+            -- up
+            mangles = {0,0,0}
+        elseif angle == -2 then
+            -- down
+            mangles = {0,-0.25,0}
+        else
+            mangles = {0,0,angle/360+0.5}
+        end
+
         set_move_dir(self)
         self.mins = {0,0,0}
         self.maxs = {0,0,0}
@@ -166,7 +182,7 @@ local misc=function(progs)
             spikes.think=function()
                 progs:remove(spikes)
             end
-            spikes.mangles=m_fwd(make_m_look_at(self.movedir,{0,0,1}))
+            spikes.mangles=mangles
 
             spikes.mins = {0,0,0}
             spikes.maxs = {0,0,0}

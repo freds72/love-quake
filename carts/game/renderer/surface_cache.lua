@@ -6,7 +6,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
     -- allocate a big lightmap - to be reused
     local lightmap = ffi.new("unsigned char[?]", 64*64)
     -- from conf?
-    local colormap=mmap("gfx/colormap.lmp","uint8_t")
+    local colormap=mmap("gfx/colormap.lmp","uint8_t")    
     -- contains a snapshot of the lightstlyes at given frame
     local activeLights
 
@@ -18,8 +18,8 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
     local texturesByRegion={}
     local recyclesByRegion={}
     local regions={
-      {block=4096, len=128},
-      {block=8192, len=32},
+      {block=4096, len=1024},
+      {block=8192, len=64},
       {block=16384, len=32},
       {block=32768, len=16},
       {block=65536, len=8}
@@ -76,7 +76,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
           for u=0,tw-1 do
             local tu=u/tw
             -- 2* to make sure it rolls over the whole texture space
-            local s,t=flr((tu + 0.1*sin(t+2*tv))*tw)%tw,flr((tv + 0.1*sin(t+2*tu))*th)%th
+            local s,t=flr((tu + 0.1*sin(t+tv))*tw)%tw,flr((tv + 0.1*sin(t+tu))*th)%th
             dst[u] = src[s + t*tw]
           end          
           dst = dst + tw

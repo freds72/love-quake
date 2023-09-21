@@ -52,7 +52,7 @@ local PakReader=function(conf)
         local ptr = ffi.cast("unsigned char*", mem)
 
         local info = ffi.cast('dpackheader_t*', ptr)
-        logging.debug("Found PAK: "..filename.." version:"..ffi.string(info.identification))
+        logging.debug("Found PAK: "..filename.." version:"..ffi.string(info.identification).." num. lumps: "..info.numlumps)
 
         local entries = read_directory("dpackfile_t", info, ptr)
 

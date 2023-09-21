@@ -1,14 +1,26 @@
 local soldier=function(progs)
 
     progs:precache_model("progs/soldier.mdl")
-    local poses={
+    progs:precache_model("progs/ogre.mdl")
+    local soldier_poses={
+        mdl="progs/soldier.mdl",
         stand={random=true,length=8},
         run={random=true,length=8},
         death={length=10,loop_not=true},
-        deathc={length=11,loop_not=true}
+        deathc={length=11,loop_not=true},
+        death_poses={"death","deathc"}
     }
 
-    progs.monster_army=function(self)
+    local ogre_poses={
+        mdl="progs/ogre.mdl",
+        stand={random=true,length=9},        
+        run={random=true,length=8},
+        death={length=14,loop_not=true},
+        bdeath={length=10,loop_not=true},
+        death_poses={"death","bdeath"}
+    }
+
+    local function init_monster(self,poses)
         self.SOLID_SLIDEBOX = true
         self.MOVETYPE_NONE = true
         --self.MOVETYPE_WALK = true
@@ -16,7 +28,7 @@ local soldier=function(progs)
         self.frame = "stand1"
         self.mangles = {0,0,self.angle or 0}
         self.health = 30
-        progs:setmodel(self, "progs/soldier.mdl")
+        progs:setmodel(self, poses.mdl)
         --self.velocity = {0,0,-18}
         --     
         local select_pose=function(name,ttl,think)    
@@ -53,11 +65,15 @@ local soldier=function(progs)
                 end
             end)
 
+        local dead
         self.die=function()
+            if dead then
+                return
+            end
             -- avoid reentrancy
-            self.die=nil
+            dead=true
             self.think=select_pose(
-                rnd()>0.5 and "deathc" or "death",
+                rnd(poses.death_poses),
                 0.1,
                 function(is_last_frame)
                     if is_last_frame then
@@ -66,6 +82,12 @@ local soldier=function(progs)
                     end
                 end)
         end
+    end
+    progs.monster_army=function(self)
+        init_monster(self,soldier_poses)
+    end
+    progs.monster_ogre=function(self)
+        init_monster(self,ogre_poses)
     end
 end
 return soldier

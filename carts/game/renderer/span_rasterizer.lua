@@ -304,20 +304,20 @@ local SpanRasterizer={
     end,
     -- push a surface to rasterize
     addSurface=function(p,np,texture)
-		if texture.transparent then
-			-- copy poly data
-			local poly={}
-			for i=1,np do
-				poly[i]=_vbo_btf:copy(_vboptr + p[i])
+			if texture.transparent then
+				-- copy poly data
+				local poly={}
+				for i=1,np do
+					poly[i]=_vbo_btf:copy(_vboptr + p[i])
+				end
+				add(_transparent_surfaces,{
+					poly=poly,
+					np=np,
+					texture=texture})
+				return
 			end
-			add(_transparent_surfaces,{
-				poly=poly,
-				np=np,
-				texture=texture})
-			return
-		end
-    
-		polytex(p,np,texture)
+			
+			polytex(p,np,texture)
     end,
 	addQuad=function(x0,y0,x1,y1,w,c)
 		if y1>=270 then
@@ -342,7 +342,7 @@ local SpanRasterizer={
 			spanfill(x0,x1,y,c,0,w,0,0,0,line)
 		end
 	end,	
-    endFrame=function()
+  endFrame=function()
 		-- draw alpha surfaces
 		local ptr=_vboptr
 		_vboptr = _vboptr_btf
@@ -355,14 +355,14 @@ local SpanRasterizer={
 		_pool:reset()
 		_vbo_btf:reset()
 
-        for y in pairs(_spans) do
-            _spans[y]=nil
-        end  
+		for y in pairs(_spans) do
+				_spans[y]=nil
+		end  
 
 		for k in pairs(_transparent_surfaces) do
 			_transparent_surfaces[k]=nil
 		end
-    end
+  end
 }
 
 return SpanRasterizer

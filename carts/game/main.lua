@@ -23,6 +23,40 @@ local gameThread
 -- thread sync
 local channels = require("picotron.emulator.channels")()
 
+--
+local utf8offset=require("utf8").offset
+local string_sub = string.sub
+local select = select
+string.ulen = require("utf8").len
+
+function string.usub(s, start_in_chars, ...)
+  local start_in_bytes = utf8offset(s, start_in_chars)
+  if start_in_bytes == nil then
+    start_in_bytes = #s + 1
+    if start_in_chars < 0 then
+      start_in_bytes = -start_in_bytes
+    end
+  end
+
+  if select('#', ...) == 0 then -- no second arg
+    return string_sub(s, start_in_bytes)
+  end
+
+  local end_in_chars = ...
+  if end_in_chars == -1 then -- -1 doesn't go well with the +1 needed later
+    return string_sub(s, start_in_bytes)
+  end
+
+  local end_in_bytes = utf8offset(s, end_in_chars + 1)
+  if end_in_bytes == nil then
+    end_in_bytes = #s + 1
+    if end_in_chars < 0 then
+      end_in_bytes = -end_in_bytes
+    end
+  end
+  return string_sub(s, start_in_bytes, end_in_bytes - 1)
+end
+
 -- keyboards and mouse states
 local scanCodes={}
 local mouseInfo={
@@ -193,7 +227,7 @@ function love.run()
                 local w,h,dh=0,0,consoleFont:getHeight() + consoleFont:getLineHeight()
                 local s,sx,sy="",b,c
                 for i=1,#a do
-                    local ch=string.sub(a,i,i)
+                    local ch=string.usub(a,i,i)
                     if ch=="\n" then
                         local sw=consoleFont:getWidth(s)
                         lg.print(s,consoleFont,sx,sy)

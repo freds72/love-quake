@@ -14,7 +14,8 @@ local triggers=function(progs)
             nextthink = -1,
             health = 0,
             spawnflags = 0,
-            wait = -1
+            wait = -1,
+            distance = 0
         })
 
         -- set size and link into world
@@ -54,13 +55,13 @@ local triggers=function(progs)
             -- can only be triggered 
             self.SOLID_TRIGGER = nil
             self.SOLID_BBOX = true
-            local max_health = self.health
+            self.max_health = self.health
             self.die=function(instigator)
                 if self.use then
                     self.use(instigator)
                 end
                 -- in case triggers is multiple
-                self.health = max_health
+                self.health = self.max_health
             end
         end
     end
@@ -214,6 +215,5 @@ local triggers=function(progs)
             end            
         end
     end
-
 end
 return triggers
