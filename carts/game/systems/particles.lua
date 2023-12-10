@@ -69,7 +69,7 @@ local ParticleSystem={
                 local t=1-pool[idx + VBO_TTL]/pool[idx + VBO_MAXTTL]
                 -- ensure particles are always visible
                 local r,ramp=max(1,w*256),ramp_styles:get(pool[idx + VBO_RAMP])
-                rasterizer.addQuad(x-r,y-r,x+r,y+r-1,w,ramp[min(flr(#ramp*t)+1,#ramp)])
+                rasterizer.addQuad(x-r,y-r,x+r,y+r,w,ramp[min(flr(#ramp*t)+1,#ramp)])
             end
         end
     end

@@ -380,6 +380,7 @@ local SurfaceCache=function(rasterizer, dynamic_lights)
                   local tx,ty=(x+xmin)%tw,(y+ymin)%th
                   --dst[x]=8+8*mip
                   dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lexel)*256]
+                  --dst[x]=colormap.ptr[ptr[tx+ty*tw] + flr(lightmap[s0t0])*256]
                   --dst[x]=colormap.ptr[15 + flr(lexel)*256]
                   s = s + dt
                 end

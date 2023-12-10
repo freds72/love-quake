@@ -180,7 +180,7 @@ local player=function(progs)
               end
             end
       
-            dangle=v_add(dangle,{input.mdy/8,acc[1]/32,input.mdx/8})
+            dangle=v_add(dangle,{input.mdy/8,acc[1]/64,input.mdx/8})
             angle=v_add(angle,dangle,1/24)
           
             local a,dx,dz=angle[3],acc[2],acc[1]
